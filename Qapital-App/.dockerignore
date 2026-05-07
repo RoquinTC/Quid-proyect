@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+db/*.db
+.env
+.env.*
+*.log
+.vscode
+.DS_Store

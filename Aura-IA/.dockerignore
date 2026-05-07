@@ -1,11 +1,9 @@
-node_modules/
+node_modules
+dist
+.git
 .env
 firebase-key.json
-memory.db
-temp/
 credentials.json
-out_*.mp3
-dist/
 test.mp3
 test-*.ts
 *.log
