@@ -22,11 +22,11 @@ export const env = {
   OPENROUTER_API_KEY: getEnv('OPENROUTER_API_KEY', false),
   GOOGLE_AI_KEY: getEnv('GOOGLE_AI_KEY', false),
   TAVILY_API_KEY: getEnv('TAVILY_API_KEY', false),
-  
+
   GITHUB_TOKEN: getEnv('GITHUB_TOKEN', false),
   GITHUB_USER: getEnv('GITHUB_USER', false),
   GITHUB_REPO: getEnv('GITHUB_REPO', false),
-  
+
   LOCAL_AI_BASE_URL: getEnv('LOCAL_AI_BASE_URL', false),
   LOCAL_AI_MODEL: getEnv('LOCAL_AI_MODEL', false, 'llama3'),
 
@@ -37,9 +37,11 @@ export const env = {
   GOOGLE_CREDENTIALS_JSON: getEnv('GOOGLE_CREDENTIALS_JSON', false),
 };
 
-// Log de diagnóstico al arrancar
 console.log('--- Diagnóstico de Variables ---');
-console.log('GOOGLE_AI_KEY detectada:', env.GOOGLE_AI_KEY ? '✅ SÍ' : '❌ NO');
-console.log('TAVILY_API_KEY detectada:', env.TAVILY_API_KEY ? '✅ SÍ' : '❌ NO');
-console.log('GITHUB_TOKEN detectada:', env.GITHUB_TOKEN ? '✅ SÍ' : '❌ NO');
+console.log('TELEGRAM_BOT_TOKEN:', env.TELEGRAM_BOT_TOKEN ? '✅' : '❌');
+console.log('GROQ_API_KEY:', env.GROQ_API_KEY ? '✅' : '❌');
+console.log('GOOGLE_AI_KEY:', env.GOOGLE_AI_KEY ? '✅' : '❌');
+console.log('TAVILY_API_KEY:', env.TAVILY_API_KEY ? '✅' : '❌');
+console.log('FIREBASE:', env.FIREBASE_SERVICE_ACCOUNT_JSON ? '✅' : '❌');
+console.log('GITHUB_TOKEN:', env.GITHUB_TOKEN ? '✅' : '❌');
 console.log('--------------------------------');

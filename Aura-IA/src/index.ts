@@ -2,14 +2,21 @@ import { memory } from './memory/db.js';
 import { startBot } from './bot/telegram.js';
 
 async function main() {
-  console.log('Iniciando Aura Agent...');
-  
-  // 1. Inicializar base de datos
-  await memory.init();
-  console.log('✅ Base de datos iniciada.');
+  console.log('🤖 Iniciando Aura Agent...');
 
-  // 2. Iniciar bot de Telegram
+  try {
+    await memory.init();
+    console.log('✅ Base de datos Firebase iniciada.');
+  } catch (error: any) {
+    console.error('❌ Error inicializando Firebase:', error.message);
+    console.error('💡 Asegúrate de configurar FIREBASE_SERVICE_ACCOUNT_JSON en tu .env o docker-compose.yml');
+    process.exit(1);
+  }
+
   startBot();
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('❌ Error fatal al iniciar Aura Agent:', error);
+  process.exit(1);
+});
