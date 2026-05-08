@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAppStore, type FinanceSubView } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock } from "lucide-react";
@@ -26,6 +27,39 @@ const tabs: { id: FinanceSubView; label: string; icon: typeof Wallet }[] = [
 
 export function FinancePage() {
   const { financeSubView, setFinanceSubView } = useAppStore();
+
+  // Swipe gesture state
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number; time: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() });
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart) return;
+    const touchEnd = { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY, time: Date.now() };
+    const dx = touchEnd.x - touchStart.x;
+    const dy = Math.abs(touchEnd.y - touchStart.y);
+    const dt = touchEnd.time - touchStart.time;
+
+    // Only trigger if horizontal swipe > 50px, vertical < 50px, and within 500ms
+    if (Math.abs(dx) > 50 && dy < 50 && dt < 500) {
+      // Check if we're in a carousel zone
+      const target = e.target as HTMLElement;
+      const carouselParent = target.closest('[data-carousel], .overflow-x-auto, .snap-x');
+      if (carouselParent) return; // Don't change tab in carousel
+
+      const currentIdx = tabs.findIndex((t) => t.id === financeSubView);
+      if (dx < 0 && currentIdx < tabs.length - 1) {
+        // Swipe left → next tab
+        setFinanceSubView(tabs[currentIdx + 1].id);
+      } else if (dx > 0 && currentIdx > 0) {
+        // Swipe right → previous tab
+        setFinanceSubView(tabs[currentIdx - 1].id);
+      }
+    }
+    setTouchStart(null);
+  };
 
   const renderContent = () => {
     if (financeSubView === "account-detail") return <AccountDetail />;
@@ -56,9 +90,9 @@ export function FinancePage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Sub-tab navigation */}
+      {/* Sticky Sub-tab navigation */}
       {!isDetailView && (
-        <div className="px-4 pt-3 pb-1">
+        <div className="sticky top-0 z-30 px-4 pt-3 pb-1 bg-white dark:bg-gray-900">
           <div className="flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = financeSubView === tab.id;
@@ -99,8 +133,12 @@ export function FinancePage() {
         </div>
       )}
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Content with swipe detection */}
+      <div
+        className="flex-1 overflow-y-auto"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={financeSubView}

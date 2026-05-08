@@ -90,8 +90,20 @@ interface Debt {
   name: string;
   type: string;
   currentBalance: number;
+  originalAmount?: number | null;
   monthlyPayment?: number | null;
   paymentDate?: number | null;
+  color?: string;
+}
+
+interface RecurringPayment {
+  id: string;
+  description: string;
+  amount: number;
+  type: string;
+  status: string;
+  scheduledDate: string;
+  category?: string | null;
 }
 
 interface MonthlyData {
@@ -478,6 +490,7 @@ export function FinanceOverview() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([]);
   const [monthlySummary, setMonthlySummary] = useState<MonthlySummaryResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [evolutionRange, setEvolutionRange] = useState<"6M" | "12M">("6M");
@@ -507,11 +520,12 @@ export function FinanceOverview() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [accs, txs, bdgs, dbts, summary] = await Promise.allSettled([
+      const [accs, txs, bdgs, dbts, recs, summary] = await Promise.allSettled([
         apiFetch<Account[]>("/api/accounts"),
         apiFetch<Transaction[]>("/api/transactions"),
         apiFetch<Budget[]>("/api/budgets"),
         apiFetch<Debt[]>("/api/debts"),
+        apiFetch<RecurringPayment[]>("/api/recurring"),
         apiFetch<MonthlySummaryResponse>("/api/dashboard/monthly-summary?months=12"),
       ]);
 
@@ -519,6 +533,7 @@ export function FinanceOverview() {
       if (txs.status === "fulfilled") setTransactions(txs.value);
       if (bdgs.status === "fulfilled") setBudgets(bdgs.value);
       if (dbts.status === "fulfilled") setDebts(dbts.value);
+      if (recs.status === "fulfilled") setRecurringPayments(recs.value);
       if (summary.status === "fulfilled") setMonthlySummary(summary.value);
     } catch (error) {
       console.error("Error fetching finance overview data:", error);
@@ -651,16 +666,27 @@ export function FinanceOverview() {
     return Object.entries(groups);
   }, [transactions]);
 
-  // Upcoming bills from debts
-  const upcomingBills = debts
-    .filter((d) => d.currentBalance > 0)
-    .slice(0, 3)
-    .map((d) => ({
-      id: d.id,
-      name: d.name,
-      amount: d.monthlyPayment || d.currentBalance,
-      dueDate: d.paymentDate ? `Día ${d.paymentDate}` : "Próximo",
-    }));
+  // Upcoming recurring payments (next 7 days, Colombia timezone)
+  const upcomingRecurring = useMemo(() => {
+    const now = getColombiaNow();
+    const in7Days = new Date(now);
+    in7Days.setDate(in7Days.getDate() + 7);
+    return recurringPayments
+      .filter((r) => {
+        if (r.status !== "pending") return false;
+        const dateStr = typeof r.scheduledDate === "string" ? r.scheduledDate.split("T")[0] : "";
+        const d = parseLocalDate(dateStr);
+        return d >= now && d <= in7Days;
+      })
+      .sort((a, b) => {
+        const da = parseLocalDate(typeof a.scheduledDate === "string" ? a.scheduledDate.split("T")[0] : "");
+        const db = parseLocalDate(typeof b.scheduledDate === "string" ? b.scheduledDate.split("T")[0] : "");
+        return da.getTime() - db.getTime();
+      });
+  }, [recurringPayments]);
+
+  // Active debts with progress
+  const activeDebts = debts.filter((d) => d.currentBalance > 0);
 
   // Budget progress data for circles
   const budgetProgress = useMemo(() => {
@@ -1252,7 +1278,7 @@ export function FinanceOverview() {
             // UPCOMING BILLS
             // ============================================================
             case "bills":
-              return upcomingBills.length > 0 ? (
+              return (upcomingRecurring.length > 0 || activeDebts.length > 0) ? (
                 <motion.div key="bills" variants={itemVariants}>
                   <Card className="border-0 shadow-md rounded-2xl">
                     <CardHeader className="pb-2 pt-4 px-5">
@@ -1261,33 +1287,117 @@ export function FinanceOverview() {
                         Próximos Pagos
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="px-5 pb-4">
-                      <div className="space-y-3">
-                        {upcomingBills.map((bill) => (
-                          <div
-                            key={bill.id}
-                            className="flex items-center justify-between p-3 bg-rose-50/60 dark:bg-rose-900/10 rounded-xl cursor-pointer"
-                            onClick={() => setFinanceSubView("debts")}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="size-9 rounded-xl bg-gradient-to-br from-rose-400 to-pink-400 flex items-center justify-center">
-                                <CreditCard className="size-4 text-white" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                  {bill.name}
-                                </p>
-                                <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                                  Vence: {bill.dueDate}
-                                </p>
-                              </div>
-                            </div>
-                            <span className="text-sm font-semibold text-rose-600 dark:text-rose-400">
-                              {formatCurrency(bill.amount)}
-                            </span>
+                    <CardContent className="px-5 pb-4 space-y-4">
+                      {/* Sub-section 1: Próximos Pagos Recurrentes */}
+                      {upcomingRecurring.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                            Pagos Recurrentes Próximos
+                          </p>
+                          <div className="space-y-2">
+                            {upcomingRecurring.map((rec) => {
+                              const dateStr = typeof rec.scheduledDate === "string" ? rec.scheduledDate.split("T")[0] : "";
+                              const d = parseLocalDate(dateStr);
+                              const isExpense = rec.type === "expense";
+                              return (
+                                <div
+                                  key={rec.id}
+                                  className="flex items-center justify-between p-3 bg-amber-50/60 dark:bg-amber-900/10 rounded-xl cursor-pointer"
+                                  onClick={() => setFinanceSubView("recurring")}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className={`size-9 rounded-xl flex items-center justify-center ${
+                                      isExpense
+                                        ? "bg-gradient-to-br from-amber-400 to-orange-400"
+                                        : "bg-gradient-to-br from-emerald-400 to-teal-400"
+                                    }`}>
+                                      <Calendar className="size-4 text-white" />
+                                    </div>
+                                    <div>
+                                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                        {rec.description}
+                                      </p>
+                                      <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                                        {d.toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                                        {rec.category && ` · ${rec.category}`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className={`text-sm font-semibold ${
+                                    isExpense ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
+                                  }`}>
+                                    {isExpense ? "-" : "+"}{formatCurrency(rec.amount)}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
-                      </div>
+                        </div>
+                      )}
+
+                      {/* Sub-section 2: Progreso de Deudas */}
+                      {activeDebts.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
+                            Progreso de Deudas
+                          </p>
+                          <div className="space-y-2.5">
+                            {activeDebts.map((debt) => {
+                              const original = (debt as Debt & { originalAmount?: number | null }).originalAmount || debt.currentBalance * 1.5;
+                              const paid = original - debt.currentBalance;
+                              const progressPct = original > 0 ? calcPercentage(paid, original) : 0;
+                              return (
+                                <div
+                                  key={debt.id}
+                                  className="p-3 bg-rose-50/40 dark:bg-rose-900/10 rounded-xl cursor-pointer"
+                                  onClick={() => setFinanceSubView("debts")}
+                                >
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className="size-7 rounded-lg flex items-center justify-center"
+                                        style={{ backgroundColor: (debt as Debt & { color?: string }).color || "#F43F5E" + "20" }}
+                                      >
+                                        <CreditCard className="size-3.5" style={{ color: (debt as Debt & { color?: string }).color || "#F43F5E" }} />
+                                      </div>
+                                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                        {debt.name}
+                                      </span>
+                                    </div>
+                                    <span className="text-sm font-semibold text-rose-600 dark:text-rose-400">
+                                      {formatCurrency(debt.currentBalance)}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-rose-400 rounded-full transition-all"
+                                        style={{ width: `${Math.min(progressPct, 100)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-[10px] text-gray-400 font-medium">
+                                      {progressPct}%
+                                    </span>
+                                  </div>
+                                  {debt.monthlyPayment && (
+                                    <p className="text-[10px] text-gray-400 mt-1">
+                                      Cuota: {formatCurrency(debt.monthlyPayment)}
+                                      {debt.paymentDate ? ` · Día ${debt.paymentDate}` : ""}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Empty state */}
+                      {upcomingRecurring.length === 0 && activeDebts.length === 0 && (
+                        <p className="text-sm text-gray-400 text-center py-4">
+                          Sin pagos próximos
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>

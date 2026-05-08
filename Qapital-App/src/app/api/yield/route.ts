@@ -55,6 +55,8 @@ export async function GET() {
       actualYield: number | null;
       isConfirmed: boolean;
       transactionId: string | null;
+      isPreviousMonth?: boolean;
+      previousMonth?: Date;
     }> = [];
 
     for (const account of highYieldAccounts) {
@@ -92,6 +94,60 @@ export async function GET() {
         actualYield: existingRecord?.actualYield || null,
         isConfirmed: existingRecord?.isConfirmed || false,
         transactionId: existingRecord?.transactionId || null,
+      });
+    }
+
+    // Also fetch unconfirmed yields from PREVIOUS months (these should always be visible)
+    const previousUnconfirmed = await db.yieldRecord.findMany({
+      where: {
+        isConfirmed: false,
+        month: { lt: monthStart },
+        OR: [
+          { account: { userId: session.user.id } },
+          { subAccount: { account: { userId: session.user.id } } },
+        ],
+      },
+      include: {
+        account: { select: { id: true, name: true, balance: true, yieldPercentage: true, isHighYield: true } },
+        subAccount: {
+          select: { id: true, name: true, balance: true, yieldPercentage: true, isHighYield: true, accountId: true, account: { select: { id: true, name: true } } },
+        },
+      },
+    });
+
+    for (const record of previousUnconfirmed) {
+      // Skip if this account/subAccount is already in the yields array for the current month
+      const alreadyExists = yields.some(
+        (y) =>
+          (y.accountId && y.accountId === record.accountId) ||
+          (y.subAccountId && y.subAccountId === record.subAccountId)
+      );
+      if (alreadyExists) continue;
+
+      const accountName = record.subAccountId && record.subAccount
+        ? `${record.subAccount.account.name} → ${record.subAccount.name}`
+        : record.account?.name || "Unknown";
+      const balance = record.subAccountId && record.subAccount
+        ? record.subAccount.balance
+        : record.account?.balance || 0;
+      const yieldPercentage = record.subAccountId && record.subAccount
+        ? (record.subAccount.yieldPercentage || 0)
+        : (record.account?.yieldPercentage || 0);
+
+      yields.push({
+        id: record.id,
+        accountId: record.accountId,
+        subAccountId: record.subAccountId,
+        parentAccountId: record.subAccountId && record.subAccount ? record.subAccount.accountId : null,
+        accountName,
+        balance,
+        yieldPercentage,
+        projectedYield: record.projectedYield,
+        actualYield: record.actualYield,
+        isConfirmed: false,
+        transactionId: record.transactionId,
+        isPreviousMonth: true,
+        previousMonth: record.month,
       });
     }
 

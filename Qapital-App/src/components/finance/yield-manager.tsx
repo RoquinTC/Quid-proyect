@@ -22,6 +22,8 @@ interface YieldItem {
   actualYield: number | null;
   isConfirmed: boolean;
   transactionId: string | null;
+  isPreviousMonth?: boolean;
+  previousMonth?: string; // ISO date string from API
 }
 
 interface YieldManagerProps {
@@ -138,6 +140,9 @@ export function YieldManager({ accounts }: YieldManagerProps) {
 
   const pendingYields = yields.filter((y) => !y.isConfirmed);
   const confirmedYields = yields.filter((y) => y.isConfirmed);
+  // Separate previous month unconfirmed yields from current month pending yields
+  const previousMonthPending = pendingYields.filter((y) => y.isPreviousMonth);
+  const currentMonthPending = pendingYields.filter((y) => !y.isPreviousMonth);
   const totalProjected = pendingYields.reduce((sum, y) => sum + y.projectedYield, 0);
   const totalConfirmed = confirmedYields.reduce((sum, y) => sum + (y.actualYield || 0), 0);
   const confirmedCount = confirmedYields.length;
@@ -191,8 +196,138 @@ export function YieldManager({ accounts }: YieldManagerProps) {
               <div className="px-4 pb-4 space-y-3">
                 <div className="h-px bg-emerald-200 dark:bg-emerald-800/50" />
 
-                {/* Pending Section - only visible 2 days before month-end */}
-                {pendingYields.length > 0 && (
+                {/* Previous Month Pending Section — ALWAYS visible when there are overdue yields */}
+                {previousMonthPending.length > 0 && (
+                  <div>
+                    <button
+                      onClick={() => setIsPendingExpanded(!isPendingExpanded)}
+                      className="w-full flex items-center justify-between py-1.5 mb-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        {isPendingExpanded ? (
+                          <ChevronUp className="size-3.5 text-red-500" />
+                        ) : (
+                          <ChevronDown className="size-3.5 text-red-500" />
+                        )}
+                        <span className="text-xs font-semibold text-red-600 dark:text-red-400">
+                          Pendientes Anteriores
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700 h-5 px-1.5"
+                        >
+                          {previousMonthPending.length}
+                        </Badge>
+                      </div>
+                      <span className="text-xs font-medium text-red-600 dark:text-red-400">
+                        {formatCurrency(previousMonthPending.reduce((s, y) => s + y.projectedYield, 0))}
+                      </span>
+                    </button>
+
+                    <AnimatePresence>
+                      {isPendingExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="overflow-hidden space-y-2"
+                        >
+                          {previousMonthPending.map((item) => {
+                            const itemKey = `prev-${item.accountId || item.subAccountId || ""}`;
+                            const isEditing = editingId === itemKey;
+                            const monthLabel = item.previousMonth
+                              ? new Date(item.previousMonth).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+                              : 'Mes anterior';
+
+                            return (
+                              <div
+                                key={itemKey}
+                                className="p-3 bg-red-50/60 dark:bg-red-900/10 rounded-xl border border-red-200/50 dark:border-red-800/30"
+                              >
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                    {item.accountName}
+                                  </span>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border-red-200 dark:border-red-700"
+                                  >
+                                    Mes anterior
+                                  </Badge>
+                                </div>
+
+                                <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                                  <span>
+                                    Balance: {formatCurrency(item.balance)} · {item.yieldPercentage}% anual
+                                  </span>
+                                  <span>Proyectado: {formatCurrency(item.projectedYield)}</span>
+                                </div>
+                                <p className="text-[10px] text-red-500 dark:text-red-400 mb-2">
+                                  Pendiente de {monthLabel}
+                                </p>
+
+                                <div className="flex items-center gap-2">
+                                  {isEditing ? (
+                                    <>
+                                      <div className="relative flex-1">
+                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                                          $
+                                        </span>
+                                        <Input
+                                          type="number"
+                                          value={editValue}
+                                          onChange={(e) => setEditValue(e.target.value)}
+                                          className="pl-5 h-8 text-xs rounded-lg"
+                                          placeholder={item.projectedYield.toString()}
+                                        />
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        className="h-8 rounded-lg bg-emerald-500 text-xs"
+                                        onClick={() => handleConfirm(item)}
+                                      >
+                                        <Check className="size-3" />
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                        {formatCurrency(item.projectedYield)}
+                                      </span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 text-[10px] rounded-lg"
+                                        onClick={() => {
+                                          setEditingId(itemKey);
+                                          setEditValue(item.projectedYield.toString());
+                                        }}
+                                      >
+                                        <Edit3 className="size-3 mr-1" />
+                                        Editar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        className="h-7 text-[10px] rounded-lg bg-emerald-500"
+                                        onClick={() => handleConfirm(item)}
+                                      >
+                                        Confirmar
+                                      </Button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {/* Current Month Pending Section - only visible near month-end */}
+                {currentMonthPending.length > 0 && (
                   <div>
                     {isNearMonthEnd ? (
                       <>
@@ -213,11 +348,11 @@ export function YieldManager({ accounts }: YieldManagerProps) {
                               variant="outline"
                               className="text-[10px] bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-700 h-5 px-1.5"
                             >
-                              {pendingYields.length}
+                              {currentMonthPending.length}
                             </Badge>
                           </div>
                           <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                            {formatCurrency(totalProjected)}
+                            {formatCurrency(currentMonthPending.reduce((s, y) => s + y.projectedYield, 0))}
                           </span>
                         </button>
 
@@ -230,7 +365,7 @@ export function YieldManager({ accounts }: YieldManagerProps) {
                               transition={{ duration: 0.15 }}
                               className="overflow-hidden space-y-2"
                             >
-                              {pendingYields.map((item) => {
+                              {currentMonthPending.map((item) => {
                                 const itemKey = item.accountId || item.subAccountId || "";
                                 const isEditing = editingId === itemKey;
 
@@ -321,7 +456,7 @@ export function YieldManager({ accounts }: YieldManagerProps) {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-medium text-amber-500/70 dark:text-amber-400/70">
-                              {pendingYields.length} pendiente{pendingYields.length !== 1 ? "s" : ""}
+                              {currentMonthPending.length} pendiente{currentMonthPending.length !== 1 ? "s" : ""}
                             </span>
                           </div>
                           <span className="text-[10px] text-gray-400 dark:text-gray-500">
