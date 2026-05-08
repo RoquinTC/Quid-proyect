@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export type ModuleType = "dashboard" | "finance" | "transport" | "health" | "pantry";
 
-export type FinanceSubView = "accounts" | "transactions" | "budgets" | "debts" | "savings" | "cdts" | "recurring" | "account-detail" | "debt-detail" | "savings-detail";
+export type FinanceSubView = "overview" | "accounts" | "transactions" | "budgets" | "debts" | "savings" | "cdts" | "recurring" | "account-detail" | "debt-detail" | "savings-detail";
 export type TransportSubView = "vehicles" | "fuel" | "maintenance";
 export type HealthSubView = "medications" | "appointments" | "profiles";
 export type PantrySubView = "items" | "shopping-lists";
@@ -64,7 +64,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveModule: (module) => set({ activeModule: module }),
 
   // Sub-views
-  financeSubView: "accounts",
+  financeSubView: "overview",
   setFinanceSubView: (view) => set({ financeSubView: view }),
   transportSubView: "vehicles",
   setTransportSubView: (view) => set({ transportSubView: view }),

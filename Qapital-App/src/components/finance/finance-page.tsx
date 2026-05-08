@@ -2,7 +2,8 @@
 
 import { useAppStore, type FinanceSubView } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock } from "lucide-react";
+import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock } from "lucide-react";
+import { FinanceOverview } from "./finance-overview";
 import { AccountsView } from "./accounts-view";
 import { BudgetsView } from "./budgets-view";
 import { DebtsView } from "./debts-view";
@@ -14,6 +15,7 @@ import { DebtDetail } from "./debt-detail";
 import { SavingsGoalDetail } from "./savings-goal-detail";
 
 const tabs: { id: FinanceSubView; label: string; icon: typeof Wallet }[] = [
+  { id: "overview", label: "Resumen", icon: LayoutDashboard },
   { id: "accounts", label: "Cuentas", icon: Wallet },
   { id: "budgets", label: "Presupuesto", icon: Receipt },
   { id: "debts", label: "Deudas", icon: CreditCard },
@@ -30,6 +32,7 @@ export function FinancePage() {
     if (financeSubView === "debt-detail") return <DebtDetail />;
     if (financeSubView === "savings-detail") return <SavingsGoalDetail />;
     if (financeSubView === "transactions") return <AccountsView />;
+    if (financeSubView === "overview") return <FinanceOverview />;
 
     switch (financeSubView) {
       case "accounts":
@@ -45,7 +48,7 @@ export function FinancePage() {
       case "recurring":
         return <RecurringView />;
       default:
-        return <AccountsView />;
+        return <FinanceOverview />;
     }
   };
 

@@ -1,26 +1,26 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Wallet,
-  TrendingUp,
-  TrendingDown,
   CreditCard,
-  Plus,
   ArrowUpRight,
   ArrowDownRight,
   ChevronRight,
+  Calendar,
   PiggyBank,
   Receipt,
-  Calendar,
+  LayoutDashboard,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { formatCurrency, apiFetch, calcPercentage } from "@/lib/api";
+import { formatCurrency, apiFetch, getColombiaNow } from "@/lib/api";
 import { motion } from "framer-motion";
+
+// ============================================================
+// TYPES
+// ============================================================
 
 interface SubAccount {
   id: string;
@@ -37,16 +37,6 @@ interface Account {
   color: string;
   excludeFromAvailable?: boolean;
   subAccounts: SubAccount[];
-}
-
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  description: string;
-  category?: string | null;
-  date: string;
-  account?: { id: string; name: string; color: string } | null;
 }
 
 interface Budget {
@@ -66,6 +56,10 @@ interface Debt {
   paymentDate?: number | null;
 }
 
+// ============================================================
+// ANIMATION VARIANTS
+// ============================================================
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: {
@@ -79,25 +73,26 @@ const itemVariants = {
   show: { opacity: 1, y: 0 },
 };
 
+// ============================================================
+// MAIN DASHBOARD COMPONENT
+// ============================================================
+
 export function DashboardPage() {
   const { setActiveModule, setFinanceSubView } = useAppStore();
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [accs, txs, bdgs, dbts] = await Promise.allSettled([
+      const [accs, bdgs, dbts] = await Promise.allSettled([
         apiFetch<Account[]>("/api/accounts"),
-        apiFetch<Transaction[]>("/api/transactions"),
         apiFetch<Budget[]>("/api/budgets"),
         apiFetch<Debt[]>("/api/debts"),
       ]);
 
       if (accs.status === "fulfilled") setAccounts(accs.value);
-      if (txs.status === "fulfilled") setTransactions(txs.value);
       if (bdgs.status === "fulfilled") setBudgets(bdgs.value);
       if (dbts.status === "fulfilled") setDebts(dbts.value);
     } catch (error) {
@@ -111,11 +106,14 @@ export function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
-  // Compute real data — account.balance and subAccount.balance are SEPARATE
-  // (a transaction on a sub-account only updates subAccount.balance, never account.balance)
+  // ============================================================
+  // COMPUTED VALUES
+  // ============================================================
+
   const totalAccountBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
   const totalSubAccountBalance = accounts.reduce(
-    (sum, a) => sum + a.subAccounts.reduce((s, sa) => s + sa.balance, 0), 0
+    (sum, a) => sum + a.subAccounts.reduce((s, sa) => s + sa.balance, 0),
+    0
   );
   const totalBalance = totalAccountBalance + totalSubAccountBalance;
 
@@ -124,42 +122,20 @@ export function DashboardPage() {
   const monthlyIncome = incomeBudgets.reduce((sum, b) => sum + b.spent, 0);
   const monthlyExpenses = expenseBudgets.reduce((sum, b) => sum + b.spent, 0);
   const totalExpenseBudget = expenseBudgets.reduce((sum, b) => sum + b.amount, 0);
-  const budgetUsage = totalExpenseBudget > 0
-    ? calcPercentage(monthlyExpenses, totalExpenseBudget)
+  const budgetPercentage = totalExpenseBudget > 0
+    ? Math.round((monthlyExpenses / totalExpenseBudget) * 100)
     : 0;
 
-  const recentTransactions = transactions.slice(0, 5);
-
-  // Expense categories for chart — aggregate by category to avoid duplicate keys
-  const expenseByCategory = (() => {
-    const categoryMap = new Map<string, { name: string; amount: number; color: string }>();
-    for (const b of expenseBudgets) {
-      const existing = categoryMap.get(b.category);
-      if (existing) {
-        existing.amount += b.spent;
-      } else {
-        categoryMap.set(b.category, {
-          name: b.category,
-          amount: b.spent,
-          color: b.category === "Vivienda" ? "#10B981"
-            : b.category === "Alimentación" ? "#F59E0B"
-            : b.category === "Transporte" ? "#3B82F6"
-            : b.category === "Entretenimiento" ? "#8B5CF6"
-            : b.category === "Ahorros" ? "#8B5CF6"
-            : b.category === "Suscripciones" ? "#EC4899"
-            : "#6B7280",
-        });
-      }
-    }
-    return Array.from(categoryMap.values()).map((cat) => ({
-      ...cat,
-      percentage: totalExpenseBudget > 0 ? calcPercentage(cat.amount, totalExpenseBudget) : 0,
-    }));
-  })();
+  const activeDebts = debts.filter((d) => d.currentBalance > 0);
+  const totalSavings = accounts.reduce(
+    (sum, a) => sum + a.subAccounts
+      .filter((sa) => !sa.excludeFromAvailable)
+      .reduce((s, sa) => s + sa.balance, 0),
+    0
+  );
 
   // Upcoming bills from debts
-  const upcomingBills = debts
-    .filter((d) => d.currentBalance > 0)
+  const upcomingBills = activeDebts
     .slice(0, 3)
     .map((d) => ({
       id: d.id,
@@ -168,6 +144,41 @@ export function DashboardPage() {
       dueDate: d.paymentDate ? `Día ${d.paymentDate}` : "Próximo",
     }));
 
+  // ============================================================
+  // NAVIGATION HELPER
+  // ============================================================
+
+  const goToFinanceOverview = () => {
+    setActiveModule("finance");
+    setFinanceSubView("overview");
+  };
+
+  // ============================================================
+  // LOADING STATE
+  // ============================================================
+
+  if (loading) {
+    return (
+      <div className="p-4 space-y-4 pb-24">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 w-32 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+          <div className="h-40 bg-gradient-to-br from-emerald-600/20 to-teal-500/20 rounded-2xl" />
+          <div className="grid grid-cols-3 gap-3">
+            <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
+            <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
+            <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
+          </div>
+          <div className="h-24 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
+          <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================
+  // RENDER
+  // ============================================================
+
   return (
     <motion.div
       variants={containerVariants}
@@ -175,13 +186,21 @@ export function DashboardPage() {
       animate="show"
       className="p-4 space-y-4 pb-24"
     >
-      {/* Greeting */}
+      {/* ============================================================ */}
+      {/* HEADER */}
+      {/* ============================================================ */}
       <motion.div variants={itemVariants}>
-        <h2 className="text-xl font-bold text-gray-900">¡Hola! 👋</h2>
-        <p className="text-sm text-gray-500">Aquí está tu resumen de hoy</p>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+          ¡Hola! 👋
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Aquí está tu resumen financiero
+        </p>
       </motion.div>
 
-      {/* Balance Card */}
+      {/* ============================================================ */}
+      {/* BALANCE CARD */}
+      {/* ============================================================ */}
       <motion.div variants={itemVariants}>
         <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white overflow-hidden relative">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)] pointer-events-none" />
@@ -221,222 +240,102 @@ export function DashboardPage() {
         </Card>
       </motion.div>
 
-      {/* Quick Stats Row */}
+      {/* ============================================================ */}
+      {/* QUICK STATS */}
+      {/* ============================================================ */}
       <motion.div variants={itemVariants} className="grid grid-cols-3 gap-3">
-        <Card className="border-0 shadow-md rounded-2xl">
+        <Card
+          className="border-0 shadow-sm rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => {
+            setActiveModule("finance");
+            setFinanceSubView("budgets");
+          }}
+        >
           <CardContent className="p-3 text-center">
-            <div className="inline-flex items-center justify-center size-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-400 mb-1.5">
-              <Receipt className="size-4 text-white" />
-            </div>
-            <p className="text-xs text-gray-500">Presupuesto</p>
-            <p className="text-lg font-bold text-gray-900">{budgetUsage}%</p>
-            <Progress value={budgetUsage} className="h-1.5 mt-1 rounded-full" />
+            <Receipt className="size-5 text-amber-500 mx-auto mb-1" />
+            <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {budgetPercentage}%
+            </p>
+            <p className="text-[10px] text-gray-500 dark:text-gray-400">Presupuesto</p>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-md rounded-2xl">
+        <Card
+          className="border-0 shadow-sm rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => {
+            setActiveModule("finance");
+            setFinanceSubView("debts");
+          }}
+        >
           <CardContent className="p-3 text-center">
-            <div className="inline-flex items-center justify-center size-8 rounded-lg bg-gradient-to-br from-rose-400 to-pink-400 mb-1.5">
-              <CreditCard className="size-4 text-white" />
-            </div>
-            <p className="text-xs text-gray-500">Deudas</p>
-            <p className="text-lg font-bold text-gray-900">
-              {debts.filter((d) => d.currentBalance > 0).length}
+            <CreditCard className="size-5 text-rose-500 mx-auto mb-1" />
+            <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {activeDebts.length}
             </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">Activas</p>
+            <p className="text-[10px] text-gray-500 dark:text-gray-400">Deudas</p>
           </CardContent>
         </Card>
-        <Card className="border-0 shadow-md rounded-2xl">
+        <Card
+          className="border-0 shadow-sm rounded-2xl cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => {
+            setActiveModule("finance");
+            setFinanceSubView("savings");
+          }}
+        >
           <CardContent className="p-3 text-center">
-            <div className="inline-flex items-center justify-center size-8 rounded-lg bg-gradient-to-br from-emerald-400 to-teal-400 mb-1.5">
-              <PiggyBank className="size-4 text-white" />
-            </div>
-            <p className="text-xs text-gray-500">Ahorro</p>
-            <p className="text-lg font-bold text-gray-900">
-              {formatCurrency(Math.max(monthlyIncome - monthlyExpenses, 0))}
+            <PiggyBank className="size-5 text-emerald-500 mx-auto mb-1" />
+            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+              {formatCurrency(totalSavings)}
             </p>
-            <p className="text-[10px] text-emerald-500 mt-0.5">Este mes</p>
+            <p className="text-[10px] text-gray-500 dark:text-gray-400">Ahorros</p>
           </CardContent>
         </Card>
       </motion.div>
 
-      {/* Quick Actions */}
+      {/* ============================================================ */}
+      {/* RESUMEN FINANCIERO CTA CARD */}
+      {/* ============================================================ */}
       <motion.div variants={itemVariants}>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="flex-1 h-12 rounded-xl border-dashed border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400"
-            onClick={() => {
-              setActiveModule("finance");
-              setFinanceSubView("accounts");
-            }}
-          >
-            <Plus className="size-4 mr-1" />
-            Transacción
-          </Button>
-          <Button
-            variant="outline"
-            className="flex-1 h-12 rounded-xl border-dashed border-rose-300 text-rose-600 hover:bg-rose-50 hover:border-rose-400"
-            onClick={() => {
-              setActiveModule("finance");
-              setFinanceSubView("accounts");
-            }}
-          >
-            <TrendingDown className="size-4 mr-1" />
-            Gasto
-          </Button>
-          <Button
-            variant="outline"
-            className="flex-1 h-12 rounded-xl border-dashed border-amber-300 text-amber-600 hover:bg-amber-50 hover:border-amber-400"
-            onClick={() => {
-              setActiveModule("finance");
-              setFinanceSubView("budgets");
-            }}
-          >
-            <Receipt className="size-4 mr-1" />
-            Presupuesto
-          </Button>
-        </div>
-      </motion.div>
-
-      {/* Expense Categories - Mini chart */}
-      {expenseByCategory.length > 0 && (
-        <motion.div variants={itemVariants}>
-          <Card className="border-0 shadow-md rounded-2xl">
-            <CardHeader className="pb-2 pt-4 px-5">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <TrendingUp className="size-4 text-emerald-500" />
-                Gastos por Categoría
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-5 pb-4">
-              {expenseByCategory.some((c) => c.amount > 0) ? (
-                <>
-                  {/* Visual bar chart */}
-                  <div className="flex items-end gap-1 h-20 mb-3">
-                    {expenseByCategory.map((cat, i) => (
-                      <motion.div
-                        key={`bar-${cat.name}-${i}`}
-                        className="flex-1 rounded-t-lg"
-                        initial={{ height: 0 }}
-                        animate={{ height: `${Math.max(cat.percentage, 5)}%` }}
-                        transition={{ delay: 0.1 * i, duration: 0.5, ease: "easeOut" }}
-                        style={{ backgroundColor: cat.color }}
-                      />
-                    ))}
-                  </div>
-                  {/* Category list */}
-                  <div className="space-y-2">
-                    {expenseByCategory.map((cat, i) => (
-                      <div key={`cat-${cat.name}-${i}`} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="size-2.5 rounded-full"
-                            style={{ backgroundColor: cat.color }}
-                          />
-                          <span className="text-xs text-gray-600">{cat.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-gray-900">
-                            {formatCurrency(cat.amount)}
-                          </span>
-                          <span className="text-[10px] text-gray-400">{cat.percentage}%</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-gray-400 text-center py-4">
-                  Agrega presupuestos para ver tus gastos por categoría
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
-
-      {/* Recent Transactions */}
-      <motion.div variants={itemVariants}>
-        <Card className="border-0 shadow-md rounded-2xl">
-          <CardHeader className="pb-2 pt-4 px-5">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Receipt className="size-4 text-emerald-500" />
-                Transacciones Recientes
-              </CardTitle>
-              <button
-                onClick={() => {
-                  setActiveModule("finance");
-                  setFinanceSubView("accounts");
-                }}
-                className="text-xs text-emerald-600 font-medium flex items-center gap-0.5"
-              >
-                Ver todo <ChevronRight className="size-3" />
-              </button>
-            </div>
-          </CardHeader>
-          <CardContent className="px-5 pb-4">
-            {recentTransactions.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">
-                Sin transacciones aún
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {recentTransactions.map((tx) => (
-                  <div key={tx.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`size-9 rounded-xl flex items-center justify-center ${
-                          tx.type === "income"
-                            ? "bg-emerald-50 text-emerald-600"
-                            : "bg-rose-50 text-rose-600"
-                        }`}
-                      >
-                        {tx.type === "income" ? (
-                          <ArrowUpRight className="size-4" />
-                        ) : (
-                          <ArrowDownRight className="size-4" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {tx.description}
-                        </p>
-                        <p className="text-[10px] text-gray-400">{tx.category || "Sin categoría"}</p>
-                      </div>
-                    </div>
-                    <span
-                      className={`text-sm font-semibold ${
-                        tx.type === "income" ? "text-emerald-600" : "text-gray-900"
-                      }`}
-                    >
-                      {tx.type === "income" ? "+" : ""}
-                      {formatCurrency(Math.abs(tx.amount))}
-                    </span>
-                  </div>
-                ))}
+        <Card
+          className="border-0 shadow-md rounded-2xl cursor-pointer hover:shadow-lg transition-all overflow-hidden"
+          onClick={goToFinanceOverview}
+        >
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="size-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center flex-shrink-0">
+                <LayoutDashboard className="size-6 text-white" />
               </div>
-            )}
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  Resumen Financiero
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Ve tu resumen financiero completo con gráficos y proyecciones
+                </p>
+              </div>
+              <ChevronRight className="size-5 text-gray-400 flex-shrink-0" />
+            </div>
           </CardContent>
         </Card>
       </motion.div>
 
-      {/* Upcoming Bills */}
+      {/* ============================================================ */}
+      {/* UPCOMING BILLS */}
+      {/* ============================================================ */}
       {upcomingBills.length > 0 && (
         <motion.div variants={itemVariants}>
           <Card className="border-0 shadow-md rounded-2xl">
-            <CardHeader className="pb-2 pt-4 px-5">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <div className="pb-2 pt-4 px-5">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
                 <Calendar className="size-4 text-rose-500" />
                 Próximos Pagos
-              </CardTitle>
-            </CardHeader>
+              </h3>
+            </div>
             <CardContent className="px-5 pb-4">
               <div className="space-y-3">
                 {upcomingBills.map((bill) => (
                   <div
                     key={bill.id}
-                    className="flex items-center justify-between p-3 bg-rose-50/60 rounded-xl cursor-pointer"
+                    className="flex items-center justify-between p-3 bg-rose-50/60 dark:bg-rose-900/10 rounded-xl cursor-pointer"
                     onClick={() => {
                       setActiveModule("finance");
                       setFinanceSubView("debts");
@@ -447,15 +346,15 @@ export function DashboardPage() {
                         <CreditCard className="size-4 text-white" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           {bill.name}
                         </p>
-                        <p className="text-[10px] text-gray-400">
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500">
                           Vence: {bill.dueDate}
                         </p>
                       </div>
                     </div>
-                    <span className="text-sm font-semibold text-rose-600">
+                    <span className="text-sm font-semibold text-rose-600 dark:text-rose-400">
                       {formatCurrency(bill.amount)}
                     </span>
                   </div>
@@ -466,7 +365,46 @@ export function DashboardPage() {
         </motion.div>
       )}
 
-
+      {/* ============================================================ */}
+      {/* QUICK ACTIONS */}
+      {/* ============================================================ */}
+      <motion.div variants={itemVariants}>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 h-12 rounded-xl border-dashed border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:border-emerald-400"
+            onClick={() => {
+              setActiveModule("finance");
+              setFinanceSubView("accounts");
+            }}
+          >
+            <ArrowUpRight className="size-4 mr-1" />
+            Ingreso
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 h-12 rounded-xl border-dashed border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:border-rose-400"
+            onClick={() => {
+              setActiveModule("finance");
+              setFinanceSubView("accounts");
+            }}
+          >
+            <ArrowDownRight className="size-4 mr-1" />
+            Gasto
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 h-12 rounded-xl border-dashed border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-400"
+            onClick={() => {
+              setActiveModule("finance");
+              setFinanceSubView("budgets");
+            }}
+          >
+            <Receipt className="size-4 mr-1" />
+            Presupuesto
+          </Button>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
