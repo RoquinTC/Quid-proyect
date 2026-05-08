@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export type ModuleType = "dashboard" | "finance" | "transport" | "health" | "pantry";
 
-export type FinanceSubView = "overview" | "accounts" | "transactions" | "budgets" | "debts" | "savings" | "cdts" | "recurring" | "account-detail" | "debt-detail" | "savings-detail";
+export type FinanceSubView = "accounts" | "transactions" | "budgets" | "debts" | "savings" | "cdts" | "recurring" | "account-detail" | "debt-detail" | "savings-detail";
 export type TransportSubView = "vehicles" | "fuel" | "maintenance";
 export type HealthSubView = "medications" | "appointments" | "profiles";
 export type PantrySubView = "items" | "shopping-lists";
@@ -56,6 +56,16 @@ interface AppState {
   // Onboarding
   onboardingStep: number;
   setOnboardingStep: (step: number) => void;
+
+  // Sync & offline state (local-first)
+  isOnline: boolean;
+  setOnline: (online: boolean) => void;
+  isSyncing: boolean;
+  setSyncStatus: (syncing: boolean) => void;
+  pendingCount: number;
+  setPendingCount: (count: number) => void;
+  lastSyncAt: Date | null;
+  setLastSyncAt: (date: Date) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -64,7 +74,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveModule: (module) => set({ activeModule: module }),
 
   // Sub-views
-  financeSubView: "overview",
+  financeSubView: "accounts",
   setFinanceSubView: (view) => set({ financeSubView: view }),
   transportSubView: "vehicles",
   setTransportSubView: (view) => set({ transportSubView: view }),
@@ -114,4 +124,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Onboarding
   onboardingStep: 0,
   setOnboardingStep: (step) => set({ onboardingStep: step }),
+
+  // Sync & offline state
+  isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
+  setOnline: (online) => set({ isOnline: online }),
+  isSyncing: false,
+  setSyncStatus: (syncing) => set({ isSyncing: syncing }),
+  pendingCount: 0,
+  setPendingCount: (count) => set({ pendingCount: count }),
+  lastSyncAt: null,
+  setLastSyncAt: (date) => set({ lastSyncAt: date }),
 }));

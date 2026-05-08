@@ -1,166 +1,340 @@
-'use client';
+/**
+ * SyncProvider — Orchestrates local-first synchronization
+ *
+ * This component wraps the app and handles:
+ *   1. Initial data population from server → IndexedDB
+ *   2. Background periodic sync (server → IndexedDB)
+ *   3. Offline/online detection
+ *   4. Drain sync queue when coming back online
+ *   5. Pending operations count
+ *
+ * Place this inside the SessionProvider so it has access to the user session.
+ */
 
-import { useEffect, useState, useCallback, createContext, useContext, type ReactNode } from 'react';
-import { localDB, getSyncMeta, setSyncMeta, isLocalDBPopulated } from '../db';
-import { performInitialSync, performPull, performPush, syncNow } from './engine';
+"use client";
 
-// ─── Sync Status Types ───
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from "react";
+import { useSession } from "next-auth/react";
+import {
+  localDB,
+  API_TABLE_MAP,
+  TABLE_API_MAP,
+  getAllFromTable,
+  replaceAllInTable,
+  isInitialSyncDone,
+  setInitialSyncDone,
+  getPendingSyncItems,
+  removeSyncItem,
+  incrementRetry,
+  getPendingSyncCount,
+  clearLocalData,
+} from "../index";
+import { apiFetch } from "@/lib/api";
+import { useAppStore } from "@/lib/store";
+import { isBrowserOnline, MAX_RETRY_COUNT, getRetryDelay, sleep } from "./utils";
 
-export type SyncPhase = 'idle' | 'initializing' | 'pulling' | 'pushing' | 'error' | 'ready';
+// ============================================
+// SYNC CONFIGURATION
+// ============================================
 
-export interface SyncState {
-  phase: SyncPhase;
-  isOnline: boolean;
-  lastSyncAt: number | null;
-  pendingCount: number;
-  error: string | null;
+/** How often to do a full background sync (ms) */
+const BACKGROUND_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+/** How often to drain the sync queue (ms) */
+const QUEUE_DRAIN_INTERVAL = 30 * 1000; // 30 seconds
+
+/** API endpoints to sync during initial load and background refresh */
+const SYNC_ENDPOINTS = [
+  "/api/accounts",
+  "/api/transactions",
+  "/api/budgets",
+  "/api/debts",
+  "/api/savings",
+  "/api/cdts",
+  "/api/recurring",
+  "/api/payroll",
+  "/api/vehicles",
+  "/api/medications",
+  "/api/appointments",
+  "/api/pantry",
+  "/api/shopping-lists",
+  "/api/health-profiles",
+  "/api/fuel-prices",
+  "/api/settings",
+] as const;
+
+// ============================================
+// SYNC PROVIDER COMPONENT
+// ============================================
+
+interface SyncProviderProps {
+  children: ReactNode;
 }
 
-// ─── Context ───
+export function SyncProvider({ children }: SyncProviderProps) {
+  const { data: session, status } = useSession();
+  const userId = session?.user?.id ?? "";
+  const {
+    setSyncStatus,
+    setOnline,
+    setPendingCount,
+    isOnline,
+    pendingCount,
+  } = useAppStore();
 
-const SyncContext = createContext<SyncState & {
-  triggerSync: () => Promise<void>;
-  retryFailed: () => Promise<void>;
-}>({
-  phase: 'idle',
-  isOnline: true,
-  lastSyncAt: null,
-  pendingCount: 0,
-  error: null,
-  triggerSync: async () => {},
-  retryFailed: async () => {},
-});
+  const [initialSyncComplete, setInitialSyncComplete] = useState(false);
+  const backgroundSyncRef = useRef<NodeJS.Timeout | null>(null);
+  const queueDrainRef = useRef<NodeJS.Timeout | null>(null);
+  const isDrainingRef = useRef(false);
+  const isSyncingRef = useRef(false);
 
-export const useSync = () => useContext(SyncContext);
+  // ============================================
+  // INITIAL SYNC — First load populates IndexedDB
+  // ============================================
 
-// ─── Provider ───
+  const performInitialSync = useCallback(async () => {
+    if (!userId || isSyncingRef.current) return;
 
-export function SyncProvider({ children }: { children: ReactNode }) {
-  const [phase, setPhase] = useState<SyncPhase>('idle');
-  const [isOnline, setIsOnline] = useState(true);
-  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+    // Check if we already have data for this user
+    const alreadySynced = await isInitialSyncDone(userId);
+    if (alreadySynced) {
+      setInitialSyncComplete(true);
+      return;
+    }
 
-  // Monitor online status
-  useEffect(() => {
-    const update = () => setIsOnline(navigator.onLine);
-    update();
-    window.addEventListener('online', update);
-    window.addEventListener('offline', update);
-    return () => {
-      window.removeEventListener('online', update);
-      window.removeEventListener('offline', update);
-    };
-  }, []);
+    isSyncingRef.current = true;
+    setSyncStatus(true);
 
-  // Count pending mutations periodically
-  useEffect(() => {
-    const countPending = async () => {
-      try {
-        const count = await localDB.mutationQueue
-          .where('status')
-          .equals('pending')
-          .count();
-        setPendingCount(count);
-      } catch {
-        // DB not initialized yet
-      }
-    };
-    countPending();
-    const interval = setInterval(countPending, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Load last sync timestamp
-  useEffect(() => {
-    getSyncMeta('lastPullTimestamp').then((ts) => {
-      if (ts) setLastSyncAt(parseInt(ts));
-    });
-  }, []);
-
-  const triggerSync = useCallback(async () => {
-    if (phase === 'initializing' || phase === 'pulling' || phase === 'pushing') return;
+    console.log(`[Sync] Starting initial sync for user ${userId}...`);
 
     try {
-      setError(null);
+      // Fetch all endpoints in parallel
+      const results = await Promise.allSettled(
+        SYNC_ENDPOINTS.map(async (endpoint) => {
+          const tableName = API_TABLE_MAP[endpoint];
+          if (!tableName) return;
 
-      // Check if initial sync needed
-      const populated = await isLocalDBPopulated();
-      if (!populated) {
-        setPhase('initializing');
-        await performInitialSync();
-        setPhase('ready');
-        setLastSyncAt(Date.now());
-        return;
+          try {
+            const data = await apiFetch<any[]>(endpoint);
+            if (Array.isArray(data)) {
+              await replaceAllInTable(tableName, userId, data);
+            } else {
+              // Single object (e.g. /api/settings)
+              await localDB[tableName]?.put({ ...(data as Record<string, unknown>), userId });
+            }
+          } catch (err) {
+            console.warn(`[Sync] Failed to sync ${endpoint}:`, err);
+          }
+        })
+      );
+
+      // Mark initial sync as done
+      await setInitialSyncDone(userId);
+      setInitialSyncComplete(true);
+
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      console.log(`[Sync] Initial sync complete: ${succeeded}/${SYNC_ENDPOINTS.length} endpoints synced`);
+    } catch (err) {
+      console.error("[Sync] Initial sync failed:", err);
+    } finally {
+      isSyncingRef.current = false;
+      setSyncStatus(false);
+    }
+  }, [userId, setSyncStatus]);
+
+  // ============================================
+  // BACKGROUND SYNC — Periodic server refresh
+  // ============================================
+
+  const performBackgroundSync = useCallback(async () => {
+    if (!userId || !isBrowserOnline() || isSyncingRef.current) return;
+
+    isSyncingRef.current = true;
+    setSyncStatus(true);
+
+    try {
+      await Promise.allSettled(
+        SYNC_ENDPOINTS.map(async (endpoint) => {
+          const tableName = API_TABLE_MAP[endpoint];
+          if (!tableName) return;
+
+          try {
+            const data = await apiFetch<any[]>(endpoint);
+            if (Array.isArray(data)) {
+              await replaceAllInTable(tableName, userId, data);
+            } else {
+              await localDB[tableName]?.put({ ...(data as Record<string, unknown>), userId });
+            }
+          } catch {
+            // Silently fail — local data is still available
+          }
+        })
+      );
+    } finally {
+      isSyncingRef.current = false;
+      setSyncStatus(false);
+    }
+  }, [userId, setSyncStatus]);
+
+  // ============================================
+  // QUEUE DRAIN — Push pending operations to server
+  // ============================================
+
+  const drainSyncQueue = useCallback(async () => {
+    if (!userId || !isBrowserOnline() || isDrainingRef.current) return;
+
+    isDrainingRef.current = true;
+
+    try {
+      const pending = await getPendingSyncItems();
+
+      for (const item of pending) {
+        // Skip items that have exceeded max retries
+        if (item.retryCount >= MAX_RETRY_COUNT) {
+          console.warn(`[Sync] Dropping item ${item.id} after ${MAX_RETRY_COUNT} retries`);
+          await removeSyncItem(item.id!);
+          continue;
+        }
+
+        try {
+          const fetchOptions: RequestInit = {
+            method: item.method,
+            headers: { "Content-Type": "application/json" },
+          };
+
+          if (item.body) {
+            fetchOptions.body = item.body;
+          }
+
+          const response = await fetch(item.serverUrl, fetchOptions);
+
+          if (response.ok) {
+            // Success — remove from queue
+            await removeSyncItem(item.id!);
+
+            // If this was a create with a tempId, update IndexedDB with server response
+            if (item.tempId && item.operation === "create") {
+              try {
+                const serverData = await response.json();
+                const table = (localDB as any)[item.table];
+                if (table && serverData?.id) {
+                  await table.delete(item.tempId);
+                  await table.put({ ...serverData, userId });
+                }
+              } catch {
+                // If we can't parse the response, the record still exists with tempId
+                // It'll get replaced on next background sync
+              }
+            }
+          } else {
+            // Server rejected — increment retry
+            await incrementRetry(item.id!, `HTTP ${response.status}`);
+          }
+        } catch (err: any) {
+          // Network error — increment retry
+          await incrementRetry(item.id!, err.message);
+        }
       }
 
-      // Incremental sync
-      setPhase('pulling');
-      await performPull();
-
-      setPhase('pushing');
-      await performPush();
-
-      setPhase('ready');
-      setLastSyncAt(Date.now());
-      await setSyncMeta('lastPullTimestamp', String(Date.now()));
-    } catch (err) {
-      setPhase('error');
-      setError(err instanceof Error ? err.message : 'Error de sincronización');
-      console.error('[SyncProvider] Sync failed:', err);
+      // Update pending count
+      const count = await getPendingSyncCount();
+      setPendingCount(count);
+    } finally {
+      isDrainingRef.current = false;
     }
-  }, [phase]);
+  }, [userId, setPendingCount]);
 
-  const retryFailed = useCallback(async () => {
-    // Reset failed mutations to pending
-    await localDB.mutationQueue
-      .where('status')
-      .equals('failed')
-      .modify({ status: 'pending', retryCount: 0, error: null });
+  // ============================================
+  // ONLINE/OFFLINE DETECTION
+  // ============================================
 
-    await triggerSync();
-  }, [triggerSync]);
-
-  // Initial sync on mount
-  useEffect(() => {
-    if (navigator.onLine) {
-      triggerSync();
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-sync on back online
   useEffect(() => {
     const handleOnline = () => {
-      console.log('[SyncProvider] Back online — triggering sync');
-      triggerSync();
+      setOnline(true);
+      // When coming back online, drain the queue
+      drainSyncQueue();
     };
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
-  }, [triggerSync]);
 
-  // Periodic sync while online (every 30s)
+    const handleOffline = () => {
+      setOnline(false);
+    };
+
+    // Initial state
+    setOnline(isBrowserOnline());
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [setOnline, drainSyncQueue]);
+
+  // ============================================
+  // LIFECYCLE — Start/stop sync based on session
+  // ============================================
+
   useEffect(() => {
-    if (!isOnline) return;
-    const interval = setInterval(() => {
-      triggerSync();
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [isOnline, triggerSync]);
+    // Only start sync when user is authenticated
+    if (status !== "authenticated" || !userId) {
+      // Clear intervals if user logs out
+      if (backgroundSyncRef.current) {
+        clearInterval(backgroundSyncRef.current);
+        backgroundSyncRef.current = null;
+      }
+      if (queueDrainRef.current) {
+        clearInterval(queueDrainRef.current);
+        queueDrainRef.current = null;
+      }
+      return;
+    }
 
-  return (
-    <SyncContext.Provider
-      value={{
-        phase,
-        isOnline,
-        lastSyncAt,
-        pendingCount,
-        error,
-        triggerSync,
-        retryFailed,
-      }}
-    >
-      {children}
-    </SyncContext.Provider>
-  );
+    // Initial sync
+    performInitialSync();
+
+    // Background sync interval
+    backgroundSyncRef.current = setInterval(() => {
+      performBackgroundSync();
+    }, BACKGROUND_SYNC_INTERVAL);
+
+    // Queue drain interval
+    queueDrainRef.current = setInterval(() => {
+      drainSyncQueue();
+    }, QUEUE_DRAIN_INTERVAL);
+
+    // Initial pending count
+    getPendingSyncCount().then(setPendingCount);
+
+    return () => {
+      if (backgroundSyncRef.current) {
+        clearInterval(backgroundSyncRef.current);
+        backgroundSyncRef.current = null;
+      }
+      if (queueDrainRef.current) {
+        clearInterval(queueDrainRef.current);
+        queueDrainRef.current = null;
+      }
+    };
+  }, [userId, status, performInitialSync, performBackgroundSync, drainSyncQueue, setPendingCount]);
+
+  // Clear local data on logout
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      clearLocalData("");
+      setInitialSyncComplete(false);
+    }
+  }, [status]);
+
+  // ============================================
+  // RENDER
+  // ============================================
+
+  return <>{children}</>;
 }

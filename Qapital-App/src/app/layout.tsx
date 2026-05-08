@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Poppins } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { QueryClientProvider } from "@/components/providers/query-provider";
-import { PWAProvider } from "@/components/pwa";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -38,20 +37,8 @@ export const metadata: Metadata = {
     title: "Qapital",
   },
   icons: {
-    icon: [
-      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
-      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
-      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
-    ],
-    apple: [
-      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
-    ],
-  },
-  openGraph: {
-    title: "Qapital - Tu Centro Financiero",
-    description: "Gestión financiera personal en una sola app",
-    type: "website",
-    locale: "es_CO",
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
   },
 };
 
@@ -62,15 +49,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <head>
-        {/* PWA meta tags */}
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="application-name" content="Qapital" />
-        <meta name="apple-mobile-web-app-title" content="Qapital" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="msapplication-TileColor" content="#059669" />
-        <meta name="msapplication-TileImage" content="/icon-192.png" />
-      </head>
       <body
         className={`${inter.variable} ${poppins.variable} font-sans antialiased bg-background text-foreground`}
       >
@@ -81,9 +59,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <QueryClientProvider>
-            <PWAProvider>
-              {children}
-            </PWAProvider>
+            {children}
             <Toaster
               position="top-center"
               richColors

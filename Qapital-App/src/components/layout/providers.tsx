@@ -1,6 +1,7 @@
 "use client";
 
 import { SessionProvider } from "next-auth/react";
+import { SyncProvider } from "@/lib/local/sync/provider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +11,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       refetchInterval={15}
       refetchOnWindowFocus={true}
     >
-      {children}
+      <SyncProvider>
+        {children}
+      </SyncProvider>
     </SessionProvider>
   );
 }

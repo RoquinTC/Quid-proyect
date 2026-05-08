@@ -1,145 +1,341 @@
-'use client';
+/**
+ * Local-First Mutation Hooks
+ *
+ * React hooks for writing data with offline-first support.
+ *
+ * Flow:
+ *   1. Write to IndexedDB immediately (optimistic update)
+ *   2. Add operation to sync queue
+ *   3. Try to push to server
+ *   4. On success → remove from queue, update IndexedDB with server response
+ *   5. On failure → keep in queue for retry when back online
+ *
+ * The component sees the change instantly (IndexedDB read updates via liveQuery).
+ * If the server push fails, the queue retries automatically.
+ */
 
-import { localDB } from '../db';
-import type { MutationOperation } from '../db';
+"use client";
 
-let sequenceCounter = 0;
+import { useState, useCallback, useRef } from "react";
+import { useSession } from "next-auth/react";
+import {
+  localDB,
+  API_TABLE_MAP,
+  upsertRecord,
+  deleteRecord,
+  enqueueSync,
+  removeSyncItem,
+  getPendingSyncCount,
+} from "../index";
+import { apiFetch } from "@/lib/api";
+import { useAppStore } from "@/lib/store";
+import { generateTempId } from "../sync/utils";
 
-// Initialize sequence counter from existing queue
-if (typeof window !== 'undefined') {
-  localDB.mutationQueue
-    .orderBy('sequence')
-    .reverse()
-    .first()
-    .then((last) => {
-      if (last) sequenceCounter = last.sequence;
-    })
-    .catch(() => {
-      // DB not ready yet
-    });
+// ============================================
+// useLocalMutation — Create / Update / Delete
+// ============================================
+
+interface UseLocalMutationResult<T> {
+  mutate: (data: Partial<T>, id?: string) => Promise<T | null>;
+  mutateAsync: (data: Partial<T>, id?: string) => Promise<T | null>;
+  loading: boolean;
+  error: string | null;
+  reset: () => void;
 }
 
+type MutationMethod = "POST" | "PUT" | "DELETE";
+
 /**
- * Enqueue a mutation for later sync to the server.
- * The mutation is stored in IndexedDB and processed when online.
+ * Hook for creating, updating, or deleting records with offline support.
+ *
+ * @param apiPath - Base API endpoint, e.g. "/api/accounts"
+ * @param tableName - IndexedDB table name, e.g. "accounts"
+ *
+ * @example
+ * // Create
+ * const { mutate: createAccount } = useLocalMutation<Account>("/api/accounts", "accounts");
+ * await createAccount({ name: "Ahorros", type: "savings", balance: 0 });
+ *
+ * // Update
+ * await mutate({ name: "Nuevo Nombre" }, "account-id-123");
+ *
+ * // Delete (pass empty data + id)
+ * await mutate({}, "account-id-123"); // with method override
  */
-export async function enqueueMutation(
-  operation: MutationOperation,
-  tableName: string,
-  recordId: string,
-  payload: Record<string, unknown>,
-  options?: {
-    snapshot?: Record<string, unknown>;
-    apiRoute?: string;
-    apiMethod?: string;
-    groupId?: string;
-  }
-): Promise<void> {
-  const entry = {
-    id: crypto.randomUUID(),
-    operation,
-    tableName,
-    recordId,
-    payload: JSON.stringify(payload),
-    apiRoute: options?.apiRoute,
-    apiMethod: options?.apiMethod,
-    snapshot: options?.snapshot ? JSON.stringify(options.snapshot) : undefined,
-    sequence: ++sequenceCounter,
-    status: 'pending' as const,
-    retryCount: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    groupId: options?.groupId,
+export function useLocalMutation<T extends { id: string; userId?: string }>(
+  apiPath: string,
+  tableName: string
+): UseLocalMutationResult<T> {
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? "";
+  const { setPendingCount, isOnline } = useAppStore();
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const executeMutation = useCallback(
+    async (payload: Partial<T>, id?: string): Promise<T | null> => {
+      if (!userId) return null;
+      setLoading(true);
+      setError(null);
+
+      // Determine operation type
+      const isCreate = !id;
+      const isDelete = id && Object.keys(payload).length === 0 && (payload as any)._delete === true;
+      const isUpdate = id && !isDelete;
+
+      const method: MutationMethod = isCreate ? "POST" : isDelete ? "DELETE" : "PUT";
+      const url = id ? `${apiPath}/${id}` : apiPath;
+
+      try {
+        // 1. Optimistic local update
+        if (isCreate) {
+          // Generate a temp ID for the new record
+          const tempId = generateTempId();
+          const optimisticRecord = {
+            ...payload,
+            id: tempId,
+            userId,
+          } as T;
+
+          // Write to IndexedDB immediately
+          await upsertRecord(tableName, optimisticRecord);
+
+          // Queue for server sync
+          await enqueueSync({
+            table: tableName,
+            operation: "create",
+            serverUrl: apiPath,
+            method: "POST",
+            body: JSON.stringify({ ...payload, _tempId: tempId }),
+            tempId,
+          });
+
+          // Try to push to server immediately if online
+          if (isOnline) {
+            try {
+              const serverResponse = await apiFetch<T>(apiPath, {
+                method: "POST",
+                body: JSON.stringify(payload),
+              });
+
+              // Replace temp record with server record (has real ID)
+              await localDB[tableName]?.delete(tempId);
+              await upsertRecord(tableName, serverResponse);
+
+              // Remove from sync queue
+              const pending = await localDB.syncQueue
+                .where("tempId")
+                .equals(tempId)
+                .toArray();
+              for (const item of pending) {
+                await removeSyncItem(item.id!);
+              }
+
+              // Update pending count
+              const count = await getPendingSyncCount();
+              setPendingCount(count);
+
+              setLoading(false);
+              return serverResponse;
+            } catch {
+              // Server push failed — keep in queue for later retry
+              const count = await getPendingSyncCount();
+              setPendingCount(count);
+            }
+          }
+
+          setLoading(false);
+          return optimisticRecord;
+        }
+
+        if (isUpdate) {
+          // Get current record for optimistic update
+          const currentRecord = await localDB[tableName]?.get(id);
+          const optimisticRecord = {
+            ...(currentRecord || {}),
+            ...payload,
+            id,
+            userId,
+          } as T;
+
+          // Write to IndexedDB immediately
+          await upsertRecord(tableName, optimisticRecord);
+
+          // Queue for server sync
+          await enqueueSync({
+            table: tableName,
+            operation: "update",
+            serverUrl: url,
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+
+          // Try to push to server immediately if online
+          if (isOnline) {
+            try {
+              const serverResponse = await apiFetch<T>(url, {
+                method: "PUT",
+                body: JSON.stringify(payload),
+              });
+
+              // Update IndexedDB with server response
+              await upsertRecord(tableName, serverResponse);
+
+              // Remove from sync queue
+              const pending = await localDB.syncQueue
+                .where("table")
+                .equals(tableName)
+                .toArray();
+              // Find the most recent update for this specific URL
+              const matchingItems = pending.filter(
+                (item: any) => item.serverUrl === url && item.operation === "update"
+              );
+              if (matchingItems.length > 0) {
+                // Remove only the most recent one (last added)
+                await removeSyncItem(matchingItems[matchingItems.length - 1].id!);
+              }
+
+              const count = await getPendingSyncCount();
+              setPendingCount(count);
+
+              setLoading(false);
+              return serverResponse;
+            } catch {
+              const count = await getPendingSyncCount();
+              setPendingCount(count);
+            }
+          }
+
+          setLoading(false);
+          return optimisticRecord;
+        }
+
+        if (isDelete) {
+          // Remove from IndexedDB immediately
+          await deleteRecord(tableName, id);
+
+          // Queue for server sync
+          await enqueueSync({
+            table: tableName,
+            operation: "delete",
+            serverUrl: url,
+            method: "DELETE",
+          });
+
+          // Try to push to server immediately if online
+          if (isOnline) {
+            try {
+              await apiFetch(url, { method: "DELETE" });
+
+              // Remove from sync queue
+              const pending = await localDB.syncQueue
+                .where("table")
+                .equals(tableName)
+                .toArray();
+              const matchingItems = pending.filter(
+                (item: any) => item.serverUrl === url && item.operation === "delete"
+              );
+              if (matchingItems.length > 0) {
+                await removeSyncItem(matchingItems[matchingItems.length - 1].id!);
+              }
+
+              const count = await getPendingSyncCount();
+              setPendingCount(count);
+            } catch {
+              const count = await getPendingSyncCount();
+              setPendingCount(count);
+            }
+          }
+
+          setLoading(false);
+          return null;
+        }
+
+        setLoading(false);
+        return null;
+      } catch (err: any) {
+        setError(err.message || "Error en la operación");
+        setLoading(false);
+        return null;
+      }
+    },
+    [userId, apiPath, tableName, isOnline, setPendingCount]
+  );
+
+  const reset = useCallback(() => {
+    setError(null);
+    setLoading(false);
+  }, []);
+
+  return {
+    mutate: executeMutation,
+    mutateAsync: executeMutation,
+    loading,
+    error,
+    reset,
   };
+}
 
-  await localDB.mutationQueue.add(entry);
+// ============================================
+// useLocalDelete — Specialized delete hook
+// ============================================
+
+interface UseLocalDeleteResult {
+  remove: (id: string) => Promise<boolean>;
+  loading: boolean;
+  error: string | null;
 }
 
 /**
- * Write to IndexedDB optimistically AND enqueue the mutation for server sync.
- * This is the primary way to create records in local-first mode.
+ * Specialized hook for deleting records with offline support.
+ *
+ * @param apiPath - Base API endpoint, e.g. "/api/accounts"
+ * @param tableName - IndexedDB table name
+ *
+ * @example
+ * const { remove } = useLocalDelete("/api/accounts", "accounts");
+ * await remove("account-id-123");
  */
-export async function localCreate<T extends Record<string, unknown>>(
-  tableName: string,
-  data: T & { id: string }
-): Promise<void> {
-  const now = Date.now();
+export function useLocalDelete(
+  apiPath: string,
+  tableName: string
+): UseLocalDeleteResult {
+  const { mutate } = useLocalMutation(apiPath, tableName);
 
-  // 1. Write to IndexedDB optimistically
-  await localDB.table(tableName).put({
-    ...data,
-    _syncStatus: 'pending_create',
-    _version: 1,
-    _lastModified: now,
-  });
+  const remove = useCallback(
+    async (id: string): Promise<boolean> => {
+      const result = await mutate({ _delete: true } as any, id);
+      return result !== undefined; // Delete returns null on success
+    },
+    [mutate]
+  );
 
-  // 2. Enqueue mutation for server sync
-  await enqueueMutation('create', tableName, data.id, data);
+  return {
+    remove,
+    loading: false, // Managed by parent mutation hook
+    error: null,
+  };
 }
 
-/**
- * Update a record in IndexedDB optimistically AND enqueue the mutation.
- */
-export async function localUpdate<T extends Record<string, unknown>>(
-  tableName: string,
-  id: string,
-  changes: Partial<T>
-): Promise<void> {
-  const now = Date.now();
-
-  // Get current state for snapshot (for rollback)
-  const existing = await localDB.table(tableName).get(id);
-  const snapshot = existing ? { ...existing } : undefined;
-
-  // 1. Update IndexedDB optimistically
-  await localDB.table(tableName).update(id, {
-    ...changes,
-    _syncStatus: existing?._syncStatus === 'synced' ? 'pending_update' : existing?._syncStatus,
-    _lastModified: now,
-  });
-
-  // 2. Enqueue mutation for server sync
-  await enqueueMutation('update', tableName, id, changes, { snapshot });
-}
+// ============================================
+// useSyncQueue — Monitor pending sync items
+// ============================================
 
 /**
- * Delete a record from IndexedDB optimistically AND enqueue the mutation.
+ * Hook that provides the current count of pending sync operations.
+ * Useful for showing a badge or status indicator.
  */
-export async function localDelete(
-  tableName: string,
-  id: string
-): Promise<void> {
-  // Get current state for snapshot
-  const existing = await localDB.table(tableName).get(id);
-  const snapshot = existing ? { ...existing } : undefined;
+export function useSyncQueue() {
+  const { pendingCount, setPendingCount } = useAppStore();
 
-  // 1. Mark as pending_delete in IndexedDB (don't remove yet — need for rollback)
-  await localDB.table(tableName).update(id, {
-    _syncStatus: 'pending_delete',
-    _lastModified: Date.now(),
-  });
+  const refreshCount = useCallback(async () => {
+    const count = await getPendingSyncCount();
+    setPendingCount(count);
+  }, [setPendingCount]);
 
-  // 2. Enqueue mutation for server sync
-  await enqueueMutation('delete', tableName, id, {}, { snapshot });
-}
-
-/**
- * Enqueue a complex operation (e.g., debt payment) that needs a specific API route.
- * The local optimistic update should be done BEFORE calling this.
- */
-export async function localComplexOperation(
-  apiRoute: string,
-  apiMethod: string,
-  payload: Record<string, unknown>,
-  affectedRecords: Array<{ tableName: string; id: string }>,
-  groupId?: string
-): Promise<void> {
-  const gId = groupId || crypto.randomUUID();
-
-  // Enqueue the complex operation
-  await enqueueMutation('complex', affectedRecords[0]?.tableName || '', affectedRecords[0]?.id || '', payload, {
-    apiRoute,
-    apiMethod,
-    groupId: gId,
-  });
+  return {
+    pendingCount,
+    refreshCount,
+  };
 }
