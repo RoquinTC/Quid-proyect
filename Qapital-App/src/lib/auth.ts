@@ -122,6 +122,6 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60,
   },
-  secret: process.env.NEXTAUTH_SECRET || "lifehub-secret-key-dev-2024",
+  secret: process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === "development" ? "lifehub-secret-key-dev-2024" : undefined),
   cookies: getCookieConfig(isSecureEnvironment),
 };

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hash } from "bcryptjs";
+import { hash, compare } from "bcryptjs";
 import { db } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, newPassword, confirmPassword } = body;
+    const { email, currentPassword, newPassword, confirmPassword } = body;
 
-    if (!email || !newPassword || !confirmPassword) {
+    if (!email || !currentPassword || !newPassword || !confirmPassword) {
       return NextResponse.json(
         { error: "Todos los campos son requeridos" },
         { status: 400 }
@@ -16,14 +16,21 @@ export async function POST(req: NextRequest) {
 
     if (newPassword.length < 6) {
       return NextResponse.json(
-        { error: "La contraseña debe tener al menos 6 caracteres" },
+        { error: "La nueva contraseña debe tener al menos 6 caracteres" },
         { status: 400 }
       );
     }
 
     if (newPassword !== confirmPassword) {
       return NextResponse.json(
-        { error: "Las contraseñas no coinciden" },
+        { error: "Las contraseñas nuevas no coinciden" },
+        { status: 400 }
+      );
+    }
+
+    if (currentPassword === newPassword) {
+      return NextResponse.json(
+        { error: "La nueva contraseña debe ser diferente a la actual" },
         { status: 400 }
       );
     }
@@ -36,6 +43,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "No se encontró una cuenta con este correo" },
         { status: 404 }
+      );
+    }
+
+    // Verify current password
+    const isValid = await compare(currentPassword, user.password);
+    if (!isValid) {
+      return NextResponse.json(
+        { error: "La contraseña actual es incorrecta" },
+        { status: 401 }
       );
     }
 

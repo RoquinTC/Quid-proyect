@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useSyncExternalStore } from 'react';
 import { Download, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -9,15 +9,38 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+// Use useSyncExternalStore to detect standalone mode reactively
+function useIsStandalone() {
+  const subscribe = useCallback((callback: () => void) => {
+    const mql = window.matchMedia('(display-mode: standalone)');
+    mql.addEventListener('change', callback);
+    return () => mql.removeEventListener('change', callback);
+  }, []);
+
+  const getSnapshot = useCallback(() => {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           (window.navigator as unknown as { standalone?: boolean }).standalone === true;
+  }, []);
+
+  const getServerSnapshot = useCallback(() => false, []);
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showBanner, setShowBanner] = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const isStandalone = useIsStandalone();
+
+  // Check if user already installed (localStorage flag)
+  const getWasInstalled = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('qapital-installed') === 'true';
+  }, []);
 
   useEffect(() => {
-    // Check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstalled(true);
+    // If already in standalone mode or was already installed, don't show
+    if (isStandalone || getWasInstalled()) {
       return;
     }
 
@@ -46,17 +69,29 @@ export function InstallPrompt() {
     window.addEventListener('beforeinstallprompt', handler);
 
     // Listen for successful install
-    window.addEventListener('appinstalled', () => {
-      setIsInstalled(true);
+    const installedHandler = () => {
+      localStorage.setItem('qapital-installed', 'true');
       setShowBanner(false);
       setDeferredPrompt(null);
       console.log('[PWA] App installed successfully');
-    });
+    };
+
+    window.addEventListener('appinstalled', installedHandler);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', installedHandler);
     };
-  }, []);
+  }, [isStandalone, getWasInstalled]);
+
+  // If standalone mode changed to true (app opened as installed), mark as installed
+  useEffect(() => {
+    if (isStandalone) {
+      localStorage.setItem('qapital-installed', 'true');
+      setShowBanner(false);
+      setDeferredPrompt(null);
+    }
+  }, [isStandalone]);
 
   const handleInstall = useCallback(async () => {
     if (!deferredPrompt) return;
@@ -67,6 +102,7 @@ export function InstallPrompt() {
 
       if (outcome === 'accepted') {
         console.log('[PWA] User accepted install prompt');
+        localStorage.setItem('qapital-installed', 'true');
       } else {
         console.log('[PWA] User dismissed install prompt');
       }
@@ -83,8 +119,8 @@ export function InstallPrompt() {
     localStorage.setItem('qapital-install-dismissed', Date.now().toString());
   }, []);
 
-  // Don't render if already installed or no prompt available
-  if (isInstalled || !deferredPrompt) return null;
+  // Don't show if already in standalone, already installed, or no prompt available
+  if (isStandalone || getWasInstalled() || !deferredPrompt) return null;
 
   return (
     <AnimatePresence>
