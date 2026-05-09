@@ -13,19 +13,36 @@ export async function POST() {
     const userId = session.user.id;
 
     // Delete all finance data for this user (order matters due to foreign keys)
-    await db.savingsContribution.deleteMany({ where: { goal: { userId } } });
-    await db.savingsGoalAccount.deleteMany({ where: { goal: { userId } } });
-    await db.savingsGoal.deleteMany({ where: { userId } });
-    await db.cDT.deleteMany({ where: { userId } });
-    await db.installment.deleteMany({ where: { debt: { userId } } });
-    await db.recurringPayment.deleteMany({ where: { userId } });
-    await db.debt.deleteMany({ where: { userId } });
-    await db.transaction.deleteMany({ where: { userId } });
-    await db.budget.deleteMany({ where: { userId } });
-    await db.yieldRecord.deleteMany({ where: { account: { userId } } });
-    await db.sharedAccountUser.deleteMany({ where: { account: { userId } } });
-    await db.subAccount.deleteMany({ where: { account: { userId } } });
-    await db.account.deleteMany({ where: { userId } });
+    // Wrapped in transaction for atomicity — if any step fails, nothing is deleted
+    await db.$transaction(async (tx) => {
+      // Savings & CDTs (depends on contributions, goal accounts)
+      await tx.savingsContribution.deleteMany({ where: { goal: { userId } } });
+      await tx.savingsGoalAccount.deleteMany({ where: { goal: { userId } } });
+      await tx.savingsGoal.deleteMany({ where: { userId } });
+      await tx.cDT.deleteMany({ where: { userId } });
+
+      // Debts — must delete abono details, abonos, installments before debts
+      await tx.abonoDetail.deleteMany({ where: { abono: { debt: { userId } } } });
+      await tx.abono.deleteMany({ where: { debt: { userId } } });
+      await tx.installment.deleteMany({ where: { debt: { userId } } });
+      await tx.recurringPayment.deleteMany({ where: { userId } });
+      await tx.payrollGroup.deleteMany({ where: { userId } });
+      await tx.debt.deleteMany({ where: { userId } });
+
+      // Transactions & budgets
+      await tx.transaction.deleteMany({ where: { userId } });
+      await tx.budget.deleteMany({ where: { userId } });
+
+      // Yield records
+      await tx.yieldRecord.deleteMany({ where: { account: { userId } } });
+
+      // Shared accounts & sub-accounts (before accounts)
+      await tx.sharedAccountUser.deleteMany({ where: { account: { userId } } });
+      await tx.subAccount.deleteMany({ where: { account: { userId } } });
+
+      // Accounts (must be last — many things depend on it)
+      await tx.account.deleteMany({ where: { userId } });
+    });
 
     return NextResponse.json({ success: true, message: "Todos los datos financieros han sido eliminados" });
   } catch (error) {

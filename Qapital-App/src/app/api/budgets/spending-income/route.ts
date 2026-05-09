@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     const ccInstallments = await db.installment.findMany({
       where: {
         purchaseDate: { gte: periodStart, lte: periodEnd },
-        debt: { type: { not: "loan" } }, // Only CC installments
+        debt: { userId, type: { not: "loan" } }, // Only CC installments for this user
       },
       select: {
         purchaseDate: true,

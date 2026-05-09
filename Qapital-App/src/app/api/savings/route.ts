@@ -190,12 +190,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Update currentAmount with linked accounts total + CDTs invested amount
-    // CDTs represent money already invested towards the goal, so they count as progress
-    if (linkedAccountsTotal > 0 || linkedCDTTotal > 0) {
+    // Update currentAmount with linked accounts + CDTs total
+    const totalInitialAmount = linkedAccountsTotal + linkedCDTTotal;
+    if (totalInitialAmount > 0) {
       await db.savingsGoal.update({
         where: { id: goal.id },
-        data: { currentAmount: linkedAccountsTotal + linkedCDTTotal },
+        data: { currentAmount: totalInitialAmount },
       })
     }
 
@@ -282,6 +282,10 @@ export async function POST(request: Request) {
         },
       })
     }
+
+    // Sync savings budget to keep budget progress accurate
+    const { syncSavingsBudget } = await import('@/lib/savings-budget-sync')
+    await syncSavingsBudget(userId)
 
     // Re-fetch with all includes for the response
     const fullGoal = await db.savingsGoal.findUnique({

@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
 
 dotenv.config();
 
@@ -43,5 +44,6 @@ console.log('GROQ_API_KEY:', env.GROQ_API_KEY ? '✅' : '❌');
 console.log('GOOGLE_AI_KEY:', env.GOOGLE_AI_KEY ? '✅' : '❌');
 console.log('TAVILY_API_KEY:', env.TAVILY_API_KEY ? '✅' : '❌');
 console.log('FIREBASE:', env.FIREBASE_SERVICE_ACCOUNT_JSON ? '✅' : '❌');
+console.log('GOOGLE_AUTH:', (env.GOOGLE_CREDENTIALS_JSON || fs.existsSync('./credentials.json')) ? '✅' : '❌');
 console.log('GITHUB_TOKEN:', env.GITHUB_TOKEN ? '✅' : '❌');
 console.log('--------------------------------');

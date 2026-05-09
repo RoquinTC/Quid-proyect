@@ -5,7 +5,7 @@
  * Whenever a savings goal is created, updated, deleted, contributed to,
  * or has accounts linked/unlinked, this function recalculates:
  * 
- * - Each goal's `currentAmount` = sum of linked account/subaccount balances + CDT invested amounts + manual contributions
+ * - Each goal's `currentAmount` = manual contributions + linked account/subaccount balances + CDT invested amounts
  * - Budget `amount` = sum of all active savings goals' targetAmount
  * - Budget `spent` = sum of all active savings goals' currentAmount
  * 
@@ -16,7 +16,7 @@ import { db } from "./db";
 
 export async function syncSavingsBudget(userId: string): Promise<void> {
   try {
-    // First, recalculate currentAmount for each active goal based on linked accounts + CDTs
+    // First, recalculate currentAmount for each active goal based on linked accounts + CDTs + contributions
     const activeGoals = await db.savingsGoal.findMany({
       where: { userId, isActive: true },
       include: {
@@ -27,12 +27,12 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
           },
         },
         cdts: { select: { amount: true, status: true } },
-        contributions: { select: { amount: true } },
+        contributions: { select: { amount: true, description: true } },
       },
     });
 
     for (const goal of activeGoals) {
-      // Calculate current from linked accounts
+      // Calculate current from linked accounts (live balances)
       let linkedBalance = 0;
       for (const link of goal.linkedAccounts) {
         if (link.subAccount) {
@@ -50,16 +50,21 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
         }
       }
 
-      // Calculate manual contributions (those not from account linking or CDT)
-      // Contributions from account linking have description "Saldo de ... al vincular"
-      // Contributions from CDT have description starting with "CDT"
-      // We need to be careful not to double-count
-      // Actually, it's simpler: currentAmount = linkedBalance + cdtBalance + manual contributions
-      // But contributions already include everything. So let's just use linkedBalance + cdtBalance
-      // since those are the live balances, and any manual contributions are captured in linkedBalance already.
-      
-      // The cleanest approach: currentAmount = sum of all linked account/subaccount live balances + active CDT amounts
-      const newCurrentAmount = linkedBalance + cdtBalance;
+      // Calculate manual contributions (those NOT from account linking snapshots)
+      // "Saldo cuenta vinculada" contributions are snapshot values from when accounts were linked.
+      // We use live balances instead to always reflect the current state,
+      // so we exclude these snapshot contributions to avoid double-counting.
+      let manualContributions = 0;
+      for (const contrib of goal.contributions) {
+        if (contrib.description !== 'Saldo cuenta vinculada') {
+          manualContributions += contrib.amount;
+        }
+      }
+
+      // Final calculation: manual contributions + live linked balances + CDT amounts
+      // This avoids double-counting: we use live balances for linked accounts
+      // (not snapshots) and only add manual contributions that aren't linked-account snapshots.
+      const newCurrentAmount = manualContributions + linkedBalance + cdtBalance;
 
       // Only update if there's a meaningful difference to avoid unnecessary writes
       if (Math.abs(goal.currentAmount - newCurrentAmount) > 0.01) {
@@ -67,7 +72,7 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
           where: { id: goal.id },
           data: { currentAmount: newCurrentAmount },
         });
-        console.log(`[SavingsBudgetSync] Updated goal "${goal.name}": ${goal.currentAmount} → ${newCurrentAmount} (linked=${linkedBalance}, cdt=${cdtBalance})`);
+        console.log(`[SavingsBudgetSync] Updated goal "${goal.name}": ${goal.currentAmount} → ${newCurrentAmount} (manual=${manualContributions}, linked=${linkedBalance}, cdt=${cdtBalance})`);
       }
     }
 

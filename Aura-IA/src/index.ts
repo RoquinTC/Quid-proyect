@@ -3,7 +3,7 @@ import { startBot } from './bot/telegram.js';
 
 async function main() {
   console.log('🤖 Iniciando Aura Agent...');
-
+  
   try {
     await memory.init();
     console.log('✅ Base de datos Firebase iniciada.');

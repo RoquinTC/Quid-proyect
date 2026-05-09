@@ -169,6 +169,14 @@ export function SettingsPage() {
     setResettingAll(true);
     try {
       await apiFetch("/api/settings/reset-all-data", { method: "POST" });
+      // Clear local IndexedDB data + sync queue to prevent stale data
+      try {
+        const { clearLocalData, clearSyncQueue } = await import("@/lib/local/index");
+        await clearLocalData("");
+        await clearSyncQueue();
+      } catch (idbError) {
+        console.warn("Could not clear IndexedDB after reset:", idbError);
+      }
       setResetResult("Todos los datos financieros eliminados");
       setShowResetFinanceDialog(false);
       setTimeout(() => setResetResult(null), 4000);

@@ -161,7 +161,7 @@ bot.on('message:voice', async (ctx) => {
     await ctx.api.editMessageText(ctx.chat.id, waitMsg.message_id, `🎤 He entendido: "${transcription}"\n\n⏳ Pensando respuesta...`);
     
     await ctx.replyWithChatAction('typing');
-    const responseText = await runAgentLoop(userId, transcription, ctx);
+    const responseText = await runAgentLoop(userId, `[NOTA DE VOZ]: ${transcription}`, ctx);
     
     try { await ctx.api.deleteMessage(ctx.chat.id, waitMsg.message_id); } catch(e) {}
     

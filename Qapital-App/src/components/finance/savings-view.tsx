@@ -8,6 +8,8 @@ import { SavingsGoalForm } from "./savings-goal-form";
 import { SavingsContributeForm } from "./savings-contribute-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Plus, PiggyBank, Sparkles, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,8 +20,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, PiggyBank, Sparkles, Trash2 } from "lucide-react";
-import { motion } from "framer-motion";
 
 interface SavingsGoal {
   id: string;
@@ -91,8 +91,8 @@ export function SavingsView() {
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
   const [contributeGoalId, setContributeGoalId] = useState<string | null>(null);
   const [contributeGoalName, setContributeGoalName] = useState("");
-
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchGoals = useCallback(async () => {
     try {
@@ -115,21 +115,6 @@ export function SavingsView() {
   const handleContribute = (goalId: string, goalName: string) => {
     setContributeGoalId(goalId);
     setContributeGoalName(goalName);
-  };
-
-  const handleDeleteGoal = (goalId: string) => {
-    setDeleteGoalId(goalId);
-  };
-
-  const confirmDeleteGoal = async () => {
-    if (!deleteGoalId) return;
-    try {
-      await apiFetch(`/api/savings/${deleteGoalId}`, { method: 'DELETE' });
-      fetchGoals();
-    } catch (error) {
-      console.error('Error deleting goal:', error);
-    }
-    setDeleteGoalId(null);
   };
 
   const handleGoalClick = (goalId: string) => {
@@ -156,6 +141,20 @@ export function SavingsView() {
     setShowGoalForm(open);
     if (!open) {
       setEditingGoal(null);
+    }
+  };
+
+  const handleDeleteGoal = async () => {
+    if (!deleteGoalId) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/savings/${deleteGoalId}`, { method: "DELETE" });
+      setDeleteGoalId(null);
+      fetchGoals();
+    } catch (error) {
+      console.error("Error deleting savings goal:", error);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -249,7 +248,7 @@ export function SavingsView() {
                 onContribute={() => handleContribute(goal.id, goal.name)}
                 onClick={() => handleGoalClick(goal.id)}
                 onEdit={() => handleEditGoal(goal)}
-                onDelete={() => handleDeleteGoal(goal.id)}
+                onDelete={() => setDeleteGoalId(goal.id)}
               />
             </motion.div>
           ))}
@@ -282,27 +281,6 @@ export function SavingsView() {
         onSuccess={handleFormSuccess}
       />
 
-      {/* Delete Goal Dialog */}
-      <AlertDialog open={!!deleteGoalId} onOpenChange={() => setDeleteGoalId(null)}>
-        <AlertDialogContent className="rounded-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar esta meta?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se eliminará la meta y todo su historial. Los CDTs vinculados se desvincularán. Esta acción no se puede deshacer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteGoal}
-              className="rounded-xl bg-red-500 hover:bg-red-600"
-            >
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       {/* Contribute Sheet */}
       {contributeGoalId && (
         <SavingsContributeForm
@@ -318,6 +296,29 @@ export function SavingsView() {
           onSuccess={fetchGoals}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteGoalId} onOpenChange={(open) => { if (!open) setDeleteGoalId(null); }}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esta meta de ahorro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente la meta, todos sus aportes y pagos recurrentes asociados. Los CDTs vinculados se desvincularán. No se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-xl bg-red-500 hover:bg-red-600"
+              onClick={handleDeleteGoal}
+              disabled={deleting}
+            >
+              {deleting ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }

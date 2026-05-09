@@ -2,6 +2,7 @@
 
 import { SessionProvider } from "next-auth/react";
 import { SyncProvider } from "@/lib/local/sync/provider";
+import { PWAProvider } from "@/components/pwa";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -12,7 +13,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       refetchOnWindowFocus={true}
     >
       <SyncProvider>
-        {children}
+        <PWAProvider>
+          {children}
+        </PWAProvider>
       </SyncProvider>
     </SessionProvider>
   );

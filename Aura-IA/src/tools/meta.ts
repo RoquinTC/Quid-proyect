@@ -94,7 +94,8 @@ export async function applyNewSkill(skill_name: string) {
   if (env.GITHUB_TOKEN && env.GITHUB_USER && env.GITHUB_REPO) {
     try {
       const repoName = env.GITHUB_REPO.split('/').pop()?.replace('.git', '');
-      const url = `${GITHUB_API_URL}/repos/${env.GITHUB_USER}/${repoName}/contents/src/tools/${toolFileName}`;
+      // Ajuste para Monorepo: Las herramientas están en Aura-IA/src/tools/
+      const url = `${GITHUB_API_URL}/repos/${env.GITHUB_USER}/${repoName}/contents/Aura-IA/src/tools/${toolFileName}`;
       
       // Ver si el archivo ya existe para obtener el SHA
       let sha;

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { syncSavingsBudget } from '@/lib/savings-budget-sync'
 
 // GET /api/savings/[id] — get a single savings goal
 export async function GET(
@@ -97,25 +98,19 @@ export async function PUT(
       },
     })
 
-    // Recalculate currentAmount from CDTs + linked accounts + contributions
-    // This ensures CDT amounts are always reflected in currentAmount
-    const allContributions = await db.savingsContribution.aggregate({
-      where: { goalId: id },
-      _sum: { amount: true },
-    })
-    const contributionsTotal = allContributions._sum.amount || 0
-
-    // CDTs linked to this goal
-    const linkedCDTTotal = goal.cdts.reduce((sum, cdt) => sum + cdt.amount, 0)
-
-    // Update currentAmount = contributions + CDTs invested amount
-    await db.savingsGoal.update({
-      where: { id },
-      data: { currentAmount: contributionsTotal + linkedCDTTotal },
-    })
-
     // Recalculate monthly quota and recreate recurring payments
     if (targetAmount || deadline || frequency || periodAmounts || biweeklyDays || monthlyDay || weeklyDay) {
+      // Get current CDT total for this goal (before any relinking)
+      const currentCdts = await db.cDT.findMany({ where: { goalId: id } })
+      const linkedCDTTotal = currentCdts.reduce((sum, cdt) => sum + cdt.amount, 0)
+
+      // Get current contributions total
+      const allContributions = await db.savingsContribution.aggregate({
+        where: { goalId: id },
+        _sum: { amount: true },
+      })
+      const contributionsTotal = allContributions._sum.amount || 0
+
       const monthsRemaining = Math.max(1, Math.ceil(
         ((goal.deadline || new Date()).getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 30)
       ))
@@ -248,18 +243,6 @@ export async function PUT(
           data: { goalId: id },
         })
       }
-
-      // Recalculate currentAmount after CDT link changes
-      const cdtsNow = await db.cDT.findMany({ where: { goalId: id } })
-      const cdtTotal = cdtsNow.reduce((sum, c) => sum + c.amount, 0)
-      const allContribs = await db.savingsContribution.aggregate({
-        where: { goalId: id },
-        _sum: { amount: true },
-      })
-      await db.savingsGoal.update({
-        where: { id },
-        data: { currentAmount: (allContribs._sum.amount || 0) + cdtTotal },
-      })
     }
 
     // Update linked accounts if provided
@@ -304,19 +287,18 @@ export async function PUT(
           newLinkedTotal += bal
         }
       }
-
-      // Update currentAmount: recalculate from contributions
-      const totalContributions = await db.savingsContribution.aggregate({
-        where: { goalId: id },
-        _sum: { amount: true },
-      })
-      await db.savingsGoal.update({
-        where: { id },
-        data: { currentAmount: totalContributions._sum.amount || 0 },
-      })
     }
 
-    // Re-fetch with full includes for response
+    // ============================================================
+    // FINAL RECALCULATION: Always recalculate currentAmount
+    // using the authoritative sync function after ALL updates.
+    // This ensures CDTs + linked accounts + contributions are
+    // always correctly reflected, regardless of which fields
+    // were changed during the edit.
+    // ============================================================
+    await syncSavingsBudget(session.user.id)
+
+    // Re-fetch with full includes for response (AFTER sync, so data is fresh)
     const fullGoal = await db.savingsGoal.findUnique({
       where: { id },
       include: {
@@ -369,6 +351,10 @@ export async function DELETE(
     await db.recurringPayment.deleteMany({ where: { savingsGoalId: id } })
     // Delete the goal (cascade will handle contributions, linked accounts)
     await db.savingsGoal.delete({ where: { id, userId: session.user.id } })
+
+    // Sync budget after deletion so the Ahorros budget reflects the change
+    await syncSavingsBudget(session.user.id)
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })

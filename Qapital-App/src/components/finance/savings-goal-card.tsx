@@ -115,34 +115,32 @@ export function SavingsGoalCard({ goal, onContribute, onClick, onEdit, onDelete 
               >
                 {goal.name}
               </h3>
-              <div className="ml-auto flex items-center gap-0.5 shrink-0">
-                {/* Edit button */}
-                {onEdit && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit();
-                    }}
-                    className="p-1 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950 transition-colors"
-                    title="Editar meta"
-                  >
-                    <Pencil className="size-3.5" />
-                  </button>
-                )}
-                {/* Delete button */}
-                {onDelete && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete();
-                    }}
-                    className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
-                    title="Eliminar meta"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                )}
-              </div>
+              {/* Edit button */}
+              {onEdit && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                  className="p-1 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950 transition-colors shrink-0"
+                  title="Editar meta"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+              )}
+              {/* Delete button */}
+              {onDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                  }}
+                  className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors shrink-0"
+                  title="Eliminar meta"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              )}
             </div>
 
             <span className="text-[10px] text-gray-400">
