@@ -36,6 +36,7 @@ import {
   Trash2,
   Wallet,
   Database,
+  UserX,
 } from "lucide-react";
 import { AccountManager } from "@/components/finance/account-manager";
 import {
@@ -49,6 +50,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { motion } from "framer-motion";
+import { signOut } from "next-auth/react";
 
 interface UserSettings {
   id: string;
@@ -97,8 +99,10 @@ export function SettingsPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [showResetFinanceDialog, setShowResetFinanceDialog] = useState(false);
   const [showResetTransportDialog, setShowResetTransportDialog] = useState(false);
+  const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
   const [resettingAll, setResettingAll] = useState(false);
   const [resettingTransport, setResettingTransport] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
@@ -169,14 +173,6 @@ export function SettingsPage() {
     setResettingAll(true);
     try {
       await apiFetch("/api/settings/reset-all-data", { method: "POST" });
-      // Clear local IndexedDB data + sync queue to prevent stale data
-      try {
-        const { clearLocalData, clearSyncQueue } = await import("@/lib/local/index");
-        await clearLocalData("");
-        await clearSyncQueue();
-      } catch (idbError) {
-        console.warn("Could not clear IndexedDB after reset:", idbError);
-      }
       setResetResult("Todos los datos financieros eliminados");
       setShowResetFinanceDialog(false);
       setTimeout(() => setResetResult(null), 4000);
@@ -200,6 +196,21 @@ export function SettingsPage() {
       setResetResult("Error al eliminar datos de transporte");
     } finally {
       setResettingTransport(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      await apiFetch("/api/settings/delete-account", { method: "POST" });
+      setShowDeleteAccountDialog(false);
+      // Sign out and redirect to login
+      await signOut({ redirect: false });
+      window.location.href = window.location.origin + "/";
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      setResetResult("Error al eliminar la cuenta");
+      setDeletingAccount(false);
     }
   };
 
@@ -592,6 +603,38 @@ export function SettingsPage() {
         </Card>
       </motion.div>
 
+      {/* Delete Account */}
+      <motion.div variants={itemVariants}>
+        <Card className="border-0 shadow-sm rounded-xl border border-red-200 dark:border-red-900/30">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="size-9 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <UserX className="size-4 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-red-700 dark:text-red-400">Eliminar cuenta</p>
+                <p className="text-[11px] text-gray-400">
+                  Borra permanentemente tu usuario y todos los datos de todos los módulos
+                </p>
+              </div>
+            </div>
+            <div className="bg-red-50 dark:bg-red-900/10 rounded-xl p-3">
+              <p className="text-[11px] text-red-600 dark:text-red-400">
+                Al eliminar tu cuenta se borrarán todos tus datos sin excepción: finanzas, transporte, salud, despensa y configuración. Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full rounded-xl text-xs gap-2 border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/10"
+              onClick={() => setShowDeleteAccountDialog(true)}
+            >
+              <UserX className="size-3.5" />
+              Eliminar Mi Cuenta
+            </Button>
+          </CardContent>
+        </Card>
+      </motion.div>
+
       {/* Global reset result */}
       {resetResult && (
         <motion.div variants={itemVariants}>
@@ -642,6 +685,33 @@ export function SettingsPage() {
             >
               {resettingTransport ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
               Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Account Dialog */}
+      <AlertDialog open={showDeleteAccountDialog} onOpenChange={setShowDeleteAccountDialog}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <div className="flex items-center justify-center size-12 rounded-2xl bg-red-100 dark:bg-red-900/30 mx-auto mb-3">
+              <UserX className="size-6 text-red-600 dark:text-red-400" />
+            </div>
+            <AlertDialogTitle className="text-center">¿Eliminar tu cuenta?</AlertDialogTitle>
+            <AlertDialogDescription className="text-center space-y-2">
+              <span className="block">Esta acción eliminará <strong>permanentemente</strong> tu cuenta y <strong>todos</strong> tus datos: cuentas, transacciones, presupuestos, deudas, ahorros, vehículos, medicamentos, despensa y configuración.</span>
+              <span className="block text-red-600 dark:text-red-400 font-medium">No se puede deshacer. Perderás acceso a toda tu información.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col gap-2 sm:flex-row">
+            <AlertDialogCancel className="rounded-xl" disabled={deletingAccount}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-xl bg-red-600 hover:bg-red-700"
+              onClick={handleDeleteAccount}
+              disabled={deletingAccount}
+            >
+              {deletingAccount ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
+              Sí, eliminar mi cuenta
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
