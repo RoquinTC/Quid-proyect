@@ -97,14 +97,30 @@ export async function PUT(
       },
     })
 
+    // Recalculate currentAmount from CDTs + linked accounts + contributions
+    // This ensures CDT amounts are always reflected in currentAmount
+    const allContributions = await db.savingsContribution.aggregate({
+      where: { goalId: id },
+      _sum: { amount: true },
+    })
+    const contributionsTotal = allContributions._sum.amount || 0
+
+    // CDTs linked to this goal
+    const linkedCDTTotal = goal.cdts.reduce((sum, cdt) => sum + cdt.amount, 0)
+
+    // Update currentAmount = contributions + CDTs invested amount
+    await db.savingsGoal.update({
+      where: { id },
+      data: { currentAmount: contributionsTotal + linkedCDTTotal },
+    })
+
     // Recalculate monthly quota and recreate recurring payments
     if (targetAmount || deadline || frequency || periodAmounts || biweeklyDays || monthlyDay || weeklyDay) {
       const monthsRemaining = Math.max(1, Math.ceil(
         ((goal.deadline || new Date()).getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 30)
       ))
 
-      const linkedCDTTotal = goal.cdts.reduce((sum, cdt) => sum + cdt.amount, 0)
-      const remainingAmount = Math.max(0, goal.targetAmount - linkedCDTTotal)
+      const remainingAmount = Math.max(0, goal.targetAmount - contributionsTotal - linkedCDTTotal)
       const monthlyQuota = remainingAmount / monthsRemaining
 
       const effectiveFrequency = goal.frequency
@@ -232,6 +248,18 @@ export async function PUT(
           data: { goalId: id },
         })
       }
+
+      // Recalculate currentAmount after CDT link changes
+      const cdtsNow = await db.cDT.findMany({ where: { goalId: id } })
+      const cdtTotal = cdtsNow.reduce((sum, c) => sum + c.amount, 0)
+      const allContribs = await db.savingsContribution.aggregate({
+        where: { goalId: id },
+        _sum: { amount: true },
+      })
+      await db.savingsGoal.update({
+        where: { id },
+        data: { currentAmount: (allContribs._sum.amount || 0) + cdtTotal },
+      })
     }
 
     // Update linked accounts if provided

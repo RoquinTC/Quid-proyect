@@ -8,7 +8,17 @@ import { SavingsGoalForm } from "./savings-goal-form";
 import { SavingsContributeForm } from "./savings-contribute-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, PiggyBank, Sparkles } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, PiggyBank, Sparkles, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface SavingsGoal {
@@ -82,6 +92,8 @@ export function SavingsView() {
   const [contributeGoalId, setContributeGoalId] = useState<string | null>(null);
   const [contributeGoalName, setContributeGoalName] = useState("");
 
+  const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
+
   const fetchGoals = useCallback(async () => {
     try {
       const data = await apiFetch<SavingsGoal[]>("/api/savings");
@@ -103,6 +115,21 @@ export function SavingsView() {
   const handleContribute = (goalId: string, goalName: string) => {
     setContributeGoalId(goalId);
     setContributeGoalName(goalName);
+  };
+
+  const handleDeleteGoal = (goalId: string) => {
+    setDeleteGoalId(goalId);
+  };
+
+  const confirmDeleteGoal = async () => {
+    if (!deleteGoalId) return;
+    try {
+      await apiFetch(`/api/savings/${deleteGoalId}`, { method: 'DELETE' });
+      fetchGoals();
+    } catch (error) {
+      console.error('Error deleting goal:', error);
+    }
+    setDeleteGoalId(null);
   };
 
   const handleGoalClick = (goalId: string) => {
@@ -222,6 +249,7 @@ export function SavingsView() {
                 onContribute={() => handleContribute(goal.id, goal.name)}
                 onClick={() => handleGoalClick(goal.id)}
                 onEdit={() => handleEditGoal(goal)}
+                onDelete={() => handleDeleteGoal(goal.id)}
               />
             </motion.div>
           ))}
@@ -253,6 +281,27 @@ export function SavingsView() {
         editingGoal={editingGoal}
         onSuccess={handleFormSuccess}
       />
+
+      {/* Delete Goal Dialog */}
+      <AlertDialog open={!!deleteGoalId} onOpenChange={() => setDeleteGoalId(null)}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar esta meta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará la meta y todo su historial. Los CDTs vinculados se desvincularán. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteGoal}
+              className="rounded-xl bg-red-500 hover:bg-red-600"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Contribute Sheet */}
       {contributeGoalId && (

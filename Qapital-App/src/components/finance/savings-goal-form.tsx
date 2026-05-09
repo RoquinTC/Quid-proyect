@@ -14,6 +14,7 @@ import {
   AlertCircle, ArrowRightLeft, Wallet, Unlink
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format'
+import { apiFetch } from '@/lib/api'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface SubAccount {
@@ -301,11 +302,8 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
 
   const loadAccounts = async () => {
     try {
-      const res = await fetch('/api/accounts')
-      if (res.ok) {
-        const data = await res.json()
-        setAccounts(data)
-      }
+      const data = await apiFetch<Account[]>('/api/accounts')
+      setAccounts(data)
     } catch (e) {
       console.error('Error loading accounts:', e)
     }
@@ -313,11 +311,8 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
 
   const loadCDTs = async () => {
     try {
-      const res = await fetch('/api/cdts')
-      if (res.ok) {
-        const data = await res.json()
-        setCDTs(data)
-      }
+      const data = await apiFetch<CDTRecord[]>('/api/cdts')
+      setCDTs(data)
     } catch (e) {
       console.error('Error loading CDTs:', e)
     }
@@ -385,9 +380,8 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
     try {
       const startDate = new Date()
       const endDate = new Date(Date.now() + newCDTTerm * 24 * 60 * 60 * 1000)
-      const res = await fetch('/api/cdts', {
+      const cdt = await apiFetch<CDTRecord>('/api/cdts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount,
           bank: newCDTBank || 'Banco',
@@ -398,10 +392,9 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
         }),
       })
 
-      if (res.ok) {
-        const cdt = await res.json()
+      if (cdt) {
         setCDTs(prev => [...prev, cdt])
-        setSelectedCDTIds(prev => [...prev, cdt.id])
+        if (cdt.id) setSelectedCDTIds(prev => [...prev, cdt.id])
         setNewCDTAmount('')
         setNewCDTRate('')
         setNewCDTBank('')
@@ -448,22 +441,17 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
       const url = editingGoal ? `/api/savings/${editingGoal.id}` : '/api/savings'
       const method = editingGoal ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const saved = await apiFetch<any>(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
 
-      if (res.ok) {
-        const saved = await res.json()
+      if (saved) {
         onSuccess?.(saved)
         onOpenChange(false)
-      } else {
-        const err = await res.json()
-        setErrors({ submit: err.error || 'Error al guardar' })
       }
-    } catch (e) {
-      setErrors({ submit: 'Error de conexión' })
+    } catch (e: any) {
+      setErrors({ submit: e?.message || 'Error de conexión' })
     } finally {
       setLoading(false)
     }

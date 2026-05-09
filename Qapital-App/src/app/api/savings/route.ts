@@ -190,11 +190,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Update currentAmount with linked accounts total
-    if (linkedAccountsTotal > 0) {
+    // Update currentAmount with linked accounts total + CDTs invested amount
+    // CDTs represent money already invested towards the goal, so they count as progress
+    if (linkedAccountsTotal > 0 || linkedCDTTotal > 0) {
       await db.savingsGoal.update({
         where: { id: goal.id },
-        data: { currentAmount: linkedAccountsTotal },
+        data: { currentAmount: linkedAccountsTotal + linkedCDTTotal },
       })
     }
 

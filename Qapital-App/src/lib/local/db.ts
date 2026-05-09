@@ -541,6 +541,27 @@ class QapitalDB extends Dexie {
 // Singleton — reused across the app
 export const localDB = new QapitalDB();
 
+// ─── API path → Table name mapping ───
+
+export const API_TABLE_MAP: Record<string, string> = {
+  "/api/accounts": "accounts",
+  "/api/transactions": "transactions",
+  "/api/budgets": "budgets",
+  "/api/debts": "debts",
+  "/api/savings": "savingsGoals",
+  "/api/cdts": "cdts",
+  "/api/recurring": "recurringPayments",
+  "/api/payroll": "payrollGroups",
+  "/api/vehicles": "vehicles",
+  "/api/medications": "medications",
+  "/api/appointments": "appointments",
+  "/api/pantry": "pantryItems",
+  "/api/shopping-lists": "shoppingLists",
+  "/api/health-profiles": "healthProfiles",
+  "/api/fuel-prices": "fuelPrices",
+  "/api/settings": "userSettings",
+};
+
 // ─── Helper: Table name → API route mapping ───
 
 export const TABLE_TO_ROUTE: Record<string, string> = {

@@ -1,47 +1,408 @@
-// Generic fetch wrapper for API calls
-export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  let response: Response;
+// ============================================
+// OFFLINE-AWARE API FETCH
+// ============================================
+// This wrapper makes ALL existing apiFetch calls work offline:
+//   - GET requests: Try server first, fall back to IndexedDB cache on network error
+//   - POST/PUT/DELETE: Try server first, queue in mutation queue on network error
+// No component changes needed — transparent offline support!
+
+// Lazy-loaded to avoid SSR issues — Dexie/IndexedDB only works in the browser
+let _localDB: any = null;
+let _API_TABLE_MAP: Record<string, string> = {};
+let _MutationQueueEntry: any = null;
+let _generateTempId: (() => string) | null = null;
+
+async function ensureLocalDB() {
+  if (typeof window === "undefined") return false; // SSR guard
+  if (_localDB) return true;
   try {
-    response = await fetch(url, {
+    const db = await import("./local/db");
+    _localDB = db.localDB;
+    _API_TABLE_MAP = db.API_TABLE_MAP;
+    const utils = await import("./local/sync/utils");
+    _generateTempId = utils.generateTempId;
+    return true;
+  } catch (err) {
+    console.warn("[Offline] IndexedDB not available:", err);
+    return false;
+  }
+}
+
+/**
+ * Determine if a URL is a GET request (no method or method=GET).
+ */
+function isGetRequest(options?: RequestInit): boolean {
+  return !options?.method || options.method.toUpperCase() === "GET";
+}
+
+/**
+ * Extract the API path and table name from a URL.
+ * e.g. "/api/accounts" → { tableName: "accounts", isCollection: true }
+ * e.g. "/api/accounts/abc123" → { tableName: "accounts", isCollection: false }
+ * e.g. "/api/recurring/abc123/confirm" → { tableName: "recurringPayments", isCollection: false, isComplex: true }
+ */
+function parseApiUrl(url: string): { tableName: string | null; isCollection: boolean; isComplex: boolean; recordId: string | null } {
+  // Check for complex operation endpoints (e.g., /confirm, /reverse, /pay, /abono, /contribute, /finalize)
+  const complexPatterns = /\/(confirm|reverse|pay|abono|contribute|finalize|recalculate|generate)$/;
+  const isComplex = complexPatterns.test(url);
+
+  // Strip query params
+  const cleanUrl = url.split("?")[0];
+
+  // Match /api/{resource} or /api/{resource}/{id} or /api/{resource}/{id}/{sub}
+  // Also handles sub-resources like /api/accounts/{id}/sub-accounts
+  const match = cleanUrl.match(/^\/api\/([^/]+)(?:\/([^/]+))?(?:\/(.+))?$/);
+  if (!match) return { tableName: null, isCollection: false, isComplex, recordId: null };
+
+  const resource = match[1]; // e.g., "accounts", "recurring", "shopping-lists"
+  let tableName = _API_TABLE_MAP[`/api/${resource}`] ?? null;
+
+  // Handle sub-resource URLs
+  const thirdSegment = match[3];
+  let recordId: string | null = match[2] || null;
+
+  // Special sub-resource mapping
+  if (thirdSegment) {
+    // /api/accounts/{id}/sub-accounts → subAccounts table
+    if (thirdSegment === "sub-accounts") {
+      tableName = "subAccounts";
+      return { tableName, isCollection: true, isComplex: false, recordId };
+    }
+    // /api/vehicles/{id}/fuel-logs → fuelLogs table
+    if (thirdSegment === "fuel-logs") {
+      tableName = "fuelLogs";
+      return { tableName, isCollection: true, isComplex: false, recordId };
+    }
+    // /api/vehicles/{id}/maintenance → maintenanceRecords table
+    if (thirdSegment === "maintenance") {
+      tableName = "maintenanceRecords";
+      return { tableName, isCollection: true, isComplex: false, recordId };
+    }
+    // /api/debts/{id}/installments → installments table
+    if (thirdSegment === "installments") {
+      tableName = "installments";
+      return { tableName, isCollection: true, isComplex: false, recordId };
+    }
+    // /api/savings/{id}/accounts → savingsGoalAccounts table
+    if (thirdSegment === "accounts") {
+      tableName = "savingsGoalAccounts";
+      return { tableName, isCollection: true, isComplex: false, recordId };
+    }
+    // /api/shopping-lists/{id}/items → shoppingListItems table
+    if (thirdSegment === "items") {
+      tableName = "shoppingListItems";
+      return { tableName, isCollection: true, isComplex: false, recordId };
+    }
+  }
+
+  // If there's a third segment that's not a known sub-resource, it's complex
+  const hasThirdSegment = !!thirdSegment;
+
+  return {
+    tableName,
+    isCollection: !match[2], // No ID = collection endpoint
+    isComplex: isComplex || hasThirdSegment,
+    recordId,
+  };
+}
+
+/**
+ * Read data from IndexedDB when server is unreachable.
+ * Handles both collection reads and single-record reads.
+ */
+async function readFromLocalDB<T>(url: string): Promise<T | null> {
+  const { tableName, isCollection } = parseApiUrl(url);
+  if (!tableName) return null;
+
+  try {
+    if (!_localDB) return null;
+    const table = (_localDB as any)[tableName];
+    if (!table) return null;
+
+    if (isCollection) {
+      // Collection endpoint — return all records for this user
+      // Note: we return all records; the server would filter by userId,
+      // but IndexedDB already has only the current user's data
+      const allRecords = await table.toArray();
+      // Strip sync metadata from response
+      return allRecords.map(({ _syncStatus, _version, _lastModified, ...rest }: any) => rest) as T;
+    } else {
+      // Single record — extract ID from URL
+      const cleanUrl = url.split("?")[0];
+      const parts = cleanUrl.split("/");
+      const id = parts[parts.length - 1]; // Last segment is the ID
+      // But skip if it's a complex operation (e.g., "confirm", "reverse")
+      const complexSuffixes = ["confirm", "reverse", "pay", "abono", "contribute", "finalize", "recalculate", "generate", "accounts", "items", "installments", "fuel-logs", "maintenance", "sub-accounts"];
+      if (complexSuffixes.includes(id)) return null;
+
+    if (!_localDB) return null;
+      const record = await table.get(id);
+      if (!record) return null;
+      const { _syncStatus, _version, _lastModified, ...rest } = record as any;
+      return rest as T;
+    }
+  } catch (err) {
+    console.warn("[Offline] Error reading from IndexedDB:", err);
+    return null;
+  }
+}
+
+/**
+ * Queue a mutation for later replay when the server is unreachable.
+ */
+async function queueOfflineMutation(url: string, options: RequestInit): Promise<void> {
+  const method = options.method?.toUpperCase() || "POST";
+  const { tableName, isComplex } = parseApiUrl(url);
+
+  if (!_localDB || !_generateTempId) return;
+  const now = Date.now();
+  const entry = {
+    id: _generateTempId(),
+    operation: isComplex ? "complex" : method === "POST" ? "create" : method === "DELETE" ? "delete" : "update",
+    tableName: tableName || "unknown",
+    recordId: isComplex ? "complex" : (url.split("/").pop() || _generateTempId()),
+    payload: options.body?.toString() || "{}",
+    apiRoute: url,
+    apiMethod: method,
+    sequence: now,
+    status: "pending",
+    retryCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  try {
+    await _localDB.mutationQueue.add(entry);
+    console.log(`[Offline] Queued ${method} ${url} for later sync`);
+  } catch (err) {
+    console.error("[Offline] Error queuing mutation:", err);
+  }
+}
+
+/**
+ * Apply an optimistic write to IndexedDB for immediate UI feedback.
+ * This is a best-effort operation — the sync engine will correct any discrepancies.
+ */
+async function applyOptimisticWrite(url: string, options: RequestInit): Promise<void> {
+  const method = options.method?.toUpperCase() || "POST";
+  const { tableName, isComplex } = parseApiUrl(url);
+
+  if (isComplex || !tableName || !_localDB) return; // Don't try optimistic writes for complex operations
+
+  try {
+    const table = (_localDB as any)[tableName];
+    if (!table) return;
+
+    const body = options.body ? JSON.parse(options.body.toString()) : {};
+    const now = Date.now();
+
+    if (method === "POST") {
+      // Create: add with temp ID
+      if (!_generateTempId) return;
+      const tempId = _generateTempId();
+      await table.put({
+        ...body,
+        id: tempId,
+        _syncStatus: "pending_create",
+        _version: 1,
+        _lastModified: now,
+      });
+    } else if (method === "PUT") {
+      // Update: modify existing record
+      const parts = url.split("/");
+      const id = parts[parts.length - 1];
+      const existing = await table.get(id);
+      if (existing) {
+        await table.update(id, {
+          ...body,
+          _syncStatus: "pending_update",
+          _version: (existing._version || 0) + 1,
+          _lastModified: now,
+        });
+      }
+    } else if (method === "DELETE") {
+      // Delete: mark as pending_delete
+      const parts = url.split("/");
+      const id = parts[parts.length - 1];
+      const existing = await table.get(id);
+      if (existing) {
+        await table.update(id, {
+          _syncStatus: "pending_delete",
+          _lastModified: now,
+        });
+      }
+    }
+  } catch (err) {
+    // Best effort — don't fail the operation if optimistic write fails
+    console.warn("[Offline] Optimistic write failed:", err);
+  }
+}
+
+// Generic fetch wrapper for API calls — OFFLINE-AWARE
+export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
+  const isGet = isGetRequest(options);
+
+  // For GET requests: try server, fall back to IndexedDB
+  if (isGet) {
+    // Ensure IndexedDB is available (lazy load)
+    await ensureLocalDB();
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
+        ...options,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Cache successful GET response in IndexedDB for offline use
+      cacheGetResponse(url, data).catch(() => { /* non-blocking */ });
+
+      return data as T;
+    } catch (networkError) {
+      // Server unreachable — try IndexedDB
+      const localData = await readFromLocalDB<T>(url);
+      if (localData !== null) {
+        console.log(`[Offline] Serving ${url} from IndexedDB cache`);
+        return localData;
+      }
+      throw new Error("Error de conexión: no se pudo contactar el servidor");
+    }
+  }
+
+  // For POST/PUT/DELETE: try server, queue on failure
+  await ensureLocalDB();
+  try {
+    const response = await fetch(url, {
       headers: {
         "Content-Type": "application/json",
         ...options?.headers,
       },
       ...options,
     });
-  } catch (networkError) {
-    // Network error (server unreachable, CORS, etc.)
-    throw new Error("Error de conexión: no se pudo contactar el servidor");
-  }
 
-  if (!response.ok) {
-    let errorMsg = `Error: ${response.status}`;
-    try {
-      const contentType = response.headers.get("content-type") || "";
-      if (contentType.includes("application/json")) {
-        const errorData = await response.json();
-        errorMsg = errorData.error || errorData.message || errorMsg;
-      } else {
-        // Server returned HTML error page — try to extract useful info from status
+    if (!response.ok) {
+      let errorMsg = `Error: ${response.status}`;
+      try {
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorData.message || errorMsg;
+        } else {
+          if (response.status === 500) {
+            errorMsg = "Error interno del servidor. ¿Ejecutaste 'npx prisma db push' después de actualizar el esquema?";
+          } else if (response.status === 404) {
+            errorMsg = "Recurso no encontrado";
+          } else if (response.status === 401) {
+            errorMsg = "No autorizado";
+          } else {
+            errorMsg = `Error del servidor (${response.status})`;
+          }
+        }
+      } catch {
         if (response.status === 500) {
           errorMsg = "Error interno del servidor. ¿Ejecutaste 'npx prisma db push' después de actualizar el esquema?";
-        } else if (response.status === 404) {
-          errorMsg = "Recurso no encontrado";
-        } else if (response.status === 401) {
-          errorMsg = "No autorizado";
-        } else {
-          errorMsg = `Error del servidor (${response.status})`;
         }
       }
-    } catch {
-      if (response.status === 500) {
-        errorMsg = "Error interno del servidor. ¿Ejecutaste 'npx prisma db push' después de actualizar el esquema?";
-      }
+      throw new Error(errorMsg);
     }
-    throw new Error(errorMsg);
-  }
 
-  return response.json();
+    // After successful mutation, update IndexedDB with server response
+    try {
+      const data = await response.json();
+      await updateLocalAfterMutation(url, options!, data);
+      return data as T;
+    } catch {
+      // Response might not be JSON (e.g., 204 No Content for DELETE)
+      return undefined as T;
+    }
+  } catch (networkError) {
+    // Server unreachable — queue mutation and apply optimistically
+    console.log(`[Offline] Server unreachable, queuing ${options?.method} ${url}`);
+    await queueOfflineMutation(url, options!);
+    await applyOptimisticWrite(url, options!);
+
+    // Return a mock success response so the UI can continue
+    return { success: true, offline: true } as T;
+  }
+}
+
+/**
+ * Cache a successful GET response into IndexedDB for offline use.
+ */
+async function cacheGetResponse(url: string, data: unknown): Promise<void> {
+  const { tableName, isCollection } = parseApiUrl(url);
+  if (!tableName || !_localDB) return;
+
+  try {
+    const table = (_localDB as any)[tableName];
+    if (!table) return;
+
+    if (isCollection && Array.isArray(data)) {
+      // Replace all records for this table with server data
+      const now = Date.now();
+      const enriched = data.map((record: any) => ({
+        ...record,
+        _syncStatus: "synced",
+        _version: 1,
+        _lastModified: now,
+      }));
+      await table.bulkPut(enriched);
+    }
+    // Single record caching is handled by the sync engine
+  } catch (err) {
+    // Non-critical — don't fail the original request
+    console.warn("[Offline] Cache write failed:", err);
+  }
+}
+
+/**
+ * Update IndexedDB after a successful mutation.
+ * This keeps the local data in sync with the server.
+ */
+async function updateLocalAfterMutation(url: string, options: RequestInit, data: any): Promise<void> {
+  const method = options.method?.toUpperCase() || "POST";
+  const { tableName, isComplex } = parseApiUrl(url);
+  if (!tableName || isComplex || !_localDB) return;
+
+  try {
+    const table = (_localDB as any)[tableName];
+    if (!table) return;
+
+    const now = Date.now();
+
+    if (method === "POST" && data?.id) {
+      // After create: store the server response (with real ID)
+      await table.put({
+        ...data,
+        _syncStatus: "synced",
+        _version: 1,
+        _lastModified: now,
+      });
+    } else if (method === "PUT" && data?.id) {
+      // After update: store the server response
+      await table.put({
+        ...data,
+        _syncStatus: "synced",
+        _version: 1,
+        _lastModified: now,
+      });
+    } else if (method === "DELETE") {
+      // After delete: remove from IndexedDB
+      const parts = url.split("/");
+      const id = parts[parts.length - 1];
+      await table.delete(id);
+    }
+  } catch (err) {
+    // Non-critical
+    console.warn("[Offline] Post-mutation update failed:", err);
+  }
 }
 
 // Format currency (COP by default) — always shows 2 decimal places

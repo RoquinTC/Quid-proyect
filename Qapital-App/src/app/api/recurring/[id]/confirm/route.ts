@@ -130,17 +130,6 @@ export async function POST(
       );
     }
 
-    // Re-verify ownership of all referenced entities before mutating balances
-    const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
-    if (payment.accountId) entitiesToVerify.push({ type: "account", id: payment.accountId });
-    if (payment.subAccountId) entitiesToVerify.push({ type: "subAccount", id: payment.subAccountId });
-    if (payment.debtId) entitiesToVerify.push({ type: "debt", id: payment.debtId });
-    if (effectiveDestAccountId) entitiesToVerify.push({ type: "account", id: effectiveDestAccountId });
-    if (effectiveDestSubAccountId) entitiesToVerify.push({ type: "subAccount", id: effectiveDestSubAccountId });
-
-    const ownershipError = await verifyEntityOwnership(session.user.id, entitiesToVerify);
-    if (ownershipError) return ownershipError;
-
     const confirmedAmount = actualAmount !== undefined ? actualAmount : payment.amount;
     const now = new Date();
 
@@ -163,6 +152,17 @@ export async function POST(
     // For savings goal transfers, the destination is chosen at confirmation time
     const effectiveDestAccountId = isSavingsGoal ? (destinationAccountId || payment.destinationAccountId) : payment.destinationAccountId;
     const effectiveDestSubAccountId = isSavingsGoal ? (destinationSubAccountId !== undefined ? destinationSubAccountId : payment.destinationSubAccountId) : payment.destinationSubAccountId;
+
+    // Re-verify ownership of all referenced entities before mutating balances
+    const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
+    if (payment.accountId) entitiesToVerify.push({ type: "account", id: payment.accountId });
+    if (payment.subAccountId) entitiesToVerify.push({ type: "subAccount", id: payment.subAccountId });
+    if (payment.debtId) entitiesToVerify.push({ type: "debt", id: payment.debtId });
+    if (effectiveDestAccountId) entitiesToVerify.push({ type: "account", id: effectiveDestAccountId });
+    if (effectiveDestSubAccountId) entitiesToVerify.push({ type: "subAccount", id: effectiveDestSubAccountId });
+
+    const ownershipError = await verifyEntityOwnership(session.user.id, entitiesToVerify);
+    if (ownershipError) return ownershipError;
 
     // 1. Mark payment as confirmed
     await db.recurringPayment.update({
@@ -630,16 +630,37 @@ export async function POST(
     });
   } catch (error) {
     console.error("Confirm recurring payment error:", error);
-    const message = error instanceof Error ? error.message : "Error al confirmar pago recurrente";
+    const message = error instanceof Error ? error.message : String(error);
+
     // Detect missing DB columns (Prisma error after schema change)
-    if (message.includes("Unknown column") || message.includes("does not exist") || message.includes("no column")) {
+    if (
+      message.includes("Unknown column") ||
+      message.includes("does not exist") ||
+      message.includes("no column") ||
+      message.includes("no such column") ||
+      message.includes("SQLITE_ERROR")
+    ) {
+      console.error("[DB Schema] Columna faltante detectada. Se necesita prisma db push.", message);
       return NextResponse.json(
-        { error: "Error de base de datos: ejecuta 'npx prisma db push' para sincronizar el esquema" },
+        { error: "Error de base de datos: reinicia el contenedor Docker para sincronizar el esquema (prisma db push)" },
         { status: 500 }
       );
     }
+
+    // Detect foreign key constraint errors
+    if (message.includes("FOREIGN KEY") || message.includes("foreign key")) {
+      return NextResponse.json(
+        { error: "Error de referencia: una de las cuentas o deudas asociadas no fue encontrada" },
+        { status: 400 }
+      );
+    }
+
+    // Return more detailed error in development, generic in production
+    const detail = process.env.NODE_ENV === "development"
+      ? `: ${message}`
+      : "";
     return NextResponse.json(
-      { error: "Error al confirmar pago recurrente" },
+      { error: `Error al confirmar pago recurrente${detail}` },
       { status: 500 }
     );
   }

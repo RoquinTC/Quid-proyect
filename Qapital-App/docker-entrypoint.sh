@@ -18,7 +18,13 @@ if [ ! -f "$DB_PATH" ]; then
 else
   echo "✅ Base de datos existente encontrada."
   # Apply any pending schema changes (skip-generate because client was built in Docker build stage)
-  su-exec nextjs:nodejs node_modules/.bin/prisma db push --accept-data-loss --skip-generate 2>/dev/null || true
+  echo "🔄 Sincronizando schema con la base de datos..."
+  if su-exec nextjs:nodejs node_modules/.bin/prisma db push --accept-data-loss --skip-generate; then
+    echo "✅ Schema sincronizado."
+  else
+    echo "⚠️  Error sincronizando schema. Intentando migrate deploy..."
+    su-exec nextjs:nodejs node_modules/.bin/prisma migrate deploy || echo "⚠️  migrate deploy también falló. Continuando..."
+  fi
 fi
 
 echo "🌐 Iniciando servidor Next.js..."

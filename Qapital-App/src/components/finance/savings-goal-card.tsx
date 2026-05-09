@@ -2,7 +2,7 @@
 
 import { formatCurrency, calcPercentage } from "@/lib/api";
 import { motion } from "framer-motion";
-import { PiggyBank, Calendar, Plus, Pencil } from "lucide-react";
+import { PiggyBank, Calendar, Plus, Pencil, Trash2 } from "lucide-react";
 
 interface SavingsGoalCardProps {
   goal: {
@@ -19,6 +19,7 @@ interface SavingsGoalCardProps {
   onContribute?: () => void;
   onClick?: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 const frequencyLabels: Record<string, string> = {
@@ -27,7 +28,7 @@ const frequencyLabels: Record<string, string> = {
   semanal: "Semanal",
 };
 
-export function SavingsGoalCard({ goal, onContribute, onClick, onEdit }: SavingsGoalCardProps) {
+export function SavingsGoalCard({ goal, onContribute, onClick, onEdit, onDelete }: SavingsGoalCardProps) {
   const percentage = calcPercentage(goal.currentAmount, goal.targetAmount);
   const daysRemaining = goal.deadline
     ? Math.max(
@@ -114,19 +115,34 @@ export function SavingsGoalCard({ goal, onContribute, onClick, onEdit }: Savings
               >
                 {goal.name}
               </h3>
-              {/* Edit button */}
-              {onEdit && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit();
-                  }}
-                  className="ml-auto p-1 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950 transition-colors shrink-0"
-                  title="Editar meta"
-                >
-                  <Pencil className="size-3.5" />
-                </button>
-              )}
+              <div className="ml-auto flex items-center gap-0.5 shrink-0">
+                {/* Edit button */}
+                {onEdit && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit();
+                    }}
+                    className="p-1 rounded-lg text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950 transition-colors"
+                    title="Editar meta"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                )}
+                {/* Delete button */}
+                {onDelete && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                    className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                    title="Eliminar meta"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <span className="text-[10px] text-gray-400">

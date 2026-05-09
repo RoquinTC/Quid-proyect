@@ -20,12 +20,62 @@ import { useSession } from "next-auth/react";
 import {
   localDB,
   API_TABLE_MAP,
-  getAllFromTable,
-  replaceAllInTable,
-  isInitialSyncDone,
-} from "../index";
+  getSyncMeta,
+} from "../db";
+import type { Table } from "dexie";
 import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
+
+// ============================================
+// Inline helpers (replacing old index.ts functions)
+// ============================================
+
+/**
+ * Get all records from a table for a specific user.
+ */
+async function getAllFromTable<T>(tableName: string, userId: string): Promise<T[]> {
+  try {
+    const table = (localDB as any)[tableName] as Table<any, string> | undefined;
+    if (!table) return [];
+    return (await table.where("userId").equals(userId).toArray()) as T[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Replace all data in a table for a user (full refresh from server).
+ */
+async function replaceAllInTable<T extends { id: string }>(
+  tableName: string,
+  userId: string,
+  data: T[]
+): Promise<void> {
+  const table = (localDB as any)[tableName] as Table<any, string> | undefined;
+  if (!table) return;
+
+  await localDB.transaction("rw", table, async () => {
+    await table.where("userId").equals(userId).delete();
+    if (data.length > 0) {
+      // Enrich records with sync metadata
+      const enriched = data.map((record) => ({
+        ...record,
+        _syncStatus: "synced" as const,
+        _version: 1,
+        _lastModified: Date.now(),
+      }));
+      await table.bulkPut(enriched);
+    }
+  });
+}
+
+/**
+ * Check if initial sync has been completed for this user.
+ */
+async function isInitialSyncDone(_userId: string): Promise<boolean> {
+  const value = await getSyncMeta("initialSyncCompleted");
+  return value === "true";
+}
 
 // ============================================
 // useLocalQuery — Read a collection from local-first
@@ -248,7 +298,7 @@ export function useLocalSingleQuery<T extends { id: string }>(
     try {
       const table = (localDB as any)[tableName];
       if (!table) return;
-      const record = await table.get(id) as T | undefined;
+      const record = (await table.get(id)) as T | undefined;
       if (mountedRef.current && record) {
         setData(record);
         setLoading(false);
@@ -268,10 +318,15 @@ export function useLocalSingleQuery<T extends { id: string }>(
         setData(serverData);
         setError(null);
 
-        // Persist to IndexedDB
+        // Persist to IndexedDB with sync metadata
         const table = (localDB as any)[tableName];
         if (table) {
-          await table.put(serverData);
+          await table.put({
+            ...serverData,
+            _syncStatus: "synced",
+            _version: 1,
+            _lastModified: Date.now(),
+          });
         }
       }
     } catch (err: any) {

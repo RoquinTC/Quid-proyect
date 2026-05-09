@@ -5,28 +5,21 @@
  *
  * Flow:
  *   1. Write to IndexedDB immediately (optimistic update)
- *   2. Add operation to sync queue
+ *   2. Add operation to mutation queue (MutationQueueEntry)
  *   3. Try to push to server
- *   4. On success → remove from queue, update IndexedDB with server response
+ *   4. On success → mark as completed, update IndexedDB with server response
  *   5. On failure → keep in queue for retry when back online
  *
  * The component sees the change instantly (IndexedDB read updates via liveQuery).
- * If the server push fails, the queue retries automatically.
+ * If the server push fails, the queue retries automatically via the sync engine.
  */
 
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
-import {
-  localDB,
-  API_TABLE_MAP,
-  upsertRecord,
-  deleteRecord,
-  enqueueSync,
-  removeSyncItem,
-  getPendingSyncCount,
-} from "../index";
+import { localDB, API_TABLE_MAP } from "../db";
+import type { MutationQueueEntry, SyncStatus } from "../db";
 import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 import { generateTempId } from "../sync/utils";
@@ -73,6 +66,18 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const updatePendingCount = useCallback(async () => {
+    try {
+      const count = await localDB.mutationQueue
+        .where("status")
+        .equals("pending")
+        .count();
+      setPendingCount(count);
+    } catch {
+      // DB not ready
+    }
+  }, [setPendingCount]);
+
   const executeMutation = useCallback(
     async (payload: Partial<T>, id?: string): Promise<T | null> => {
       if (!userId) return null;
@@ -92,24 +97,36 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
         if (isCreate) {
           // Generate a temp ID for the new record
           const tempId = generateTempId();
+          const now = Date.now();
           const optimisticRecord = {
             ...payload,
             id: tempId,
             userId,
-          } as T;
+            _syncStatus: "pending_create" as SyncStatus,
+            _version: 1,
+            _lastModified: now,
+          } as unknown as T;
 
           // Write to IndexedDB immediately
-          await upsertRecord(tableName, optimisticRecord);
+          const table = (localDB as any)[tableName];
+          if (table) await table.put(optimisticRecord);
 
-          // Queue for server sync
-          await enqueueSync({
-            table: tableName,
+          // Queue mutation entry
+          const mutationEntry: MutationQueueEntry = {
+            id: generateTempId(),
             operation: "create",
-            serverUrl: apiPath,
-            method: "POST",
-            body: JSON.stringify({ ...payload, _tempId: tempId }),
-            tempId,
-          });
+            tableName,
+            recordId: tempId,
+            payload: JSON.stringify({ ...payload, _tempId: tempId }),
+            apiRoute: apiPath,
+            apiMethod: "POST",
+            sequence: now,
+            status: "pending",
+            retryCount: 0,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await localDB.mutationQueue.add(mutationEntry);
 
           // Try to push to server immediately if online
           if (isOnline) {
@@ -120,28 +137,29 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
               });
 
               // Replace temp record with server record (has real ID)
-              await localDB[tableName]?.delete(tempId);
-              await upsertRecord(tableName, serverResponse);
-
-              // Remove from sync queue
-              const pending = await localDB.syncQueue
-                .where("tempId")
-                .equals(tempId)
-                .toArray();
-              for (const item of pending) {
-                await removeSyncItem(item.id!);
+              if (table) {
+                await table.delete(tempId);
+                await table.put({
+                  ...serverResponse,
+                  _syncStatus: "synced",
+                  _version: 1,
+                  _lastModified: Date.now(),
+                });
               }
 
-              // Update pending count
-              const count = await getPendingSyncCount();
-              setPendingCount(count);
+              // Mark mutation as completed
+              await localDB.mutationQueue.update(mutationEntry.id, {
+                status: "completed",
+                updatedAt: Date.now(),
+              });
+
+              await updatePendingCount();
 
               setLoading(false);
               return serverResponse;
             } catch {
               // Server push failed — keep in queue for later retry
-              const count = await getPendingSyncCount();
-              setPendingCount(count);
+              await updatePendingCount();
             }
           }
 
@@ -151,25 +169,38 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
 
         if (isUpdate) {
           // Get current record for optimistic update
-          const currentRecord = await localDB[tableName]?.get(id);
+          const table = (localDB as any)[tableName];
+          const currentRecord = table ? await table.get(id) : null;
+          const now = Date.now();
           const optimisticRecord = {
             ...(currentRecord || {}),
             ...payload,
             id,
             userId,
-          } as T;
+            _syncStatus: "pending_update" as SyncStatus,
+            _version: (currentRecord?._version ?? 0) + 1,
+            _lastModified: now,
+          } as unknown as T;
 
           // Write to IndexedDB immediately
-          await upsertRecord(tableName, optimisticRecord);
+          if (table) await table.put(optimisticRecord);
 
-          // Queue for server sync
-          await enqueueSync({
-            table: tableName,
+          // Queue mutation entry
+          const mutationEntry: MutationQueueEntry = {
+            id: generateTempId(),
             operation: "update",
-            serverUrl: url,
-            method: "PUT",
-            body: JSON.stringify(payload),
-          });
+            tableName,
+            recordId: id,
+            payload: JSON.stringify(payload),
+            apiRoute: url,
+            apiMethod: "PUT",
+            sequence: now,
+            status: "pending",
+            retryCount: 0,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await localDB.mutationQueue.add(mutationEntry);
 
           // Try to push to server immediately if online
           if (isOnline) {
@@ -180,30 +211,27 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
               });
 
               // Update IndexedDB with server response
-              await upsertRecord(tableName, serverResponse);
-
-              // Remove from sync queue
-              const pending = await localDB.syncQueue
-                .where("table")
-                .equals(tableName)
-                .toArray();
-              // Find the most recent update for this specific URL
-              const matchingItems = pending.filter(
-                (item: any) => item.serverUrl === url && item.operation === "update"
-              );
-              if (matchingItems.length > 0) {
-                // Remove only the most recent one (last added)
-                await removeSyncItem(matchingItems[matchingItems.length - 1].id!);
+              if (table) {
+                await table.put({
+                  ...serverResponse,
+                  _syncStatus: "synced",
+                  _version: (currentRecord?._version ?? 0) + 1,
+                  _lastModified: Date.now(),
+                });
               }
 
-              const count = await getPendingSyncCount();
-              setPendingCount(count);
+              // Mark mutation as completed
+              await localDB.mutationQueue.update(mutationEntry.id, {
+                status: "completed",
+                updatedAt: Date.now(),
+              });
+
+              await updatePendingCount();
 
               setLoading(false);
               return serverResponse;
             } catch {
-              const count = await getPendingSyncCount();
-              setPendingCount(count);
+              await updatePendingCount();
             }
           }
 
@@ -212,39 +240,58 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
         }
 
         if (isDelete) {
-          // Remove from IndexedDB immediately
-          await deleteRecord(tableName, id);
+          const table = (localDB as any)[tableName];
+          const now = Date.now();
 
-          // Queue for server sync
-          await enqueueSync({
-            table: tableName,
+          // Mark record as pending_delete instead of removing immediately
+          // This allows the UI to filter it out while still keeping it for sync
+          if (table && id) {
+            const existing = await table.get(id);
+            if (existing) {
+              await table.update(id, {
+                _syncStatus: "pending_delete",
+                _lastModified: now,
+              });
+            } else {
+              // Record doesn't exist locally, just remove it
+              await table.delete(id);
+            }
+          }
+
+          // Queue mutation entry
+          const mutationEntry: MutationQueueEntry = {
+            id: generateTempId(),
             operation: "delete",
-            serverUrl: url,
-            method: "DELETE",
-          });
+            tableName,
+            recordId: id,
+            payload: JSON.stringify({}),
+            apiRoute: url,
+            apiMethod: "DELETE",
+            sequence: now,
+            status: "pending",
+            retryCount: 0,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await localDB.mutationQueue.add(mutationEntry);
 
           // Try to push to server immediately if online
           if (isOnline) {
             try {
               await apiFetch(url, { method: "DELETE" });
 
-              // Remove from sync queue
-              const pending = await localDB.syncQueue
-                .where("table")
-                .equals(tableName)
-                .toArray();
-              const matchingItems = pending.filter(
-                (item: any) => item.serverUrl === url && item.operation === "delete"
-              );
-              if (matchingItems.length > 0) {
-                await removeSyncItem(matchingItems[matchingItems.length - 1].id!);
-              }
+              // Actually remove from IndexedDB now that server confirmed
+              if (table) await table.delete(id);
 
-              const count = await getPendingSyncCount();
-              setPendingCount(count);
+              // Mark mutation as completed
+              await localDB.mutationQueue.update(mutationEntry.id, {
+                status: "completed",
+                updatedAt: Date.now(),
+              });
+
+              await updatePendingCount();
             } catch {
-              const count = await getPendingSyncCount();
-              setPendingCount(count);
+              await updatePendingCount();
             }
           }
 
@@ -260,7 +307,7 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
         return null;
       }
     },
-    [userId, apiPath, tableName, isOnline, setPendingCount]
+    [userId, apiPath, tableName, isOnline, updatePendingCount]
   );
 
   const reset = useCallback(() => {
@@ -330,8 +377,15 @@ export function useSyncQueue() {
   const { pendingCount, setPendingCount } = useAppStore();
 
   const refreshCount = useCallback(async () => {
-    const count = await getPendingSyncCount();
-    setPendingCount(count);
+    try {
+      const count = await localDB.mutationQueue
+        .where("status")
+        .equals("pending")
+        .count();
+      setPendingCount(count);
+    } catch {
+      // DB not ready
+    }
   }, [setPendingCount]);
 
   return {
