@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency, calcPercentage } from "@/lib/api";
 import { BudgetForm } from "./budget-form";
+import { TransactionForm } from "./transaction-form";
 import { SpendingIncomeChart } from "./spending-income-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -40,8 +40,13 @@ import {
   ChevronDown,
   ChevronRight,
   RefreshCw,
+  AlertTriangle,
+  ArrowRightLeft,
+  PencilLine,
+  CirclePlus,
+  Eye,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
 interface Budget {
@@ -54,6 +59,33 @@ interface Budget {
   period: string;
   icon?: string | null;
   color?: string | null;
+}
+
+interface UnbudgetedCategory {
+  category: string;
+  type: string;
+  totalSpent: number;
+  transactionCount: number;
+  subcategories: Array<{
+    subCategory: string | null;
+    totalSpent: number;
+    transactionCount: number;
+  }>;
+}
+
+interface Transaction {
+  id: string;
+  type: string;
+  amount: number;
+  description: string;
+  category?: string | null;
+  subCategory?: string | null;
+  date: string;
+  notes?: string | null;
+  accountId?: string | null;
+  subAccountId?: string | null;
+  account?: { id: string; name: string; type: string; color: string } | null;
+  subAccount?: { id: string; name: string } | null;
 }
 
 const categoryIcons: Record<string, typeof DollarSign> = {
@@ -97,12 +129,25 @@ function getProgressBg(percentage: number): string {
 
 export function BudgetsView() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [unbudgeted, setUnbudgeted] = useState<UnbudgetedCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
+  const [prefilledBudgetCategory, setPrefilledBudgetCategory] = useState<{
+    category: string;
+    subCategory?: string | null;
+    type: string;
+    suggestedAmount?: number;
+  } | null>(null);
   const [deleteBudgetId, setDeleteBudgetId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [recalculating, setRecalculating] = useState(false);
+
+  // Transaction drill-down state
+  const [categoryTransactions, setCategoryTransactions] = useState<Record<string, Transaction[]>>({});
+  const [loadingTransactions, setLoadingTransactions] = useState<Record<string, boolean>>({});
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [showTransactionForm, setShowTransactionForm] = useState(false);
 
   const fetchBudgets = useCallback(async () => {
     try {
@@ -115,9 +160,18 @@ export function BudgetsView() {
     }
   }, []);
 
+  const fetchUnbudgeted = useCallback(async () => {
+    try {
+      const data = await apiFetch<UnbudgetedCategory[]>("/api/budgets/unbudgeted");
+      setUnbudgeted(data);
+    } catch (error) {
+      console.error("Error fetching unbudgeted:", error);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchBudgets();
-  }, [fetchBudgets]);
+    Promise.all([fetchBudgets(), fetchUnbudgeted()]);
+  }, [fetchBudgets, fetchUnbudgeted]);
 
   const incomeBudgets = budgets.filter((b) => b.type === "income");
   const expenseBudgets = budgets.filter((b) => b.type === "expense");
@@ -126,9 +180,27 @@ export function BudgetsView() {
   const totalIncomeSpent = incomeBudgets.reduce((sum, b) => sum + b.spent, 0);
   const totalExpenseBudget = expenseBudgets.reduce((sum, b) => sum + b.amount, 0);
   const totalExpenseSpent = expenseBudgets.reduce((sum, b) => sum + b.spent, 0);
+  const totalUnbudgetedExpense = unbudgeted
+    .filter((u) => u.type === "expense")
+    .reduce((sum, u) => sum + u.totalSpent, 0);
+  const totalUnbudgetedIncome = unbudgeted
+    .filter((u) => u.type === "income")
+    .reduce((sum, u) => sum + u.totalSpent, 0);
 
   const handleEdit = (budget: Budget) => {
     setEditingBudget(budget);
+    setPrefilledBudgetCategory(null);
+    setShowBudgetForm(true);
+  };
+
+  const handleCreateBudgetFromUnbudgeted = (item: UnbudgetedCategory, sub?: { subCategory: string | null; totalSpent: number } | null) => {
+    setEditingBudget(null);
+    setPrefilledBudgetCategory({
+      category: item.category,
+      subCategory: sub?.subCategory || null,
+      type: item.type,
+      suggestedAmount: sub?.totalSpent || item.totalSpent,
+    });
     setShowBudgetForm(true);
   };
 
@@ -137,6 +209,7 @@ export function BudgetsView() {
       await apiFetch(`/api/budgets/${budgetId}`, { method: "DELETE" });
       toast.success("Presupuesto eliminado");
       fetchBudgets();
+      fetchUnbudgeted();
     } catch (error) {
       console.error("Error deleting budget:", error);
       toast.error("Error al eliminar presupuesto");
@@ -151,6 +224,7 @@ export function BudgetsView() {
         method: "POST",
       });
       setBudgets(data);
+      fetchUnbudgeted();
       toast.success("Presupuesto recalculado desde transacciones");
     } catch (error) {
       console.error("Error recalculating budgets:", error);
@@ -161,7 +235,62 @@ export function BudgetsView() {
   };
 
   const toggleCategory = (category: string) => {
-    setExpandedCategories((prev) => ({ ...prev, [category]: !prev[category] }));
+    setExpandedCategories((prev) => {
+      const newState = { ...prev, [category]: !prev[category] };
+      // Fetch transactions when expanding
+      if (!prev[category] && !categoryTransactions[category]) {
+        fetchCategoryTransactions(category);
+      }
+      return newState;
+    });
+  };
+
+  const fetchCategoryTransactions = async (category: string, subCategory?: string | null, type?: string) => {
+    setLoadingTransactions((prev) => ({ ...prev, [category]: true }));
+    try {
+      // Get budget period from settings for date filtering
+      const settingsData = await apiFetch<{ currentPeriod: { start: string; end: string } }>("/api/settings");
+      const period = settingsData.currentPeriod;
+
+      const params = new URLSearchParams({
+        category,
+        startDate: period.start.split("T")[0],
+        endDate: period.end.split("T")[0],
+        type: type || "expense",
+      });
+
+      const data = await apiFetch<Transaction[]>(`/api/transactions?${params.toString()}`);
+      setCategoryTransactions((prev) => ({ ...prev, [category]: data }));
+    } catch (error) {
+      console.error("Error fetching category transactions:", error);
+    } finally {
+      setLoadingTransactions((prev) => ({ ...prev, [category]: false }));
+    }
+  };
+
+  const handleEditTransaction = (tx: Transaction) => {
+    setEditingTransaction({
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      description: tx.description,
+      category: tx.category,
+      subCategory: tx.subCategory,
+      date: tx.date,
+      notes: tx.notes,
+      accountId: tx.accountId,
+      subAccountId: tx.subAccountId,
+    });
+    setShowTransactionForm(true);
+  };
+
+  const handleTransactionSuccess = () => {
+    // Refresh budgets and unbudgeted
+    fetchBudgets();
+    fetchUnbudgeted();
+    // Clear cached transactions for all categories
+    setCategoryTransactions({});
+    setExpandedCategories({});
   };
 
   const groupBudgetsByCategory = (budgets: Budget[]) => {
@@ -189,6 +318,43 @@ export function BudgetsView() {
       </div>
     );
   }
+
+  const renderTransactionItem = (tx: Transaction) => {
+    const isIncome = tx.type === "income";
+    return (
+      <div
+        key={tx.id}
+        className="flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer"
+        onClick={() => handleEditTransaction(tx)}
+      >
+        <div className={`size-7 rounded-lg flex items-center justify-center shrink-0 ${
+          isIncome ? "bg-emerald-100 dark:bg-emerald-900/30" : "bg-rose-100 dark:bg-rose-900/30"
+        }`}>
+          {isIncome ? (
+            <TrendingUp className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <TrendingDown className="size-3.5 text-rose-600 dark:text-rose-400" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+            {tx.description}
+          </p>
+          <p className="text-[10px] text-gray-400">
+            {new Date(tx.date).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+            {tx.subCategory && ` · ${tx.subCategory}`}
+            {tx.account && ` · ${tx.account.name}`}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className={`text-xs font-semibold ${isIncome ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+            {isIncome ? "+" : "-"}{formatCurrency(tx.amount)}
+          </p>
+        </div>
+        <PencilLine className="size-3 text-gray-300 dark:text-gray-600 shrink-0" />
+      </div>
+    );
+  };
 
   const renderBudgetCard = (budget: Budget, colorType: "emerald" | "rose", isSubItem?: boolean) => {
     const Icon = categoryIcons[budget.category] || DollarSign;
@@ -304,10 +470,10 @@ export function BudgetsView() {
     return Object.entries(groups).map(([category, group]) => {
       const hasChildren = group.children.length > 0;
       const isExpanded = expandedCategories[category] ?? false;
+      const isTransactionsLoading = loadingTransactions[category] ?? false;
+      const transactions = categoryTransactions[category] || [];
 
       // Calculate totals for the category
-      // When there are children (subcategories), use ONLY children's totals — parent is just a container.
-      // When there are no children, use parent's amounts.
       const totalSpent = hasChildren
         ? group.children.reduce((s, c) => s + c.spent, 0)
         : (group.parent?.spent || 0);
@@ -326,20 +492,17 @@ export function BudgetsView() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {hasChildren ? (
-                    <button
-                      onClick={() => toggleCategory(category)}
-                      className="size-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center transition-colors shrink-0"
-                    >
-                      {isExpanded ? (
-                        <ChevronDown className="size-4 text-gray-500" />
-                      ) : (
-                        <ChevronRight className="size-4 text-gray-500" />
-                      )}
-                    </button>
-                  ) : (
-                    <div className="size-7" />
-                  )}
+                  {/* Expand/collapse toggle */}
+                  <button
+                    onClick={() => toggleCategory(category)}
+                    className="size-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center transition-colors shrink-0"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="size-4 text-gray-500" />
+                    ) : (
+                      <ChevronRight className="size-4 text-gray-500" />
+                    )}
+                  </button>
                   <div className={`size-8 rounded-lg ${bgColor} flex items-center justify-center shrink-0`}>
                     <Icon className={`size-4 ${iconColor}`} />
                   </div>
@@ -351,7 +514,7 @@ export function BudgetsView() {
                       {formatCurrency(totalSpent)} / {formatCurrency(totalAmount)}
                       {hasChildren && (
                         <span className="text-gray-300 dark:text-gray-600 ml-1">
-                          · {group.children.length} {group.children.length === 1 ? 'meta' : 'metas'}
+                          · {group.children.length} {group.children.length === 1 ? 'sub' : 'subs'}
                         </span>
                       )}
                     </p>
@@ -393,22 +556,211 @@ export function BudgetsView() {
             </CardContent>
           </Card>
 
-          {/* Expanded subcategories */}
-          {hasChildren && isExpanded && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="space-y-1"
-            >
-              {group.children.map((child) => renderBudgetCard(child, colorType, true))}
-            </motion.div>
-          )}
+          {/* Expanded: subcategories + transactions */}
+          <AnimatePresence>
+            {isExpanded && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                {/* Sub-budget items */}
+                {hasChildren && (
+                  <div className="space-y-1 mb-1">
+                    {group.children.map((child) => renderBudgetCard(child, colorType, true))}
+                  </div>
+                )}
+
+                {/* Transactions for this category */}
+                <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
+                  <CardContent className="p-2">
+                    <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+                      <Eye className="size-3 text-gray-400" />
+                      <p className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                        Movimientos del periodo
+                      </p>
+                    </div>
+                    {isTransactionsLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <RefreshCw className="size-4 animate-spin text-gray-400" />
+                      </div>
+                    ) : transactions.length === 0 ? (
+                      <div className="text-center py-3">
+                        <p className="text-[10px] text-gray-400">Sin movimientos en este periodo</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {transactions.slice(0, 10).map(renderTransactionItem)}
+                        {transactions.length > 10 && (
+                          <p className="text-[10px] text-center text-gray-400 py-1">
+                            y {transactions.length - 10} movimientos más...
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       );
     });
   };
+
+  // Render unbudgeted categories
+  const renderUnbudgetedSection = (items: UnbudgetedCategory[], typeLabel: string, colorType: "emerald" | "rose") => {
+    if (items.length === 0) return null;
+
+    const totalSpent = items.reduce((s, u) => s + u.totalSpent, 0);
+    const Icon = colorType === "rose" ? AlertTriangle : TrendingUp;
+
+    return (
+      <motion.div variants={itemVariants}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Icon className={`size-4 ${colorType === "rose" ? "text-amber-500" : "text-emerald-500"}`} />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+              {typeLabel}
+            </h3>
+            <Badge variant="secondary" className="text-[9px]">
+              {formatCurrency(totalSpent)}
+            </Badge>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          {items.map((item) => {
+            const CatIcon = categoryIcons[item.category] || DollarSign;
+            const catKey = `unbudgeted-${item.type}-${item.category}`;
+            const isExpanded = expandedCategories[catKey] ?? false;
+            const isTransactionsLoading = loadingTransactions[catKey] ?? false;
+            const transactions = categoryTransactions[catKey] || [];
+            const bgColor = item.type === "expense"
+              ? "bg-amber-50 dark:bg-amber-900/20"
+              : "bg-emerald-50 dark:bg-emerald-900/20";
+            const iconColor = item.type === "expense"
+              ? "text-amber-600 dark:text-amber-400"
+              : "text-emerald-600 dark:text-emerald-400";
+
+            return (
+              <div key={catKey} className="space-y-1">
+                <Card className="border border-amber-200 dark:border-amber-800/40 shadow-none rounded-xl">
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <button
+                          onClick={() => {
+                            toggleCategory(catKey);
+                            if (!expandedCategories[catKey] && !categoryTransactions[catKey]) {
+                              fetchCategoryTransactions(item.category, undefined, item.type);
+                            }
+                          }}
+                          className="size-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center transition-colors shrink-0"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="size-4 text-gray-500" />
+                          ) : (
+                            <ChevronRight className="size-4 text-gray-500" />
+                          )}
+                        </button>
+                        <div className={`size-8 rounded-lg ${bgColor} flex items-center justify-center shrink-0`}>
+                          <CatIcon className={`size-4 ${iconColor}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                            {item.category}
+                          </p>
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                            Sin presupuesto · {formatCurrency(item.totalSpent)} gastado
+                            {item.transactionCount > 0 && ` · ${item.transactionCount} mov.`}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl text-[10px] gap-1 h-7 px-2 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/10 shrink-0"
+                        onClick={() => handleCreateBudgetFromUnbudgeted(item)}
+                      >
+                        <CirclePlus className="size-3" />
+                        Crear
+                      </Button>
+                    </div>
+
+                    {/* Subcategories */}
+                    {item.subcategories.length > 0 && (
+                      <div className="mt-2 ml-12 space-y-1">
+                        {item.subcategories.map((sub) => (
+                          <div key={sub.subCategory} className="flex items-center justify-between">
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                              {sub.subCategory}: {formatCurrency(sub.totalSpent)}
+                            </p>
+                            <button
+                              onClick={() => handleCreateBudgetFromUnbudgeted(item, sub)}
+                              className="text-[9px] text-amber-600 dark:text-amber-400 hover:underline"
+                            >
+                              + Presupuestar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Expanded transactions */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
+                        <CardContent className="p-2">
+                          <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+                            <Eye className="size-3 text-gray-400" />
+                            <p className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                              Movimientos del periodo
+                            </p>
+                          </div>
+                          {isTransactionsLoading ? (
+                            <div className="flex items-center justify-center py-4">
+                              <RefreshCw className="size-4 animate-spin text-gray-400" />
+                            </div>
+                          ) : transactions.length === 0 ? (
+                            <div className="text-center py-3">
+                              <p className="text-[10px] text-gray-400">Sin movimientos en este periodo</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-0.5">
+                              {transactions.slice(0, 10).map(renderTransactionItem)}
+                              {transactions.length > 10 && (
+                                <p className="text-[10px] text-center text-gray-400 py-1">
+                                  y {transactions.length - 10} movimientos más...
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
+    );
+  };
+
+  const unbudgetedExpenses = unbudgeted.filter((u) => u.type === "expense");
+  const unbudgetedIncomes = unbudgeted.filter((u) => u.type === "income");
 
   return (
     <motion.div
@@ -432,9 +784,14 @@ export function BudgetsView() {
                   <TrendingUp className="size-3 text-emerald-200" />
                   <span className="text-[10px] text-emerald-200">Ingresos</span>
                 </div>
-                <p className="text-lg font-bold">{formatCurrency(totalIncomeSpent)}</p>
+                <p className="text-lg font-bold">{formatCurrency(totalIncomeSpent + totalUnbudgetedIncome)}</p>
                 <p className="text-[10px] text-emerald-200">
                   de {formatCurrency(totalIncomeBudget)}
+                  {totalUnbudgetedIncome > 0 && (
+                    <span className="text-amber-200 ml-1">
+                      (+{formatCurrency(totalUnbudgetedIncome)} sin presup.)
+                    </span>
+                  )}
                 </p>
               </div>
               <div>
@@ -442,9 +799,14 @@ export function BudgetsView() {
                   <TrendingDown className="size-3 text-rose-200" />
                   <span className="text-[10px] text-emerald-200">Gastos</span>
                 </div>
-                <p className="text-lg font-bold">{formatCurrency(totalExpenseSpent)}</p>
+                <p className="text-lg font-bold">{formatCurrency(totalExpenseSpent + totalUnbudgetedExpense)}</p>
                 <p className="text-[10px] text-emerald-200">
                   de {formatCurrency(totalExpenseBudget)}
+                  {totalUnbudgetedExpense > 0 && (
+                    <span className="text-amber-200 ml-1">
+                      (+{formatCurrency(totalUnbudgetedExpense)} sin presup.)
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
@@ -472,6 +834,9 @@ export function BudgetsView() {
         </motion.div>
       )}
 
+      {/* Unbudgeted Incomes */}
+      {unbudgetedIncomes.length > 0 && renderUnbudgetedSection(unbudgetedIncomes, "Ingresos sin Presupuesto", "emerald")}
+
       {/* Expense Budgets */}
       <motion.div variants={itemVariants}>
         <div className="flex items-center justify-between mb-3">
@@ -493,7 +858,7 @@ export function BudgetsView() {
             {recalculating ? "Calculando..." : "Recalcular"}
           </Button>
         </div>
-        {expenseBudgets.length === 0 ? (
+        {expenseBudgets.length === 0 && unbudgetedExpenses.length === 0 ? (
           <Card className="border-0 shadow-sm rounded-2xl bg-gray-50 dark:bg-gray-800/50">
             <CardContent className="p-6 text-center">
               <Target className="size-8 text-gray-300 mx-auto mb-2" />
@@ -509,6 +874,9 @@ export function BudgetsView() {
         )}
       </motion.div>
 
+      {/* Unbudgeted Expenses */}
+      {unbudgetedExpenses.length > 0 && renderUnbudgetedSection(unbudgetedExpenses, "Gastos fuera del Presupuesto", "rose")}
+
       {/* FAB - Add Budget */}
       <motion.div
         className="fixed bottom-24 right-4 z-40"
@@ -519,6 +887,7 @@ export function BudgetsView() {
         <Button
           onClick={() => {
             setEditingBudget(null);
+            setPrefilledBudgetCategory(null);
             setShowBudgetForm(true);
           }}
           className="size-14 rounded-full bg-gradient-to-br from-emerald-600 to-teal-500 shadow-lg shadow-emerald-500/30"
@@ -532,10 +901,28 @@ export function BudgetsView() {
         open={showBudgetForm}
         onOpenChange={(open) => {
           setShowBudgetForm(open);
-          if (!open) setEditingBudget(null);
+          if (!open) {
+            setEditingBudget(null);
+            setPrefilledBudgetCategory(null);
+          }
         }}
         budget={editingBudget}
-        onSuccess={fetchBudgets}
+        prefilledCategory={prefilledBudgetCategory}
+        onSuccess={() => {
+          fetchBudgets();
+          fetchUnbudgeted();
+        }}
+      />
+
+      {/* Transaction Edit Form */}
+      <TransactionForm
+        open={showTransactionForm}
+        onOpenChange={(open) => {
+          setShowTransactionForm(open);
+          if (!open) setEditingTransaction(null);
+        }}
+        editTransaction={editingTransaction}
+        onSuccess={handleTransactionSuccess}
       />
 
       {/* Delete Budget Dialog */}

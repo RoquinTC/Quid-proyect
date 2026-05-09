@@ -47,6 +47,12 @@ import {
   Link,
   Lock,
   ChevronDown,
+  ArrowRightLeft,
+  Target,
+  CreditCard,
+  PiggyBank,
+  Landmark as BankIcon,
+  Download,
 } from "lucide-react";
 import { AccountManager } from "@/components/finance/account-manager";
 import {
@@ -132,13 +138,22 @@ export function SettingsPage() {
   const [resettingTransport, setResettingTransport] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
 
-  // Import state
+  // Import state (legacy CSV)
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{
     success: boolean;
     result?: { total: number; created: number; skipped: number; errors: string[] };
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Transaction import state (xlsx)
+  const [importingTransactions, setImportingTransactions] = useState(false);
+  const [transactionImportResult, setTransactionImportResult] = useState<{
+    success: boolean;
+    result?: { total: number; created: number; skipped: number; errors: string[] };
+  } | null>(null);
+  const transactionFileRef = useRef<HTMLInputElement>(null);
+  const [downloadingTemplate, setDownloadingTemplate] = useState<string | null>(null);
 
   const fetchSettings = useCallback(async () => {
     setLoading(true);
@@ -299,6 +314,52 @@ export function SettingsPage() {
       setImporting(false);
       // Reset file input
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDownloadTemplate = async (type: string) => {
+    setDownloadingTemplate(type);
+    try {
+      const response = await fetch(`/api/settings/import/template?type=${type}`);
+      if (!response.ok) throw new Error("Error al descargar plantilla");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `qapital-plantilla-${type}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download template error:", error);
+    } finally {
+      setDownloadingTemplate(null);
+    }
+  };
+
+  const handleTransactionImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportingTransactions(true);
+    setTransactionImportResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/settings/import/transactions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      setTransactionImportResult(data);
+    } catch (error) {
+      console.error("Transaction import error:", error);
+      setTransactionImportResult({ success: false });
+    } finally {
+      setImportingTransactions(false);
+      if (transactionFileRef.current) transactionFileRef.current.value = "";
     }
   };
 
@@ -543,110 +604,108 @@ export function SettingsPage() {
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4 space-y-3">
 
-              {/* Opción A: Archivo CSV - FUNCIONAL */}
-              <Card className="border border-indigo-200 dark:border-indigo-800/40 shadow-none rounded-xl">
+              {/* ── 1. MOVIMIENTOS FINANCIEROS (FUNCIONAL) ── */}
+              <Card className="border border-emerald-200 dark:border-emerald-800/40 shadow-none rounded-xl">
                 <CardContent className="p-3 space-y-2">
                   <div className="flex items-center gap-3">
-                    <div className="size-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                      <FileSpreadsheet className="size-3.5 text-indigo-600 dark:text-indigo-400" />
+                    <div className="size-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                      <ArrowRightLeft className="size-4 text-emerald-600 dark:text-emerald-400" />
                     </div>
-                    <div>
-                      <p className="text-xs font-medium text-gray-900 dark:text-white">Importar desde CSV</p>
-                      <p className="text-[10px] text-gray-400">Carga masiva de cuentas, presupuestos, deudas, metas y vehículos</p>
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white">Movimientos Financieros</p>
+                      <p className="text-[10px] text-gray-400">Ingresos, gastos y transferencias</p>
                     </div>
+                    <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 shrink-0">
+                      Principal
+                    </Badge>
                   </div>
-                  <div className="bg-indigo-50 dark:bg-indigo-900/10 rounded-xl p-2.5">
-                    <p className="text-[10px] text-indigo-600 dark:text-indigo-400">
-                      Formato: CSV con columnas modulo, nombre, tipo, monto, categoría, tasa, banco. Descarga la plantilla para ver el formato exacto.
+                  <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-2.5 space-y-1.5">
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      La plantilla tiene 3 hojas:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-[9px] bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md">Ingresos</span>
+                      <span className="text-[9px] bg-rose-100 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 px-2 py-0.5 rounded-md">Gastos</span>
+                      <span className="text-[9px] bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded-md">Transferencias</span>
+                    </div>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                      Cada hoja corresponde a los campos reales: fecha, descripción, monto, categoría, subcategoría, cuenta y subcuenta.
                     </p>
                   </div>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
-                      className="flex-1 rounded-xl text-xs gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400 h-8"
-                      onClick={() => {
-                        // Download template CSV
-                        const csv = `modulo,nombre,tipo,monto,categoría,tasa,banco
-cuenta,Bancolombia Ahorros,checking,5000000,#10B981,,
-cuenta,Nequi,digital_wallet,800000,#6366F1,,
-presupuesto,Alimentación,expense,1500000,,
-presupuesto,Transporte,expense,600000,,
-deuda,Tarjeta Éxito,credit_card,8000000,,29.9,Éxito
-deuda,Prestamo Vehicle,loan,35000000,,14.5,Bancolombia
-meta,Emergencias,emergency_fund,10000000,2027-06-01,,
-meta,Viaje Cancun,travel,5000000,2027-12-01,,
-vehiculo,Pulsar 200NS,motorcycle,Bajaj,2020,,`;
-                        const blob = new Blob([csv], { type: "text/csv" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = "qapital-plantilla.csv";
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
+                      className="flex-1 rounded-xl text-xs gap-1.5 border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 h-8"
+                      onClick={() => handleDownloadTemplate("movimientos")}
+                      disabled={downloadingTemplate === "movimientos"}
                     >
-                      <FileSpreadsheet className="size-3.5" />
-                      Plantilla
+                      {downloadingTemplate === "movimientos" ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                      Descargar Plantilla
                     </Button>
                     <Button
-                      className="flex-1 rounded-xl text-xs gap-2 bg-indigo-600 hover:bg-indigo-700 text-white h-8"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={importing}
+                      className="flex-1 rounded-xl text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white h-8"
+                      onClick={() => transactionFileRef.current?.click()}
+                      disabled={importingTransactions}
                     >
-                      {importing ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
-                      Importar CSV
+                      {importingTransactions ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+                      Cargar Excel
                     </Button>
                   </div>
                   <input
-                    ref={fileInputRef}
+                    ref={transactionFileRef}
                     type="file"
-                    accept=".csv"
+                    accept=".xlsx,.xls"
                     className="hidden"
-                    onChange={handleFileImport}
+                    onChange={handleTransactionImport}
                   />
-                  {importResult && (
-                    <div className={`rounded-xl p-2.5 ${importResult.success ? "bg-emerald-50 dark:bg-emerald-900/10" : "bg-red-50 dark:bg-red-900/10"}`}>
-                      {importResult.result ? (
+                  {transactionImportResult && (
+                    <div className={`rounded-xl p-2.5 ${transactionImportResult.success ? "bg-emerald-50 dark:bg-emerald-900/10" : "bg-red-50 dark:bg-red-900/10"}`}>
+                      {transactionImportResult.result ? (
                         <div className="text-[10px] space-y-1">
-                          <p className={importResult.success ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
-                            {importResult.result.created} de {importResult.result.total} registros creados
+                          <p className={transactionImportResult.success ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-red-600 dark:text-red-400 font-medium"}>
+                            {transactionImportResult.result.created} de {transactionImportResult.result.total} movimientos importados
                           </p>
-                          {importResult.result.skipped > 0 && (
-                            <p className="text-amber-600 dark:text-amber-400">{importResult.result.skipped} omitidos</p>
+                          {transactionImportResult.result.skipped > 0 && (
+                            <p className="text-amber-600 dark:text-amber-400">{transactionImportResult.result.skipped} omitidos</p>
                           )}
-                          {importResult.result.errors.length > 0 && (
+                          {transactionImportResult.result.errors.length > 0 && (
                             <div className="text-red-500 space-y-0.5">
-                              {importResult.result.errors.slice(0, 3).map((err, i) => (
+                              {transactionImportResult.result.errors.slice(0, 3).map((err, i) => (
                                 <p key={i}>{err}</p>
                               ))}
-                              {importResult.result.errors.length > 3 && (
-                                <p>...y {importResult.result.errors.length - 3} errores más</p>
+                              {transactionImportResult.result.errors.length > 3 && (
+                                <p>...y {transactionImportResult.result.errors.length - 3} errores más</p>
                               )}
                             </div>
                           )}
                         </div>
                       ) : (
-                        <p className="text-[10px] text-red-600 dark:text-red-400">Error al procesar el archivo. Verifica el formato.</p>
+                        <p className="text-[10px] text-red-600 dark:text-red-400">Error al procesar el archivo. Verifica que sea un Excel (.xlsx) con el formato correcto.</p>
                       )}
                     </div>
                   )}
                 </CardContent>
               </Card>
 
-              {/* Opción B: Desde el Banco - PRÓXIMAMENTE */}
+              {/* ── 2. PRESUPUESTOS (PRÓXIMAMENTE) ── */}
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl opacity-60">
                 <CardContent className="p-3 space-y-2">
                   <div className="flex items-center gap-3">
-                    <div className="size-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                      <Link className="size-3.5 text-gray-400" />
+                    <div className="size-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                      <Target className="size-3.5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Conectar con tu banco</p>
-                      <p className="text-[10px] text-gray-400">Importa transacciones automáticamente desde tu entidad financiera</p>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Presupuestos</p>
+                      <p className="text-[10px] text-gray-400">Carga categorías y montos asignados por periodo</p>
                     </div>
-                    <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                    <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 shrink-0">
                       Próximamente
                     </Badge>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-2">
+                    <p className="text-[10px] text-gray-400">
+                      Columnas: categoría, subcategoría, tipo (ingreso/gasto), monto, periodo
+                    </p>
                   </div>
                   <Button variant="outline" className="w-full rounded-xl text-xs h-8 opacity-50 cursor-not-allowed" disabled>
                     <Lock className="size-3.5 mr-2" />
@@ -655,20 +714,25 @@ vehiculo,Pulsar 200NS,motorcycle,Bajaj,2020,,`;
                 </CardContent>
               </Card>
 
-              {/* Opción C: Desde otra App - PRÓXIMAMENTE */}
+              {/* ── 3. DEUDAS (PRÓXIMAMENTE) ── */}
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl opacity-60">
                 <CardContent className="p-3 space-y-2">
                   <div className="flex items-center gap-3">
-                    <div className="size-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                      <Database className="size-3.5 text-gray-400" />
+                    <div className="size-8 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                      <CreditCard className="size-3.5 text-red-600 dark:text-red-400" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Migrar desde otra app</p>
-                      <p className="text-[10px] text-gray-400">Importa tus datos de otras aplicaciones financieras</p>
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Deudas</p>
+                      <p className="text-[10px] text-gray-400">Tarjetas de crédito, préstamos y otras deudas</p>
                     </div>
-                    <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                    <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 shrink-0">
                       Próximamente
                     </Badge>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-2">
+                    <p className="text-[10px] text-gray-400">
+                      Columnas: nombre, tipo, monto total, saldo, tasa de interés, banco, día de corte, día de pago
+                    </p>
                   </div>
                   <Button variant="outline" className="w-full rounded-xl text-xs h-8 opacity-50 cursor-not-allowed" disabled>
                     <Lock className="size-3.5 mr-2" />
@@ -676,6 +740,61 @@ vehiculo,Pulsar 200NS,motorcycle,Bajaj,2020,,`;
                   </Button>
                 </CardContent>
               </Card>
+
+              {/* ── 4. METAS DE AHORRO (PRÓXIMAMENTE) ── */}
+              <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl opacity-60">
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="size-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                      <PiggyBank className="size-3.5 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Metas de Ahorro</p>
+                      <p className="text-[10px] text-gray-400">Objetivos de ahorro con frecuencia y fecha meta</p>
+                    </div>
+                    <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 shrink-0">
+                      Próximamente
+                    </Badge>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-2">
+                    <p className="text-[10px] text-gray-400">
+                      Columnas: nombre, monto objetivo, monto actual, tipo, fecha meta, frecuencia
+                    </p>
+                  </div>
+                  <Button variant="outline" className="w-full rounded-xl text-xs h-8 opacity-50 cursor-not-allowed" disabled>
+                    <Lock className="size-3.5 mr-2" />
+                    No disponible aún
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* ── 5. CDT (PRÓXIMAMENTE) ── */}
+              <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl opacity-60">
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <div className="size-8 rounded-lg bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center">
+                      <BankIcon className="size-3.5 text-teal-600 dark:text-teal-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-gray-500 dark:text-gray-400">CDT</p>
+                      <p className="text-[10px] text-gray-400">Certificados de Depósito a Término</p>
+                    </div>
+                    <Badge variant="secondary" className="text-[9px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 shrink-0">
+                      Próximamente
+                    </Badge>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-2">
+                    <p className="text-[10px] text-gray-400">
+                      Columnas: banco, monto, tasa efectiva anual, plazo en días, fechas, cuenta de rendimientos
+                    </p>
+                  </div>
+                  <Button variant="outline" className="w-full rounded-xl text-xs h-8 opacity-50 cursor-not-allowed" disabled>
+                    <Lock className="size-3.5 mr-2" />
+                    No disponible aún
+                  </Button>
+                </CardContent>
+              </Card>
+
             </AccordionContent>
           </AccordionItem>
         </Card>

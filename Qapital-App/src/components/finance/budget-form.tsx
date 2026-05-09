@@ -40,17 +40,23 @@ interface BudgetFormProps {
     spent: number;
     period: string;
   } | null;
+  prefilledCategory?: {
+    category: string;
+    subCategory?: string | null;
+    type: string;
+    suggestedAmount?: number;
+  } | null;
   onSuccess?: () => void;
 }
 
-export function BudgetForm({ open, onOpenChange, budget, onSuccess }: BudgetFormProps) {
+export function BudgetForm({ open, onOpenChange, budget, prefilledCategory, onSuccess }: BudgetFormProps) {
   const [loading, setLoading] = useState(false);
-  const [type, setType] = useState(budget?.type || "expense");
-  const [category, setCategory] = useState(budget?.category || "");
+  const [type, setType] = useState(budget?.type || prefilledCategory?.type || "expense");
+  const [category, setCategory] = useState(budget?.category || prefilledCategory?.category || "");
   const [customCategory, setCustomCategory] = useState("");
   const [useCustom, setUseCustom] = useState(false);
-  const [subCategory, setSubCategory] = useState(budget?.subCategory || "");
-  const [amount, setAmount] = useState(budget?.amount?.toString() || "");
+  const [subCategory, setSubCategory] = useState(budget?.subCategory || prefilledCategory?.subCategory || "");
+  const [amount, setAmount] = useState(budget?.amount?.toString() || (prefilledCategory?.suggestedAmount ? prefilledCategory.suggestedAmount.toString() : ""));
   const [period, setPeriod] = useState(budget?.period || "monthly");
 
   // Categories from API
@@ -86,15 +92,38 @@ export function BudgetForm({ open, onOpenChange, budget, onSuccess }: BudgetForm
     if (open) fetchCategories();
   }, [open, fetchCategories]);
 
+  // Sync from prefilledCategory when it changes
+  useEffect(() => {
+    if (prefilledCategory && !budget) {
+      setType(prefilledCategory.type);
+      setCategory(prefilledCategory.category);
+      setSubCategory(prefilledCategory.subCategory || "");
+      if (prefilledCategory.suggestedAmount) {
+        setAmount(prefilledCategory.suggestedAmount.toString());
+      }
+      // Check if category is in the default list; if not, use custom input
+      const isDefaultCategory =
+        (prefilledCategory.type === "income" && ["Salario", "Freelance", "Inversiones", "Ventas", "Otros"].includes(prefilledCategory.category)) ||
+        (prefilledCategory.type === "expense" && ["Alimentación", "Transporte", "Vivienda", "Salud", "Entretenimiento", "Educación", "Ropa", "Servicios", "Deudas", "Ahorros", "Suscripciones", "Otros"].includes(prefilledCategory.category));
+      if (!isDefaultCategory) {
+        setUseCustom(true);
+        setCustomCategory(prefilledCategory.category);
+        setCategory("");
+      }
+    }
+  }, [prefilledCategory, budget]);
+
   // When type changes, reset category
   useEffect(() => {
-    if (!isEditing) {
+    if (!isEditing && !prefilledCategory) {
       setCategory("");
       setSubCategory("");
     }
-    setUseCustom(false);
-    setCustomCategory("");
-  }, [type, isEditing]);
+    if (!prefilledCategory) {
+      setUseCustom(false);
+      setCustomCategory("");
+    }
+  }, [type, isEditing, prefilledCategory]);
 
   // When category changes, reset subcategory
   useEffect(() => {
@@ -151,7 +180,7 @@ export function BudgetForm({ open, onOpenChange, budget, onSuccess }: BudgetForm
   };
 
   const resetForm = () => {
-    if (!budget) {
+    if (!budget && !prefilledCategory) {
       setType("expense");
       setCategory("");
       setCustomCategory("");

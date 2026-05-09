@@ -123,7 +123,7 @@ export async function POST() {
           category: budget.category,
           // Include BOTH paid and unpaid CC installments
           // Exclude loan installments (their expense transactions are counted in Source A)
-          debt: { userId, type: { not: "loan" } },
+          debt: { type: { not: "loan" } },
         };
 
         if (budget.subCategory) {
