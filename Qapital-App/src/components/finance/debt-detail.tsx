@@ -998,71 +998,9 @@ export function DebtDetail() {
         </div>
       )}
 
-      {/* ── Credit Card / Other: Pay Button (only shown when not using cycle view) ── */}
-      {!isLoan && dueInstallments.length > 0 && !(isCreditCard && debt.cutoffDate && debt.paymentDate) && (
-        <div className="space-y-2">
-          <Button
-            onClick={handlePay}
-            disabled={paying || selectedDueInstallments.length === 0}
-            className="w-full rounded-xl h-12 bg-gradient-to-r from-emerald-500 to-green-500"
-          >
-            {paying ? (
-              <Loader2 className="size-4 animate-spin mr-2" />
-            ) : null}
-            {paying ? "Procesando..." : `Pagar ${selectedDueInstallments.length} de ${dueInstallments.length} cuota(s): ${formatCurrency(totalDue)}`}
-          </Button>
-
-          {/* Reverse button — shown when there are paid installments */}
-          {hasPaidInstallments && (
-            <Button
-              onClick={handleReversePay}
-              disabled={reversing}
-              variant="outline"
-              className="w-full rounded-xl h-12 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/20"
-            >
-              {reversing ? (
-                <Loader2 className="size-4 animate-spin mr-2" />
-              ) : (
-                <Undo2 className="size-4 mr-2" />
-              )}
-              {reversing ? "Revirtiendo..." : "Reversar Último Pago"}
-            </Button>
-          )}
-
-          <Button
-            onClick={handleOpenAbono}
-            variant="outline"
-            className="w-full rounded-xl h-12 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-900/20"
-          >
-            <HandCoins className="size-4 mr-2" />
-            Abono a Capital
-          </Button>
-
-          {/* Abono History button — always visible when there are abonos */}
-          {(debt.abonos?.filter(a => !a.isReversed).length ?? 0) > 0 && (
-            <Button
-              onClick={() => setShowAbonoHistory(true)}
-              variant="outline"
-              className="w-full rounded-xl h-12 border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-900/20"
-            >
-              <CalendarDays className="size-4 mr-2" />
-              Historial de Abonos ({debt.abonos?.filter(a => !a.isReversed).length ?? 0})
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Abono History button — shown even when no due installments but there are abonos */}
-      {dueInstallments.length === 0 && (debt.abonos?.filter(a => !a.isReversed).length ?? 0) > 0 && (
-        <Button
-          onClick={() => setShowAbonoHistory(true)}
-          variant="outline"
-          className="w-full rounded-xl h-12 border-purple-300 text-purple-700 hover:bg-purple-50 dark:border-purple-700 dark:text-purple-400 dark:hover:bg-purple-900/20"
-        >
-          <CalendarDays className="size-4 mr-2" />
-          Historial de Abonos ({debt.abonos?.filter(a => !a.isReversed).length ?? 0})
-        </Button>
-      )}
+      {/* ── Credit Card / Other: Pay/Reverse/Abono buttons are handled by InstallmentPlan component ── */}
+      {/* The InstallmentPlan component renders its own pay/reverse/abono buttons for non-loan debts */}
+      {/* This section was removed to avoid duplicate buttons */}
 
       {/* Payment Summary — only for selected installments */}
       {selectedDueInstallments.length > 0 && (

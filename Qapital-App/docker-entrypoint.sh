@@ -28,4 +28,22 @@ else
 fi
 
 echo "🌐 Iniciando servidor Next.js..."
+
+# ── Data migration: set paymentType for existing loans ──
+echo "🔄 Migrando préstamos existentes (paymentType)..."
+su-exec nextjs:nodejs node -e "
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+prisma.debt.updateMany({
+  where: { type: 'loan', paymentType: null, monthlyPayment: { not: null } },
+  data: { paymentType: 'fixed' }
+}).then(r => {
+  console.log('✅ Préstamos migrados:', r.count);
+  prisma.\$disconnect();
+}).catch(e => {
+  console.log('⚠️  Migración omitida:', e.message);
+  prisma.\$disconnect();
+});
+" 2>/dev/null || echo "⚠️  Migración de paymentType omitida."
+
 exec su-exec nextjs:nodejs node server.js

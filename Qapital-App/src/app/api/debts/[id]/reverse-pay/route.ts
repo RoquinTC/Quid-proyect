@@ -65,13 +65,22 @@ export async function POST(
 
     // ── 2. Identify the installments that were paid in this batch ──
     // Strategy A: Try extracting installment IDs from transaction notes (primary format)
+    // Notes format: "installmentIds:id1,id2|Compras pagadas: ...|{...json...}"
     let allInstallmentIds: string[] = [];
     for (const tx of batchTransactions) {
       if (tx.notes) {
-        const match = tx.notes.match(/installmentIds:\s*([^\s]+)/);
-        if (match) {
-          const ids = match[1].split(",").filter(Boolean);
+        // Try new format with pipe delimiter first
+        const matchWithPipe = tx.notes.match(/installmentIds:([^|]+)/);
+        if (matchWithPipe) {
+          const ids = matchWithPipe[1].split(",").map((id: string) => id.trim()).filter(Boolean);
           allInstallmentIds.push(...ids);
+        } else {
+          // Fallback: old format (whitespace delimited)
+          const matchOld = tx.notes.match(/installmentIds:\s*([^\s]+)/);
+          if (matchOld) {
+            const ids = matchOld[1].split(",").filter(Boolean);
+            allInstallmentIds.push(...ids);
+          }
         }
       }
     }

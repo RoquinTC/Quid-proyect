@@ -215,6 +215,13 @@ model Debt {
   remainingPayments Int?
   startDate       DateTime?
   endDate         DateTime?
+  // ── Loan-specific fields ──
+  paymentType     String?   // "fixed" or "variable" (for loans)
+  otherCharges    Float?    // Fixed monthly charges (insurance, paperwork, IVA)
+  category        String?   // Budget category (for loan payments)
+  subCategory     String?   // Budget sub-category
+  accountId       String?   // Default payment account (for loans)
+  subAccountId    String?   // Default payment sub-account
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -237,6 +244,7 @@ model Installment {
   paidAmount          Float     @default(0) // Total pagado (capital + interés)
   interestRate        Float?    // Tasa de interés mensual para esta cuota (%), ingresada al pagar
   interestAmount      Float?    // Monto del interés pagado en esta cuota
+  otherChargesAmount  Float?    // Monto de otros gastos fijos pagados en esta cuota (seguro, papelería, IVA)
   remainingBalance    Float?    // Saldo pendiente ANTES de pagar esta cuota (para calcular interés)
   purchaseDate        DateTime
   nextPaymentDate     DateTime

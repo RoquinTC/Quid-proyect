@@ -398,13 +398,29 @@ export function InstallmentPlan({
   // ── Calculate due installments for pay button ──
   const dueInstallments = useMemo(() => {
     if (hasCycles && billingCycles) {
-      return billingCycles
-        .filter((c) => c.paymentDueDate <= today || c.cutoffDate <= today)
-        .flatMap((c) => c.installments);
+      // Include past cycles AND the next upcoming cycle
+      // (user should be able to pay even before the cutoff date)
+      const pastCycles = billingCycles
+        .filter((c) => c.cutoffDate <= today);
+      const upcomingCycles = billingCycles
+        .filter((c) => c.cutoffDate > today);
+
+      const result = pastCycles.flatMap((c) => c.installments);
+      // Also include the first upcoming cycle so user can pay early
+      if (upcomingCycles.length > 0) {
+        result.push(...upcomingCycles[0].installments);
+      }
+      return result;
     }
-    return unpaidInstallments.filter(
+    // For non-cycle debts: include due + next upcoming
+    const due = unpaidInstallments.filter(
       (inst) => new Date(inst.nextPaymentDate) <= today
     );
+    if (due.length > 0) return due;
+    // If none are past due, include the next upcoming one
+    const nextUnpaid = unpaidInstallments
+      .sort((a, b) => new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime());
+    return nextUnpaid.length > 0 ? [nextUnpaid[0]] : [];
   }, [hasCycles, billingCycles, unpaidInstallments, today]);
 
   const totalDue = dueInstallments.reduce((sum, i) => sum + i.installmentAmount, 0);

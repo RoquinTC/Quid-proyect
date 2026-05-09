@@ -355,7 +355,8 @@ export async function POST(
         accountId: string | null;
         subAccountId: string | null;
         amount: number;
-        details: { description: string; amount: number; category: string | null; subCategory: string | null; currentInstallment: number; totalInstallments: number }[];
+        installmentIds: string[];
+        details: { installmentId: string; description: string; amount: number; category: string | null; subCategory: string | null; currentInstallment: number; totalInstallments: number }[];
       }> = {};
 
       for (const inst of dueInstallments) {
@@ -373,11 +374,14 @@ export async function POST(
             accountId: effectiveAccountId,
             subAccountId: effectiveSubAccountId,
             amount: 0,
+            installmentIds: [],
             details: [],
           };
         }
         accountGroups[groupKey].amount += instTotal;
+        accountGroups[groupKey].installmentIds.push(inst.id);
         accountGroups[groupKey].details.push({
+          installmentId: inst.id,
           description: inst.description,
           amount: instTotal,
           category: inst.category,
@@ -392,7 +396,9 @@ export async function POST(
         if (!group.accountId) continue;
 
         // Build a structured notes string with installment details for the expandable UI
+        // Include installmentIds prefix for reverse-pay to find them easily
         const detailsJson = JSON.stringify(group.details);
+        const notesWithIds = `installmentIds:${group.installmentIds.join(",")} | ${detailsJson}`;
 
         await db.transaction.create({
           data: {
@@ -407,7 +413,7 @@ export async function POST(
             date: getColombiaNow(),
             sourceModule: "finance",
             sourceId: debt.id,
-            notes: detailsJson, // JSON with installment details for expandable UI
+            notes: notesWithIds, // installmentIds prefix + JSON with installment details
           },
         });
 
@@ -458,7 +464,7 @@ export async function POST(
               date: getColombiaNow(),
               sourceModule: "finance",
               sourceId: debt.id,
-              notes: `Cuota ${inst.currentInstallment}/${inst.totalInstallments} de "${inst.description}"`,
+              notes: `installmentIds:${inst.id} | Cuota ${inst.currentInstallment}/${inst.totalInstallments} de "${inst.description}"`,
             },
           });
 
