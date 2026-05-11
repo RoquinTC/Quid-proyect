@@ -29,4 +29,26 @@ services:
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - GITHUB_USER=${GITHUB_USER}
       - GITHUB_REPO=${GITHUB_REPO}
+      - LOCAL_AI_BASE_URL=http://ollama:11434/v1
+      - LOCAL_AI_MODEL=llama3.2:3b
+    depends_on:
+      - ollama
     restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: aura-ollama
+    volumes:
+      - ./ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+  ollama-setup:
+    image: ollama/ollama:latest
+    container_name: aura-ollama-setup
+    volumes:
+      - ./ollama-setup.sh:/ollama-setup.sh
+    entrypoint: ["/bin/sh", "/ollama-setup.sh"]
+    depends_on:
+      - ollama

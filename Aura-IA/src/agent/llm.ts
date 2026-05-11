@@ -164,15 +164,32 @@ export async function createChatCompletion(messages: any[], tools?: any[]) {
     console.warn('⚠️ Fallback a Groq falló:', error.message);
   }
 
-  // 3. Fallback a IA Local (Ollama / LM Studio)
+  // 3. Fallback a IA Local (Ollama Docker)
   try {
-    const localBaseUrl = env.LOCAL_AI_BASE_URL || 'http://host.docker.internal:11434/v1';
+    const localBaseUrl = env.LOCAL_AI_BASE_URL || 'http://ollama:11434/v1';
     console.log(`🤖 Intentando fallback a IA Local en: ${localBaseUrl}...`);
     
     const localClient = new OpenAI({
       apiKey: 'local-no-key-required',
       baseURL: localBaseUrl,
     });
+
+    // Determinar qué modelo usar según el contenido o herramientas
+    let selectedModel = env.LOCAL_AI_MODEL_CHAT;
+    
+    // Si hay herramientas de base de datos o cálculos, usar Coder
+    const isLogicTask = tools?.some(t => 
+      t.function.name.includes('db') || 
+      t.function.name.includes('query') || 
+      t.function.name.includes('calculate')
+    );
+
+    if (isLogicTask) {
+      selectedModel = env.LOCAL_AI_MODEL_LOGIC;
+    }
+
+    // Nota: Llava se activará si detectamos imágenes en el futuro (multimodal)
+    // Por ahora, el chat por defecto es Llama 3.2
 
     const localMessages = messages.slice(-10).map(m => {
       const msg: any = { role: m.role };
@@ -190,8 +207,10 @@ export async function createChatCompletion(messages: any[], tools?: any[]) {
       return msg;
     });
 
+    console.log(`🧠 Aura usando especialista local: ${selectedModel}`);
+
     const response = await localClient.chat.completions.create({
-      model: env.LOCAL_AI_MODEL || 'llama3.2', // modelo por defecto para Ollama
+      model: selectedModel,
       messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...localMessages],
       tools: tools && tools.length > 0 ? tools : undefined,
     });

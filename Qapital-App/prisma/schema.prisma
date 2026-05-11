@@ -160,6 +160,7 @@ model Transaction {
   isRecurring           Boolean   @default(false)
   notes                 String?
   relatedTransactionId  String?   // Links transfer pairs
+  excludeFromBudget     Boolean   @default(false) // If true, does not affect budget spent
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

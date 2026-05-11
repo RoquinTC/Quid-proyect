@@ -45,3 +45,6 @@ Aura-IA/out_*.mp3
 # IDEs
 .vscode/
 .idea/
+
+# Ollama local models (multi-GB, no subir al repo)
+ollama_data/
