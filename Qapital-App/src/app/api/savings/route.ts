@@ -3,8 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { verifyEntityOwnership } from '@/lib/auth-guards'
+import { toNumber } from '@/lib/decimal-serializer'
 
-// GET /api/savings — list savings goals for authenticated user
+// GET /api/savings -- list savings goals for authenticated user
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
@@ -43,7 +44,7 @@ export async function GET() {
   }
 }
 
-// POST /api/savings — create a savings goal
+// POST /api/savings -- create a savings goal
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -91,10 +92,11 @@ export async function POST(request: Request) {
       const cdts = await db.cDT.findMany({
         where: { id: { in: linkedCDTIds }, userId },
       })
-      linkedCDTTotal = cdts.reduce((sum, c) => sum + c.amount, 0)
+      linkedCDTTotal = cdts.reduce((sum, c) => sum + toNumber(c.amount), 0)
     }
 
     // Calculate linked account balances
+    // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
     let linkedAccountsTotal = 0
     for (const item of linkedAccountItems) {
       if (item.subAccountId) {
@@ -104,7 +106,7 @@ export async function POST(request: Request) {
         if (!sub) {
           return NextResponse.json({ error: 'Subcuenta vinculada no encontrada o sin permisos' }, { status: 403 })
         }
-        linkedAccountsTotal += sub.balance
+        linkedAccountsTotal += toNumber(sub.balance)
       } else {
         const acc = await db.account.findFirst({
           where: { id: item.accountId, userId },
@@ -112,7 +114,7 @@ export async function POST(request: Request) {
         if (!acc) {
           return NextResponse.json({ error: 'Cuenta vinculada no encontrada o sin permisos' }, { status: 403 })
         }
-        linkedAccountsTotal += acc.balance
+        linkedAccountsTotal += toNumber(acc.balance)
       }
     }
 
@@ -175,8 +177,8 @@ export async function POST(request: Request) {
 
       // Create contribution record for the linked account balance
       const bal = item.subAccountId
-        ? (await db.subAccount.findUnique({ where: { id: item.subAccountId } }))?.balance || 0
-        : (await db.account.findUnique({ where: { id: item.accountId } }))?.balance || 0
+        ? toNumber((await db.subAccount.findUnique({ where: { id: item.subAccountId } }))?.balance || 0)
+        : toNumber((await db.account.findUnique({ where: { id: item.accountId } }))?.balance || 0)
 
       if (bal > 0) {
         await db.savingsContribution.create({
@@ -199,7 +201,7 @@ export async function POST(request: Request) {
       })
     }
 
-    // Create recurring payment(s) linked to this goal — type transfer
+    // Create recurring payment(s) linked to this goal -- type transfer
     // accountId = source (where money leaves), destinationAccountId = destination (where money arrives)
     // For biweekly: create 2 recurring payments (one per day with its amount)
     // For weekly: create 4 recurring payments (one per week with its amount)

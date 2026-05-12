@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
 import { getCurrentBudgetPeriod } from "@/lib/holidays";
+import { toNumber } from "@/lib/decimal-serializer";
 
 /**
  * GET /api/budgets/spending-income
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
       referenceDate
     );
 
-    // ── Source 1: Transactions ──
+    // -- Source 1: Transactions --
     // Get all non-transfer transactions within the period
     const transactions = await db.transaction.findMany({
       where: {
@@ -73,9 +74,9 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // ── Source 2: Credit card installments ──
+    // -- Source 2: Credit card installments --
     // Include CC installments (both paid and unpaid) with purchaseDate in the period
-    // These represent spending committed via TC — the money is already "spent"
+    // These represent spending committed via TC -- the money is already "spent"
     const ccInstallments = await db.installment.findMany({
       where: {
         purchaseDate: { gte: periodStart, lte: periodEnd },
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // ── Build daily data ──
+    // -- Build daily data --
     // Group by date string (YYYY-MM-DD)
     const dailyMap = new Map<string, { income: number; expense: number }>();
 
@@ -103,6 +104,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Aggregate transactions
+    // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
+    // Without this: 0 + Decimal("800000") -> "0800000" (string concatenation!)
     let totalIncome = 0;
     let totalExpense = 0;
 
@@ -115,11 +118,11 @@ export async function GET(req: NextRequest) {
       if (!existing) continue;
 
       if (tx.type === "income") {
-        existing.income += tx.amount;
-        totalIncome += tx.amount;
+        existing.income += toNumber(tx.amount);
+        totalIncome += toNumber(tx.amount);
       } else if (tx.type === "expense") {
-        existing.expense += tx.amount;
-        totalExpense += tx.amount;
+        existing.expense += toNumber(tx.amount);
+        totalExpense += toNumber(tx.amount);
       }
     }
 
@@ -129,8 +132,8 @@ export async function GET(req: NextRequest) {
       const existing = dailyMap.get(dateStr);
       if (!existing) continue;
 
-      existing.expense += inst.installmentAmount;
-      totalExpense += inst.installmentAmount;
+      existing.expense += toNumber(inst.installmentAmount);
+      totalExpense += toNumber(inst.installmentAmount);
     }
 
     // Convert to array sorted by date
@@ -138,32 +141,32 @@ export async function GET(req: NextRequest) {
       .map(([date, data]) => ({ date, ...data }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // ── Build category breakdown ──
+    // -- Build category breakdown --
     const categoryMap = new Map<string, { category: string; subCategory: string | null; amount: number; type: string }>();
 
     for (const tx of transactions) {
       if (tx.sourceModule === "finance_transfer") continue;
 
-      const cat = tx.category || "Sin categoría";
+      const cat = tx.category || "Sin categoria";
       const sub = tx.subCategory || null;
       const key = `${tx.type}::${cat}::${sub || ""}`;
 
       if (!categoryMap.has(key)) {
         categoryMap.set(key, { category: cat, subCategory: sub, amount: 0, type: tx.type });
       }
-      categoryMap.get(key)!.amount += tx.amount;
+      categoryMap.get(key)!.amount += toNumber(tx.amount);
     }
 
     // Add CC installments to category breakdown
     for (const inst of ccInstallments) {
-      const cat = inst.category || "Sin categoría";
+      const cat = inst.category || "Sin categoria";
       const sub = inst.subCategory || null;
       const key = `expense::${cat}::${sub || ""}`;
 
       if (!categoryMap.has(key)) {
         categoryMap.set(key, { category: cat, subCategory: sub, amount: 0, type: "expense" });
       }
-      categoryMap.get(key)!.amount += inst.installmentAmount;
+      categoryMap.get(key)!.amount += toNumber(inst.installmentAmount);
     }
 
     const categoryBreakdown = Array.from(categoryMap.values())

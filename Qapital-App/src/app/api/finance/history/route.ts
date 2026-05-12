@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
 import { getCurrentBudgetPeriod } from "@/lib/holidays";
+import { toNumber } from "@/lib/decimal-serializer";
 
 const SPANISH_MONTHS = [
   "Ene", "Feb", "Mar", "Abr", "May", "Jun",
@@ -33,26 +34,26 @@ export async function GET() {
 
     const userId = session.user.id;
 
-    // ── Get user settings ──
+    // -- Get user settings --
     const settings = await db.userSettings.findUnique({
       where: { userId },
     });
     const cutoffDay = settings?.budgetCutoffDay || 1;
     const respectHolidays = settings?.respectHolidays ?? true;
 
-    // ── Calculate 6 budget periods (current + 5 previous) ──
+    // -- Calculate 6 budget periods (current + 5 previous) --
     const now = getColombiaNow();
     const periods: { start: Date; end: Date }[] = [];
 
     for (let i = -5; i <= 0; i++) {
       const refDate = new Date(now);
       refDate.setMonth(refDate.getMonth() + i);
-      // Normalize to avoid month overflow edge cases (e.g., Jan 31 → Feb 28)
+      // Normalize to avoid month overflow edge cases (e.g., Jan 31 -> Feb 28)
       const period = getCurrentBudgetPeriod(cutoffDay, respectHolidays, refDate);
       periods.push(period);
     }
 
-    // ── Build monthly data ──
+    // -- Build monthly data --
     const monthlyData = [];
 
     for (let i = 0; i < periods.length; i++) {
@@ -68,7 +69,7 @@ export async function GET() {
         },
         select: { amount: true },
       });
-      const income = incomeTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+      const income = incomeTransactions.reduce((sum, tx) => sum + toNumber(tx.amount), 0);
 
       // 2) Expenses: transactions of type "expense" + CC installments (excluding loans)
       //    Skip finance_transfer transactions
@@ -81,7 +82,7 @@ export async function GET() {
         },
         select: { amount: true, sourceModule: true },
       });
-      let expense = expenseTransactions.reduce((sum, tx) => sum + tx.amount, 0);
+      let expense = expenseTransactions.reduce((sum, tx) => sum + toNumber(tx.amount), 0);
 
       // Add credit card installments with purchaseDate in the period (excluding loans)
       const ccInstallments = await db.installment.findMany({
@@ -94,7 +95,7 @@ export async function GET() {
         },
         select: { installmentAmount: true },
       });
-      expense += ccInstallments.reduce((sum, inst) => sum + inst.installmentAmount, 0);
+      expense += ccInstallments.reduce((sum, inst) => sum + toNumber(inst.installmentAmount), 0);
 
       // 3) Savings contributions in the period
       const savingsContributions = await db.savingsContribution.findMany({
@@ -104,7 +105,7 @@ export async function GET() {
         },
         select: { amount: true },
       });
-      const savings = savingsContributions.reduce((sum, c) => sum + c.amount, 0);
+      const savings = savingsContributions.reduce((sum, c) => sum + toNumber(c.amount), 0);
 
       // Period label: use the month of the period start
       const periodMonth = periodStart.getMonth();
@@ -121,7 +122,7 @@ export async function GET() {
       });
     }
 
-    // ── Calculate current net worth ──
+    // -- Calculate current net worth --
     // Sum of all account balances + subaccount balances - debt currentBalances
     const accounts = await db.account.findMany({
       where: { userId },
@@ -134,29 +135,25 @@ export async function GET() {
     });
 
     const totalAccountBalance = accounts.reduce((sum, acc) => {
-      const subTotal = acc.subAccounts.reduce((s, sub) => s + sub.balance, 0);
-      return sum + acc.balance + subTotal;
+      const subTotal = acc.subAccounts.reduce((s, sub) => s + toNumber(sub.balance), 0);
+      return sum + toNumber(acc.balance) + subTotal;
     }, 0);
 
     const debts = await db.debt.findMany({
       where: { userId },
       select: { currentBalance: true },
     });
-    const totalDebtBalance = debts.reduce((sum, d) => sum + d.currentBalance, 0);
+    const totalDebtBalance = debts.reduce((sum, d) => sum + toNumber(d.currentBalance), 0);
 
     const currentNetWorth = Math.round(totalAccountBalance - totalDebtBalance);
 
-    // ── Approximate previous net worth ──
-    // Previous net worth ≈ current net worth - (current period income - current period expenses)
-    // because income adds to accounts and expenses remove from accounts
-    // Use the last period in monthlyData (which is the current period)
+    // -- Approximate previous net worth --
     const currentPeriodData = monthlyData[monthlyData.length - 1];
     const previousNetWorth = Math.round(
       currentNetWorth - currentPeriodData.income + currentPeriodData.expense
     );
 
-    // ── Yield history (last 6 months) ──
-    // Get YieldRecords for the last 6 months
+    // -- Yield history (last 6 months) --
     const sixMonthsAgo = new Date(now);
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     sixMonthsAgo.setDate(1);
@@ -176,22 +173,26 @@ export async function GET() {
     });
 
     // Group yield records by month
+    // FIX: Use toNumber() when initializing the Map entries to avoid storing
+    // raw Prisma Decimal objects, which would cause string concatenation bugs
+    // when they are later used in arithmetic operations.
     const yieldByMonth = new Map<string, { projected: number; actual: number | null }>();
     for (const yr of yieldRecords) {
       const monthDate = new Date(yr.month);
       const key = `${SPANISH_MONTHS[monthDate.getMonth()]} ${monthDate.getFullYear()}`;
       const existing = yieldByMonth.get(key);
       if (existing) {
-        existing.projected += yr.projectedYield;
+        existing.projected += toNumber(yr.projectedYield);
         if (yr.actualYield !== null && existing.actual !== null) {
-          existing.actual += yr.actualYield;
+          existing.actual += toNumber(yr.actualYield);
         } else if (yr.actualYield !== null && existing.actual === null) {
-          existing.actual = yr.actualYield;
+          existing.actual = toNumber(yr.actualYield);
         }
       } else {
+        // FIX: Convert Decimal to number on initial set, not just on subsequent additions.
         yieldByMonth.set(key, {
-          projected: yr.projectedYield,
-          actual: yr.actualYield,
+          projected: toNumber(yr.projectedYield),
+          actual: yr.actualYield !== null ? toNumber(yr.actualYield) : null,
         });
       }
     }

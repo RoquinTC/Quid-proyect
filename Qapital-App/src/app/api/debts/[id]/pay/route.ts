@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
+import { toNumber } from "@/lib/decimal-serializer";
 
 /**
  * Determine which billing cycle an installment CURRENTLY belongs to,
@@ -13,10 +14,10 @@ import { getColombiaNow } from "@/lib/api";
  * correctly moves to the next billing cycle.
  *
  * Logic: work backwards from the payment date to find the cycle month.
- *   If paymentDay > cutoffDay → payment is SAME month as cycle
- *     e.g. cutoff=3, payment=23 → payment May 23 → cycle May
- *   If paymentDay <= cutoffDay → payment is NEXT month after cycle
- *     e.g. cutoff=20, payment=4  → payment May 4  → cycle April
+ *   If paymentDay > cutoffDay -> payment is SAME month as cycle
+ *     e.g. cutoff=3, payment=23 -> payment May 23 -> cycle May
+ *   If paymentDay <= cutoffDay -> payment is NEXT month after cycle
+ *     e.g. cutoff=20, payment=4  -> payment May 4  -> cycle April
  */
 function getCycleFromPaymentDate(
   nextPaymentDate: Date,
@@ -47,14 +48,14 @@ export async function POST(
 
     const { id } = await params;
 
-    // ── Parse request body for interest rates and selected installments ──
+    // -- Parse request body for interest rates and selected installments --
     let body: {
       interestRates?: Record<string, number>;
       selectedInstallmentIds?: string[];
-      // ── Loan (cuota fija) fields ──
-      confirmedCapital?: Record<string, number>;   // { installmentId: capitalAmount } — user-confirmed capital
-      confirmedInterest?: Record<string, number>;   // { installmentId: interestAmount } — user-confirmed interest
-      confirmedOtherCharges?: Record<string, number>; // { installmentId: otherChargesAmount } — user-confirmed other charges
+      // -- Loan (cuota fija) fields --
+      confirmedCapital?: Record<string, number>;   // { installmentId: capitalAmount } -- user-confirmed capital
+      confirmedInterest?: Record<string, number>;   // { installmentId: interestAmount } -- user-confirmed interest
+      confirmedOtherCharges?: Record<string, number>; // { installmentId: otherChargesAmount } -- user-confirmed other charges
       payAccountId?: string | null;   // Account to debit the payment from (for loans)
       paySubAccountId?: string | null; // Sub-account to debit from (optional)
     } = {};
@@ -71,7 +72,7 @@ export async function POST(
     const payAccountId = body.payAccountId || null;
     const paySubAccountId = body.paySubAccountId || null;
 
-    // ── Idempotency check: prevent double-pay if a payment was just made ──
+    // -- Idempotency check: prevent double-pay if a payment was just made --
     const recentPayment = await db.transaction.findFirst({
       where: {
         userId: session.user.id,
@@ -96,7 +97,7 @@ export async function POST(
 
     const today = getColombiaNow();
 
-    // ── Determine which installments are due for payment ──
+    // -- Determine which installments are due for payment --
     let dueInstallments;
 
     if (selectedInstallmentIds && selectedInstallmentIds.length > 0) {
@@ -105,7 +106,7 @@ export async function POST(
         (inst) => selectedInstallmentIds.includes(inst.id) && !inst.isPaid
       );
       if (dueInstallments.length === 0) {
-        return NextResponse.json({ error: "Las cuotas seleccionadas no existen o ya están pagadas" }, { status: 400 });
+        return NextResponse.json({ error: "Las cuotas seleccionadas no existen o ya estan pagadas" }, { status: 400 });
       }
     } else if (debt.cutoffDate && debt.paymentDate) {
       // Credit card with billing cycle: only pay installments from the cycle
@@ -122,10 +123,6 @@ export async function POST(
           const cutoff = new Date(year, month, debt.cutoffDate, 23, 59, 59);
 
           // Calculate payment due date based on the relationship between paymentDate and cutoffDate
-          // If paymentDate > cutoffDate → payment is in the SAME month as the cycle
-          //   e.g. cutoff=3, payment=23 → cycle May, payment May 23
-          // If paymentDate <= cutoffDate → payment is in the NEXT month after the cycle
-          //   e.g. cutoff=20, payment=4 → cycle April, payment May 4
           let payMonth: number;
           let payYear: number;
           if (debt.paymentDate > debt.cutoffDate) {
@@ -158,7 +155,7 @@ export async function POST(
       }
 
       // Pay only the oldest due cycle
-      const [dueCycleKey, dueCycle] = dueCycles[0];
+      const [, dueCycle] = dueCycles[0];
       dueInstallments = dueCycle.installments;
     } else {
       // Non-credit-card debt: pay installments with nextPaymentDate <= today
@@ -167,7 +164,6 @@ export async function POST(
       );
 
       // For loans: if no due installments, allow paying the next upcoming one
-      // (user may want to pay early or the payment date just hasn't arrived yet)
       if (dueInstallments.length === 0 && debt.type === "loan") {
         const nextUnpaid = debt.installments
           .filter(inst => !inst.isPaid)
@@ -197,7 +193,7 @@ export async function POST(
     // Determine if this is a loan with fixed cuota
     const isLoanFixed = debt.type === "loan" && debt.paymentType === "fixed";
 
-    // Update each installment — mark as paid
+    // Update each installment -- mark as paid
     for (const installment of dueInstallments) {
       let capital: number;
       let interestAmount: number;
@@ -205,27 +201,26 @@ export async function POST(
       let otherChargesAmount: number;
 
       if (isLoanFixed) {
-        // ── Préstamo con cuota fija: usar valores confirmados por el usuario ──
-        // Capital = lo que va a saldo (confirmado por el usuario vs el extracto del banco)
+        // -- Prestamo con cuota fija: usar valores confirmados por el usuario --
         capital = confirmedCapital[installment.id] ?? 0;
         interestAmount = confirmedInterest[installment.id] ?? 0;
         interestRate = interestRates[installment.id] ?? (debt.interestRate ?? 0);
         otherChargesAmount = confirmedOtherCharges[installment.id] ?? (debt.otherCharges ?? 0);
 
         if (capital === 0 && interestAmount === 0) {
-          // Fallback: calcular automáticamente si el usuario no confirmó
-          // interestRate for loans is NMV (annual nominal), monthly rate = NMV / 12
+          // Fallback: calcular automaticamente si el usuario no confirmo
           const balance = installment.remainingBalance ?? debt.currentBalance;
           const annualRate = debt.interestRate ?? 0;
           const monthlyRate = annualRate > 0 ? annualRate / 12 : 0;
           interestRate = monthlyRate;
-          interestAmount = balance * (monthlyRate / 100);
+          interestAmount = toNumber(balance) * (monthlyRate / 100);
           const fixedCuota = debt.monthlyPayment ?? 0;
-          capital = Math.max(fixedCuota - interestAmount - otherChargesAmount, 0);
+          capital = Math.max(toNumber(fixedCuota) - interestAmount - otherChargesAmount, 0);
         }
       } else {
-        // ── Tarjeta de crédito o cuota variable: lógica original ──
-        capital = installment.installmentAmount; // Fixed capital = totalAmount / totalInstallments
+        // -- Tarjeta de credito o cuota variable: logica original --
+        // FIX: Use toNumber() to convert Prisma Decimal to number for arithmetic.
+        capital = toNumber(installment.installmentAmount);
 
         // Calculate interest for multi-installment purchases
         interestAmount = 0;
@@ -233,10 +228,10 @@ export async function POST(
         otherChargesAmount = 0;
 
         if (installment.totalInstallments > 1 && interestRates[installment.id] !== undefined) {
-          // Interest = remainingBalance × (rate / 100)
+          // Interest = remainingBalance * (rate / 100)
           interestRate = interestRates[installment.id];
           const balance = installment.remainingBalance ?? installment.totalAmount;
-          interestAmount = balance * (interestRate / 100);
+          interestAmount = toNumber(balance) * (interestRate / 100);
         }
       }
 
@@ -268,7 +263,6 @@ export async function POST(
     }
 
     // Auto-create the next installment for each multi-installment purchase that was just paid
-    // (similar to how recurring payments work: confirm one → create the next)
     for (const paidId of paidInstallmentIds) {
       const paidInst = await db.installment.findUnique({ where: { id: paidId } });
       if (!paidInst) continue;
@@ -281,12 +275,12 @@ export async function POST(
       let capitalUsed: number;
       if (isLoanFixed) {
         // For loans: capital is what the user confirmed (paidAmount - interest - otherCharges)
-        capitalUsed = (paidInst.paidAmount ?? 0) - (paidInst.interestAmount ?? 0) - (paidInst.otherChargesAmount ?? 0);
+        capitalUsed = toNumber(paidInst.paidAmount) - toNumber(paidInst.interestAmount) - toNumber(paidInst.otherChargesAmount);
       } else {
         // For credit cards: installmentAmount is the fixed capital
-        capitalUsed = paidInst.installmentAmount;
+        capitalUsed = toNumber(paidInst.installmentAmount);
       }
-      const previousBalance = paidInst.remainingBalance ?? paidInst.totalAmount;
+      const previousBalance = toNumber(paidInst.remainingBalance ?? paidInst.totalAmount);
       const newRemainingBalance = previousBalance - capitalUsed;
 
       await db.installment.create({
@@ -296,7 +290,7 @@ export async function POST(
           totalAmount: paidInst.totalAmount,
           totalInstallments: paidInst.totalInstallments,
           currentInstallment: paidInst.currentInstallment + 1,
-          installmentAmount: isLoanFixed ? capitalUsed : paidInst.installmentAmount, // Loan: variable capital; CC: same fixed capital
+          installmentAmount: isLoanFixed ? capitalUsed : toNumber(paidInst.installmentAmount),
           paidAmount: 0,
           remainingBalance: Math.max(newRemainingBalance, 0), // Never negative
           purchaseDate: paidInst.purchaseDate,
@@ -311,7 +305,8 @@ export async function POST(
       });
     }
 
-    // Update debt balance — only capital reduces the balance, not interest or other charges
+    // Update debt balance -- only capital reduces the balance, not interest or other charges
+    // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
     let totalCapital = 0;
     for (const installment of dueInstallments) {
       if (isLoanFixed) {
@@ -320,18 +315,17 @@ export async function POST(
         const other = confirmedOtherCharges[installment.id] ?? (debt.otherCharges ?? 0);
         if (capital === 0 && interest === 0) {
           // Fallback calculation
-          // interestRate for loans is NMV (annual nominal), monthly rate = NMV / 12
           const balance = installment.remainingBalance ?? debt.currentBalance;
           const annualRate = debt.interestRate ?? 0;
           const monthlyRate = annualRate > 0 ? annualRate / 12 : 0;
-          const iAmount = balance * (monthlyRate / 100);
+          const iAmount = toNumber(balance) * (monthlyRate / 100);
           const fixedCuota = debt.monthlyPayment ?? 0;
-          totalCapital += Math.max(fixedCuota - iAmount - other, 0);
+          totalCapital += Math.max(toNumber(fixedCuota) - iAmount - other, 0);
         } else {
           totalCapital += capital;
         }
       } else {
-        totalCapital += installment.installmentAmount;
+        totalCapital += toNumber(installment.installmentAmount);
       }
     }
     await db.debt.update({
@@ -339,9 +333,9 @@ export async function POST(
       data: { currentBalance: { increment: -totalCapital } },
     });
 
-    // ── Create transactions and handle budget updates ──
+    // -- Create transactions and handle budget updates --
     // For CREDIT CARDS: create ONE "transfer" transaction per account group
-    //   (this is just a payment/transfer, not a new expense — budget was already
+    //   (this is just a payment/transfer, not a new expense -- budget was already
     //   updated at purchase time). Include installment details in notes for expandable UI.
     // For LOANS: create individual transactions per installment with correct category
     //   and update budget (loan payment IS the expense itself).
@@ -349,7 +343,7 @@ export async function POST(
     const accountBalanceDeductions: Record<string, { accountId: string | null; subAccountId: string | null; amount: number }> = {};
 
     if (!isLoanFixed) {
-      // ── CREDIT CARD: one grouped "transfer" per account ──
+      // -- CREDIT CARD: one grouped "transfer" per account --
       // Group installments by account
       const accountGroups: Record<string, {
         accountId: string | null;
@@ -362,8 +356,8 @@ export async function POST(
       for (const inst of dueInstallments) {
         const instInterestRate = interestRates[inst.id] ?? 0;
         const balance = inst.remainingBalance ?? inst.totalAmount;
-        const instInterest = (inst.totalInstallments > 1 && instInterestRate) ? balance * (instInterestRate / 100) : 0;
-        const instTotal = inst.installmentAmount + instInterest;
+        const instInterest = (inst.totalInstallments > 1 && instInterestRate) ? toNumber(balance) * (instInterestRate / 100) : 0;
+        const instTotal = toNumber(inst.installmentAmount) + instInterest;
 
         const effectiveAccountId = inst.accountId;
         const effectiveSubAccountId = inst.subAccountId;
@@ -396,7 +390,6 @@ export async function POST(
         if (!group.accountId) continue;
 
         // Build a structured notes string with installment details for the expandable UI
-        // Include installmentIds prefix for reverse-pay to find them easily
         const detailsJson = JSON.stringify(group.details);
         const notesWithIds = `installmentIds:${group.installmentIds.join(",")} | ${detailsJson}`;
 
@@ -407,13 +400,13 @@ export async function POST(
             subAccountId: group.subAccountId || undefined,
             type: "transfer", // Payment to TC is a transfer, not a new expense
             amount: group.amount,
-            description: `Pago tarjeta de crédito ${debt.name}`,
-            category: "Pago Tarjeta de Crédito",
+            description: `Pago tarjeta de credito ${debt.name}`,
+            category: "Pago Tarjeta de Credito",
             subCategory: null,
             date: getColombiaNow(),
             sourceModule: "finance",
             sourceId: debt.id,
-            notes: notesWithIds, // installmentIds prefix + JSON with installment details
+            notes: notesWithIds,
           },
         });
 
@@ -425,9 +418,9 @@ export async function POST(
         };
       }
 
-      // NO budget update for CC payment — budget was already updated when the purchase was made
+      // NO budget update for CC payment -- budget was already updated when the purchase was made
     } else {
-      // ── LOAN: individual transactions per installment with correct category ──
+      // -- LOAN: individual transactions per installment with correct category --
       for (const inst of dueInstallments) {
         const capital = confirmedCapital[inst.id] ?? 0;
         const interest = confirmedInterest[inst.id] ?? 0;
@@ -437,9 +430,9 @@ export async function POST(
           const balance = inst.remainingBalance ?? debt.currentBalance;
           const annualRate = debt.interestRate ?? 0;
           const monthlyRate = annualRate > 0 ? annualRate / 12 : 0;
-          const iAmount = balance * (monthlyRate / 100);
+          const iAmount = toNumber(balance) * (monthlyRate / 100);
           const fixedCuota = debt.monthlyPayment ?? 0;
-          instTotal = Math.max(fixedCuota - iAmount - other, 0) + iAmount + other;
+          instTotal = Math.max(toNumber(fixedCuota) - iAmount - other, 0) + iAmount + other;
         } else {
           instTotal = capital + interest + other;
         }
@@ -458,7 +451,7 @@ export async function POST(
               subAccountId: effectiveSubAccountId || undefined,
               type: "expense",
               amount: instTotal,
-              description: `Pago préstamo ${debt.name} — cuota ${inst.currentInstallment}/${inst.totalInstallments}`,
+              description: `Pago prestamo ${debt.name} -- cuota ${inst.currentInstallment}/${inst.totalInstallments}`,
               category: txCategory,
               subCategory: txSubCategory,
               date: getColombiaNow(),
@@ -554,15 +547,15 @@ export async function POST(
         } else {
           const rate = interestRates[inst.id] ?? 0;
           const balance = inst.remainingBalance ?? inst.totalAmount;
-          const interest = (inst.totalInstallments > 1 && rate) ? balance * (rate / 100) : 0;
+          const interest = (inst.totalInstallments > 1 && rate) ? toNumber(balance) * (rate / 100) : 0;
           return {
             id: inst.id,
             description: inst.description,
-            capital: inst.installmentAmount,
+            capital: toNumber(inst.installmentAmount),
             interestRate: rate || null,
             interestAmount: interest || null,
             otherChargesAmount: null,
-            totalAmount: inst.installmentAmount + interest,
+            totalAmount: toNumber(inst.installmentAmount) + interest,
             currentInstallment: inst.currentInstallment,
             totalInstallments: inst.totalInstallments,
             remainingBalance: inst.remainingBalance ?? inst.totalAmount,

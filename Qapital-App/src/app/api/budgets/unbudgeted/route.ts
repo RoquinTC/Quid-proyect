@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
 import { getCurrentBudgetPeriod } from "@/lib/holidays";
+import { toNumber } from "@/lib/decimal-serializer";
 
 /**
  * GET /api/budgets/unbudgeted
@@ -79,6 +80,7 @@ export async function GET() {
     });
 
     // Aggregate spending by category+subCategory+type
+    // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
     const spendingMap: Record<
       string,
       {
@@ -102,7 +104,7 @@ export async function GET() {
           transactionCount: 0,
         };
       }
-      spendingMap[key].totalSpent += tx.amount;
+      spendingMap[key].totalSpent += toNumber(tx.amount);
       spendingMap[key].transactionCount++;
     }
 
@@ -119,7 +121,7 @@ export async function GET() {
           transactionCount: 0,
         };
       }
-      spendingMap[key].totalSpent += inst.installmentAmount;
+      spendingMap[key].totalSpent += toNumber(inst.installmentAmount);
       // Don't count installment as a transaction (it's derived)
     }
 
