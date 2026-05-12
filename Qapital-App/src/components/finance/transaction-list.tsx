@@ -193,6 +193,7 @@ export function TransactionList({ accountId, limit }: TransactionListProps) {
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Edit form state
   const [editType, setEditType] = useState<string>("expense");
@@ -375,7 +376,16 @@ export function TransactionList({ accountId, limit }: TransactionListProps) {
     );
   }
 
-  const groups = groupByDate(transactions);
+  const filteredTransactions = transactions.filter((tx) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      tx.description.toLowerCase().includes(query) ||
+      (tx.category || "").toLowerCase().includes(query) ||
+      (tx.subCategory || "").toLowerCase().includes(query)
+    );
+  });
+
+  const groups = groupByDate(filteredTransactions);
   const selectedAccount = accounts.find((a) => a.id === editAccountId);
   const subAccounts = selectedAccount?.subAccounts || [];
   const currentCategoryData = categories.find((c) => c.name === editCategory);
@@ -383,6 +393,27 @@ export function TransactionList({ accountId, limit }: TransactionListProps) {
 
   return (
     <div className="space-y-4">
+      {/* Search Box */}
+      <div className="relative">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <Filter className="size-4 text-gray-400" />
+        </div>
+        <Input
+          placeholder="Buscar descripción, categoría..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 rounded-xl border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center"
+          >
+            <X className="size-4 text-gray-400" />
+          </button>
+        )}
+      </div>
+
       {groups.map((group) => (
         <div key={group.label}>
           <h4 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2">
@@ -433,6 +464,10 @@ export function TransactionList({ accountId, limit }: TransactionListProps) {
                           </span>
                           <span className="text-[10px] text-gray-400">
                             {tx.category || ""}
+                          </span>
+                          <span className="text-[10px] text-gray-300">·</span>
+                          <span className="text-[10px] text-gray-400">
+                            {new Date(tx.date).toLocaleDateString("es-CO", { day: 'numeric', month: 'short' })}
                           </span>
                           {tx.account && (
                             <>

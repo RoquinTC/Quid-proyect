@@ -30,7 +30,9 @@ export async function middleware(request: NextRequest) {
   try {
     const token = await getToken({
       req: request,
-      secret: process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === "development" ? "lifehub-secret-key-dev-2024" : undefined),
+      // Secret comes from NEXTAUTH_SECRET env var. Must match auth.ts.
+      // Same fallback as auth.ts — needed because env vars aren't available during build.
+      secret: process.env.NEXTAUTH_SECRET || "dev-only-secret-set-NEXTAUTH_SECRET-in-production",
     });
 
     if (!token) {

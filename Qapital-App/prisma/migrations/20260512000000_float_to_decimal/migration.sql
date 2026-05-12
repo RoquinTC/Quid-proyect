@@ -1,0 +1,54 @@
+-- Migration: Float -> Decimal for monetary fields
+-- Date: 2026-05-12
+-- 
+-- IMPORTANT: SQLite doesn't support ALTER COLUMN. Prisma handles this by
+-- recreating tables. However, since SQLite is essentially typeless, the data
+-- stored as REAL (Float) can be read as TEXT (Decimal) without data loss.
+-- The migration below uses the safe approach: create new tables, copy data,
+-- drop old, rename.
+--
+-- This migration was designed to be applied via `npx prisma db push`
+-- which handles the table recreation automatically.
+-- If you prefer manual migration, the SQL below documents what changes.
+
+-- ============================================
+-- NOTE: The recommended way to apply this migration is:
+--   npx prisma db push
+--
+-- This will automatically handle the SQLite table recreation
+-- and preserve all your existing data.
+--
+-- The statements below are DOCUMENTATION of what changes,
+-- NOT meant to be run manually (SQLite table recreation is complex).
+-- ============================================
+
+-- Accounts table: balance Float -> Decimal, yieldPercentage Float -> Decimal
+-- SubAccounts table: balance Float -> Decimal, yieldPercentage Float -> Decimal
+-- Transactions table: amount Float -> Decimal
+-- Budgets table: amount Float -> Decimal, spent Float -> Decimal
+-- Debts table: totalAmount Float -> Decimal, currentBalance Float -> Decimal,
+--   interestRate Float -> Decimal, monthlyPayment Float -> Decimal, otherCharges Float -> Decimal
+-- Installments table: totalAmount Float -> Decimal, installmentAmount Float -> Decimal,
+--   paidAmount Float -> Decimal, interestRate Float -> Decimal, interestAmount Float -> Decimal,
+--   otherChargesAmount Float -> Decimal, remainingBalance Float -> Decimal
+-- Abonos table: totalAmount Float -> Decimal
+-- AbonoDetails table: amount Float -> Decimal, previousBalance Float -> Decimal, newBalance Float -> Decimal
+-- RecurringPayments table: amount Float -> Decimal, actualAmount Float -> Decimal
+-- PayrollGroups table: totalAmount Float -> Decimal
+-- SavingsGoals table: targetAmount Float -> Decimal, currentAmount Float -> Decimal
+-- SavingsContributions table: amount Float -> Decimal
+-- CDTs table: amount Float -> Decimal, effectiveRate Float -> Decimal,
+--   interestEarned Float -> Decimal, withdrawnAmount Float -> Decimal
+-- FuelLogs table: amount Float -> Decimal, pricePerGallon Float -> Decimal
+-- MaintenanceRecords table: cost Float -> Decimal
+-- PantryItems table: purchasePrice Float -> Decimal
+-- ShoppingListItems table: estimatedPrice Float -> Decimal, actualPrice Float -> Decimal
+-- FuelPrices table: pricePerGallon Float -> Decimal
+-- YieldRecords table: projectedYield Float -> Decimal, actualYield Float -> Decimal, yieldPercentage Float -> Decimal
+
+-- Fields that STAY as Float (NOT money):
+-- Vehicle.tankCapacity (volume), Vehicle.currentKm (distance)
+-- FuelLog.km (distance), FuelLog.gallons (volume)
+-- MaintenanceRecord.km (distance), MaintenanceRecord.nextDueKm (distance)
+-- PantryItem.quantity (count), PantryItem.minStock (threshold)
+-- ShoppingListItem.quantity (count)

@@ -406,13 +406,20 @@ async function updateLocalAfterMutation(url: string, options: RequestInit, data:
 }
 
 // Format currency (COP by default) — always shows 2 decimal places
-export function formatCurrency(amount: number, currency: string = "COP"): string {
+// Defensive: if the value is NaN, null, undefined, or a non-number
+// (e.g., a Prisma Decimal that slipped through), falls back to 0
+// instead of showing "$ NaN" on the UI.
+export function formatCurrency(amount: number | string | null | undefined, currency: string = "COP"): string {
+  const num = Number(amount);
+  if (Number.isNaN(num) || !Number.isFinite(num)) {
+    return formatCurrency(0, currency);
+  }
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(num);
 }
 
 // ============================================
@@ -543,25 +550,32 @@ export function getDaysBetween(start: Date | string, end: Date | string): number
  * This is the CORRECT way to calculate interest for a Tasa Efectiva Anual.
  */
 export function calculateCDTInterest(amount: number, effectiveRateEA: number, days: number): number {
-  if (amount <= 0 || effectiveRateEA <= 0 || days <= 0) return 0;
-  return amount * (Math.pow(1 + effectiveRateEA / 100, days / 365) - 1);
+  // Coerce to number in case a Prisma Decimal slipped through (defense-in-depth)
+  const a = Number(amount);
+  const r = Number(effectiveRateEA);
+  const d = Number(days);
+  if (a <= 0 || r <= 0 || d <= 0) return 0;
+  return a * (Math.pow(1 + r / 100, d / 365) - 1);
 }
 
 /**
  * Calculate CDT ReteFuente (4% withholding tax on interest earnings in Colombia).
  */
 export function calculateCDTReteFuente(interestEarned: number, rate: number = 0.04): number {
-  return interestEarned * rate;
+  return Number(interestEarned) * Number(rate);
 }
 
 /**
  * Get full CDT breakdown: interest, retefuente, net total.
  */
 export function getCDTBreakdown(amount: number, effectiveRateEA: number, termDays: number) {
-  const grossInterest = calculateCDTInterest(amount, effectiveRateEA, termDays);
+  // Coerce to number in case a Prisma Decimal slipped through (defense-in-depth)
+  // This prevents string concatenation like "800000" + 52323 = "80000052323"
+  const a = Number(amount);
+  const grossInterest = calculateCDTInterest(a, Number(effectiveRateEA), Number(termDays));
   const retefuente = calculateCDTReteFuente(grossInterest);
   const netInterest = grossInterest - retefuente;
-  const netTotal = amount + netInterest;
+  const netTotal = a + netInterest;
   return { grossInterest, retefuente, netInterest, netTotal };
 }
 

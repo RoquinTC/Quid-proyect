@@ -57,9 +57,9 @@ model Account {
   type                  String    @default("checking") // checking, savings, cash, digital_wallet, other
   color                 String    @default("#10B981")
   icon                  String?
-  balance               Float     @default(0)
+  balance               Decimal   @default(0) // CHANGED: Float -> Decimal (exact money storage)
   isHighYield           Boolean   @default(false)
-  yieldPercentage       Float?
+  yieldPercentage       Decimal?  // CHANGED: Float -> Decimal (financial rate)
   isShared              Boolean   @default(false)
   excludeFromAvailable  Boolean   @default(false)
   order                 Int       @default(0)
@@ -87,9 +87,9 @@ model SubAccount {
   accountId             String
   name                  String
   type                  String    @default("pocket") // pocket, piggy_bank, savings_box, other
-  balance               Float     @default(0)
+  balance               Decimal   @default(0) // CHANGED: Float -> Decimal
   isHighYield           Boolean   @default(false)
-  yieldPercentage       Float?
+  yieldPercentage       Decimal?  // CHANGED: Float -> Decimal
   icon                  String?
   color                 String?
   excludeFromAvailable  Boolean   @default(false)
@@ -126,9 +126,9 @@ model YieldRecord {
   accountId       String?
   subAccountId    String?
   month           DateTime  // First day of the month
-  projectedYield  Float
-  actualYield     Float?
-  yieldPercentage Float
+  projectedYield  Decimal   // CHANGED: Float -> Decimal
+  actualYield     Decimal?  // CHANGED: Float -> Decimal
+  yieldPercentage Decimal   // CHANGED: Float -> Decimal
   isConfirmed     Boolean   @default(false)
   transactionId   String?   // Links to the income Transaction created when yield is confirmed
   createdAt       DateTime  @default(now())
@@ -150,7 +150,7 @@ model Transaction {
   accountId             String?
   subAccountId          String?
   type                  String    // income, expense, transfer
-  amount                Float
+  amount                Decimal   // CHANGED: Float -> Decimal
   description           String
   category              String?
   subCategory           String?
@@ -181,8 +181,8 @@ model Budget {
   type          String    // income, expense
   category      String
   subCategory   String?
-  amount        Float     // Total budget amount
-  spent         Float     @default(0) // Amount spent/received so far
+  amount        Decimal   // CHANGED: Float -> Decimal (total budget)
+  spent         Decimal   @default(0) // CHANGED: Float -> Decimal (amount spent)
   period        String    @default("monthly") // monthly, weekly, yearly
   lastResetDate DateTime? // When was spent last reset to 0
   icon          String?
@@ -207,18 +207,18 @@ model Debt {
   color           String    @default("#EF4444")
   icon            String?
   bank            String?
-  totalAmount     Float     // Total credit limit or loan amount
-  currentBalance  Float     // Current balance owed
-  interestRate    Float?
+  totalAmount     Decimal   // CHANGED: Float -> Decimal
+  currentBalance  Decimal   // CHANGED: Float -> Decimal
+  interestRate    Decimal?  // CHANGED: Float -> Decimal
   cutoffDate      Int?      // Day of month for cutoff (credit card)
   paymentDate     Int?      // Day of month for payment (credit card)
-  monthlyPayment  Float?
+  monthlyPayment  Decimal?  // CHANGED: Float -> Decimal
   remainingPayments Int?
   startDate       DateTime?
   endDate         DateTime?
   // ── Loan-specific fields ──
   paymentType     String?   // "fixed" or "variable" (for loans)
-  otherCharges    Float?    // Fixed monthly charges (insurance, paperwork, IVA)
+  otherCharges    Decimal?  // CHANGED: Float -> Decimal
   category        String?   // Budget category (for loan payments)
   subCategory     String?   // Budget sub-category
   accountId       String?   // Default payment account (for loans)
@@ -238,15 +238,15 @@ model Installment {
   id                  String    @id @default(cuid())
   debtId              String
   description         String
-  totalAmount         Float
+  totalAmount         Decimal   // CHANGED: Float -> Decimal
   totalInstallments   Int
   currentInstallment  Int       @default(1)
-  installmentAmount   Float     // Capital fijo = totalAmount / totalInstallments
-  paidAmount          Float     @default(0) // Total pagado (capital + interés)
-  interestRate        Float?    // Tasa de interés mensual para esta cuota (%), ingresada al pagar
-  interestAmount      Float?    // Monto del interés pagado en esta cuota
-  otherChargesAmount  Float?    // Monto de otros gastos fijos pagados en esta cuota (seguro, papelería, IVA)
-  remainingBalance    Float?    // Saldo pendiente ANTES de pagar esta cuota (para calcular interés)
+  installmentAmount   Decimal   // CHANGED: Float -> Decimal
+  paidAmount          Decimal   @default(0) // CHANGED: Float -> Decimal
+  interestRate        Decimal?  // CHANGED: Float -> Decimal
+  interestAmount      Decimal?  // CHANGED: Float -> Decimal
+  otherChargesAmount  Decimal?  // CHANGED: Float -> Decimal
+  remainingBalance    Decimal?  // CHANGED: Float -> Decimal
   purchaseDate        DateTime
   nextPaymentDate     DateTime
   isPaid              Boolean   @default(false)
@@ -269,7 +269,7 @@ model Abono {
   userId          String
   debtId          String
   transactionId   String?   // Links to the expense Transaction (null if transaction was deleted)
-  totalAmount     Float     // Total amount of the abono
+  totalAmount     Decimal   // CHANGED: Float -> Decimal
   accountId       String    // Account from which the abono was paid
   subAccountId    String?   // Sub-account (optional)
   date            DateTime  // Date of the abono
@@ -288,9 +288,9 @@ model AbonoDetail {
   id              String  @id @default(cuid())
   abonoId         String
   installmentId   String
-  amount          Float   // How much was applied to this installment
-  previousBalance Float   // Balance before the abono
-  newBalance      Float   // Balance after the abono
+  amount          Decimal // CHANGED: Float -> Decimal
+  previousBalance Decimal // CHANGED: Float -> Decimal
+  newBalance      Decimal // CHANGED: Float -> Decimal
 
   abono           Abono       @relation(fields: [abonoId], references: [id], onDelete: Cascade)
   installment     Installment @relation(fields: [installmentId], references: [id], onDelete: Cascade)
@@ -306,8 +306,8 @@ model RecurringPayment {
   id                      String    @id @default(cuid())
   userId                  String
   description             String
-  amount                  Float     // Expected amount
-  actualAmount            Float?    // Actual amount when confirmed
+  amount                  Decimal   // CHANGED: Float -> Decimal
+  actualAmount            Decimal?  // CHANGED: Float -> Decimal
   type                    String    @default("expense") // expense, transfer
   accountId               String?   // Source account (or account that pays TC bill when debtId is set)
   subAccountId            String?   // Sub-account within the paying account
@@ -350,7 +350,7 @@ model PayrollGroup {
   userId                String
   description           String    @default("Sueldo")
   frequency             String    // "monthly", "biweekly", "weekly"
-  totalAmount           Float     // Sum of all schedule amounts
+  totalAmount           Decimal   // CHANGED: Float -> Decimal
   accountId             String    // Account where income is received
   subAccountId          String?   // Optional sub-account
   category              String    @default("Sueldo")
@@ -379,8 +379,8 @@ model SavingsGoal {
   userId          String
   name            String
   description     String?
-  targetAmount    Float
-  currentAmount   Float     @default(0)
+  targetAmount    Decimal   // CHANGED: Float -> Decimal
+  currentAmount   Decimal   @default(0) // CHANGED: Float -> Decimal
   deadline        DateTime?
   icon            String?
   color           String    @default("#8B5CF6")
@@ -428,7 +428,7 @@ model SavingsGoalAccount {
 model SavingsContribution {
   id            String    @id @default(cuid())
   goalId        String
-  amount        Float
+  amount        Decimal   // CHANGED: Float -> Decimal
   date          DateTime
   description   String?
   transactionId String?   // Links to the expense Transaction created when debiting
@@ -448,16 +448,16 @@ model CDT {
   id              String    @id @default(cuid())
   userId          String
   bank            String    // Banco emisor
-  amount          Float     // Monto invertido
-  effectiveRate   Float     // %EA (Tasa Efectiva Anual)
+  amount          Decimal   // CHANGED: Float -> Decimal
+  effectiveRate   Decimal   // CHANGED: Float -> Decimal (%EA)
   startDate       DateTime  // Fecha de apertura
   endDate         DateTime  // Fecha de vencimiento
   termDays        Int       // Plazo en dias (30, 60, 90, 180, 360, etc.)
-  interestEarned  Float     @default(0) // Intereses generados hasta la fecha
+  interestEarned  Decimal   @default(0) // CHANGED: Float -> Decimal
   status          String    @default("active") // active, matured, withdrawn, renewed
   goalId          String?   // Vinculacion opcional a una meta de ahorro
   accountId       String?   // Cuenta donde se depositan los rendimientos
-  withdrawnAmount Float?    // Monto retirado al vencimiento
+  withdrawnAmount Decimal?  // CHANGED: Float -> Decimal
   withdrawnDate   DateTime? // Fecha de retiro
   notes           String?
   color           String    @default("#14B8A6")
@@ -484,9 +484,9 @@ model Vehicle {
   model           String?
   year            Int?
   color           String?
-  tankCapacity    Float?    // in gallons
+  tankCapacity    Float?    // in gallons (NOT money — stays Float)
   fuelType        String?   // gasoline, diesel, electric
-  currentKm       Float     @default(0)
+  currentKm       Float     @default(0) // distance (NOT money — stays Float)
   icon            String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -502,10 +502,10 @@ model FuelLog {
   id              String    @id @default(cuid())
   vehicleId       String
   date            DateTime
-  km              Float
-  amount          Float     // Money paid
-  pricePerGallon  Float     // Fuel price per gallon
-  gallons         Float     // Calculated: amount / pricePerGallon
+  km              Float     // distance (NOT money — stays Float)
+  amount          Decimal   // CHANGED: Float -> Decimal (money paid)
+  pricePerGallon  Decimal   // CHANGED: Float -> Decimal (fuel price)
+  gallons         Float     // volume (NOT money — stays Float)
   isFullTank      Boolean   @default(true)
   notes           String?
   createdAt       DateTime  @default(now())
@@ -520,10 +520,10 @@ model MaintenanceRecord {
   vehicleId       String
   type            String    // oil_change, tire_change, brake_service, general, other
   description     String
-  cost            Float
-  km              Float
+  cost            Decimal   // CHANGED: Float -> Decimal
+  km              Float     // distance (NOT money — stays Float)
   date            DateTime
-  nextDueKm       Float?
+  nextDueKm       Float?    // distance (NOT money — stays Float)
   nextDueDate     DateTime?
   reminderEnabled Boolean   @default(true)
   createdAt       DateTime  @default(now())
@@ -587,12 +587,12 @@ model PantryItem {
   userId          String
   name            String
   category        String?   // dairy, meat, vegetables, fruits, grains, beverages, snacks, condiments, other
-  quantity        Float
+  quantity        Float     // item count/volume (NOT money — stays Float)
   unit            String    @default("unit") // unit, lb, kg, g, oz, ml, l, package, bottle, can
   expirationDate  DateTime?
   purchaseDate    DateTime?
-  purchasePrice   Float?
-  minStock        Float?    // Minimum stock threshold
+  purchasePrice   Decimal?  // CHANGED: Float -> Decimal (money)
+  minStock        Float?    // threshold (NOT money — stays Float)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -620,10 +620,10 @@ model ShoppingListItem {
   id              String    @id @default(cuid())
   shoppingListId  String
   name            String
-  quantity        Float
+  quantity        Float     // item count (NOT money — stays Float)
   unit            String    @default("unit")
-  estimatedPrice  Float?
-  actualPrice     Float?
+  estimatedPrice  Decimal?  // CHANGED: Float -> Decimal (money)
+  actualPrice     Decimal?  // CHANGED: Float -> Decimal (money)
   isPurchased     Boolean   @default(false)
   checked         Boolean   @default(false)
   pantryItemId    String?
@@ -659,7 +659,7 @@ model FuelPrice {
   id              String    @id @default(cuid())
   userId          String
   fuelType        String    @default("gasoline")
-  pricePerGallon  Float
+  pricePerGallon  Decimal   // CHANGED: Float -> Decimal (money)
   updatedAt       DateTime  @updatedAt
   createdAt       DateTime  @default(now())
 

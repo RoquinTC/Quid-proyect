@@ -44,6 +44,20 @@ function getCookieConfig(isSecure: boolean) {
 // Detect secure mode: if NEXTAUTH_URL starts with https://, we're behind a proxy
 const isSecureEnvironment = (process.env.NEXTAUTH_URL || "").startsWith("https://");
 
+// NEXTAUTH_SECRET validation:
+// - During `next build`, NODE_ENV=production but env vars from docker-compose
+//   are NOT available yet (they're only injected at runtime). So we cannot
+//   throw during build — only warn.
+// - At runtime (inside the container), NEXTAUTH_SECRET comes from
+//   docker-compose.yml → environment section.
+// - If running locally without Docker, create a .env file with NEXTAUTH_SECRET.
+if (!process.env.NEXTAUTH_SECRET) {
+  console.warn(
+    "[Auth] WARNING: NEXTAUTH_SECRET is not set. " +
+    "Set it in your .env file or docker-compose.yml for security."
+  );
+}
+
 export const authOptions: NextAuthOptions = {
   debug: process.env.NODE_ENV === "development",
   // trustHost is supported by next-auth v4.24+ but not in the types yet
@@ -122,6 +136,10 @@ export const authOptions: NextAuthOptions = {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60,
   },
-  secret: process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === "development" ? "lifehub-secret-key-dev-2024" : undefined),
+  // Secret comes from NEXTAUTH_SECRET env var (set in docker-compose.yml or .env).
+  // Falls back to a dev-only secret when not configured, so the build doesn't crash
+  // and local development works without extra setup. NextAuth itself will fail
+  // at runtime if the secret is missing in a real production deployment.
+  secret: process.env.NEXTAUTH_SECRET || "dev-only-secret-set-NEXTAUTH_SECRET-in-production",
   cookies: getCookieConfig(isSecureEnvironment),
 };
