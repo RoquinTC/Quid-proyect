@@ -13,6 +13,7 @@
  */
 
 import { db } from "./db";
+import { toNumber } from "./decimal-serializer";
 
 export async function syncSavingsBudget(userId: string): Promise<void> {
   try {
@@ -33,12 +34,13 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
 
     for (const goal of activeGoals) {
       // Calculate current from linked accounts (live balances)
+      // Use toNumber() for safe Decimal→number conversion (avoids string concatenation)
       let linkedBalance = 0;
       for (const link of goal.linkedAccounts) {
         if (link.subAccount) {
-          linkedBalance += link.subAccount.balance;
+          linkedBalance += toNumber(link.subAccount.balance);
         } else if (link.account) {
-          linkedBalance += link.account.balance;
+          linkedBalance += toNumber(link.account.balance);
         }
       }
 
@@ -46,7 +48,7 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
       let cdtBalance = 0;
       for (const cdt of goal.cdts) {
         if (cdt.status !== "withdrawn") {
-          cdtBalance += cdt.amount;
+          cdtBalance += toNumber(cdt.amount);
         }
       }
 
@@ -57,7 +59,7 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
       let manualContributions = 0;
       for (const contrib of goal.contributions) {
         if (contrib.description !== 'Saldo cuenta vinculada') {
-          manualContributions += contrib.amount;
+          manualContributions += toNumber(contrib.amount);
         }
       }
 
@@ -67,7 +69,7 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
       const newCurrentAmount = manualContributions + linkedBalance + cdtBalance;
 
       // Only update if there's a meaningful difference to avoid unnecessary writes
-      if (Math.abs(goal.currentAmount - newCurrentAmount) > 0.01) {
+      if (Math.abs(toNumber(goal.currentAmount) - newCurrentAmount) > 0.01) {
         await db.savingsGoal.update({
           where: { id: goal.id },
           data: { currentAmount: newCurrentAmount },
@@ -82,8 +84,8 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
       select: { targetAmount: true, currentAmount: true },
     });
 
-    const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0);
-    const totalCurrent = goals.reduce((sum, g) => sum + g.currentAmount, 0);
+    const totalTarget = goals.reduce((sum, g) => sum + toNumber(g.targetAmount), 0);
+    const totalCurrent = goals.reduce((sum, g) => sum + toNumber(g.currentAmount), 0);
 
     // Find or create the "Ahorros" parent budget category (expense type)
     let parentBudget = await db.budget.findFirst({
@@ -144,8 +146,8 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
         await db.budget.update({
           where: { id: subBudget.id },
           data: {
-            amount: goal.targetAmount,
-            spent: goal.currentAmount,
+            amount: toNumber(goal.targetAmount),
+            spent: toNumber(goal.currentAmount),
           },
         });
       } else {
@@ -155,8 +157,8 @@ export async function syncSavingsBudget(userId: string): Promise<void> {
             category: "Ahorros",
             subCategory,
             type: "expense",
-            amount: goal.targetAmount,
-            spent: goal.currentAmount,
+            amount: toNumber(goal.targetAmount),
+            spent: toNumber(goal.currentAmount),
             period: "monthly",
           },
         });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { serializeDecimals } from "@/lib/decimal-serializer";
 
 /**
  * GET /api/sync/pull?since=<timestamp>
@@ -22,10 +23,14 @@ export async function GET(req: NextRequest) {
     const since = sinceParam ? new Date(parseInt(sinceParam)) : new Date(0);
 
     // Fetch records updated since the given timestamp
+    // Serialize dates to ISO strings and Decimals to numbers for IndexedDB storage.
     const serialize = (records: any[]) =>
       records.map((r: any) => {
+        // First, convert all Decimal objects to numbers (preserves Date objects)
+        const decimalSafe = serializeDecimals(r) as Record<string, unknown>;
+        // Then, convert Date objects to ISO strings for IndexedDB compatibility
         const obj: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(r)) {
+        for (const [key, value] of Object.entries(decimalSafe)) {
           if (value instanceof Date) {
             obj[key] = value.toISOString();
           } else {

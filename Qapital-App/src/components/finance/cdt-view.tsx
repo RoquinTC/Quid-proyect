@@ -101,10 +101,13 @@ export function CDTView() {
     fetchCDTs();
   }, [fetchCDTs]);
 
-  const totalAmount = cdts.reduce((sum, c) => sum + c.amount, 0);
+  // Defensive Number() wrappers: Prisma Decimal values may arrive as strings
+  // if the NextResponse.json patch doesn't apply (e.g., Turbopack bundling).
+  // This prevents string concatenation like "0" + "800000" = "0800000".
+  const totalAmount = cdts.reduce((sum, c) => sum + Number(c.amount), 0);
   const totalInterestEarned = cdts.reduce(
     (sum, c) =>
-      sum + getCurrentCDTInterest(c.amount, c.effectiveRate, c.startDate),
+      sum + getCurrentCDTInterest(Number(c.amount), Number(c.effectiveRate), c.startDate),
     0
   );
 
@@ -192,8 +195,12 @@ export function CDTView() {
       ) : (
         <div className="space-y-3">
           {cdts.map((cdt) => {
-            const interest = getCurrentCDTInterest(cdt.amount, cdt.effectiveRate, cdt.startDate);
-            const maturityBreakdown = getCDTBreakdown(cdt.amount, cdt.effectiveRate, cdt.termDays);
+            // Defensive Number() wrappers for Decimal/string safety
+            const cdtAmount = Number(cdt.amount);
+            const cdtRate = Number(cdt.effectiveRate);
+            const cdtTermDays = Number(cdt.termDays);
+            const interest = getCurrentCDTInterest(cdtAmount, cdtRate, cdt.startDate);
+            const maturityBreakdown = getCDTBreakdown(cdtAmount, cdtRate, cdtTermDays);
             const daysToMaturity = calculateDaysToMaturity(cdt.endDate);
             const timeProgress = calculateTimeProgress(cdt.startDate, cdt.endDate);
             const isMatured = daysToMaturity === 0;
@@ -226,10 +233,10 @@ export function CDTView() {
                       </div>
                       <div className="text-right">
                         <p className="text-base font-bold text-gray-900 dark:text-white">
-                          {formatCurrency(cdt.amount)}
+                          {formatCurrency(cdtAmount)}
                         </p>
                         <Badge className="text-[10px] px-1.5 py-0 border-0 font-bold bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">
-                          {cdt.effectiveRate}% EA
+                          {cdtRate}% EA
                         </Badge>
                       </div>
                     </div>

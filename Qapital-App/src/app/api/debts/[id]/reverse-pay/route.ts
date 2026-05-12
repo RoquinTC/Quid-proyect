@@ -32,7 +32,9 @@ export async function POST(
       return NextResponse.json({ error: "Deuda no encontrada" }, { status: 404 });
     }
 
-    // -- 1. Find the most recent PAYMENT transactions for this debt --
+    // ── 1. Find the most recent PAYMENT transactions for this debt ──
+    // Note: Only look for "Pago" transactions, NOT "Abono" transactions (those have their own reverse endpoint)
+    // CC payments are "transfer" type, loan payments are "expense" type
     const transactions = await db.transaction.findMany({
       where: {
         userId: session.user.id,
@@ -53,6 +55,7 @@ export async function POST(
     }
 
     // Group the MOST RECENT transactions into a batch (created within 2 seconds of the newest one)
+    // This ensures we only reverse ONE payment operation, even if the user pressed pay multiple times
     const mostRecentTime = transactions[0].createdAt.getTime();
     const batchTransactions = transactions.filter(
       (tx) => Math.abs(tx.createdAt.getTime() - mostRecentTime) < 2000
@@ -61,7 +64,9 @@ export async function POST(
     // Calculate total amount from the batch transactions
     const batchTotalAmount = batchTransactions.reduce((sum, tx) => sum + toNumber(tx.amount), 0);
 
-    // -- 2. Identify the installments that were paid in this batch --
+    // ── 2. Identify the installments that were paid in this batch ──
+    // Strategy A: Try extracting installment IDs from transaction notes (primary format)
+    // Notes format: "installmentIds:id1,id2|Compras pagadas: ...|{...json...}"
     let allInstallmentIds: string[] = [];
     for (const tx of batchTransactions) {
       if (tx.notes) {
@@ -81,10 +86,10 @@ export async function POST(
       }
     }
 
-    // Deduplicate installment IDs
+    // Deduplicate installment IDs (in case multiple transactions reference the same installment)
     allInstallmentIds = [...new Set(allInstallmentIds)];
 
-    // Strategy B: Fallback -- match by purchase names from notes (legacy format)
+    // Strategy B: Fallback — match by purchase names from notes (legacy format)
     if (allInstallmentIds.length === 0) {
       const purchaseNames: string[] = [];
       for (const tx of batchTransactions) {
@@ -113,7 +118,7 @@ export async function POST(
       }
     }
 
-    // Strategy C: Last resort -- find recently paid installments by total amount match
+    // Strategy C: Last resort — find recently paid installments by total amount match
     if (allInstallmentIds.length === 0) {
       const paidInstallments = await db.installment.findMany({
         where: {
@@ -126,10 +131,9 @@ export async function POST(
       let runningTotal = 0;
       const matched: string[] = [];
       for (const inst of paidInstallments) {
-        // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
-        if (runningTotal + toNumber(inst.installmentAmount) <= batchTotalAmount + 1) {
+        if (runningTotal + inst.installmentAmount <= batchTotalAmount + 1) {
           matched.push(inst.id);
-          runningTotal += toNumber(inst.installmentAmount);
+          runningTotal += inst.installmentAmount;
         }
         if (Math.abs(runningTotal - batchTotalAmount) < 1) break;
       }
@@ -141,12 +145,12 @@ export async function POST(
 
     if (allInstallmentIds.length === 0) {
       return NextResponse.json(
-        { error: "No se pudieron identificar las cuotas del ultimo pago" },
+        { error: "No se pudieron identificar las cuotas del último pago" },
         { status: 400 }
       );
     }
 
-    // -- 3. Find and reverse each installment --
+    // ── 3. Find and reverse each installment ──
     const installments = await db.installment.findMany({
       where: {
         id: { in: allInstallmentIds },
@@ -158,7 +162,8 @@ export async function POST(
     const categoryReversals: Record<string, number> = {};
 
     for (const installment of installments) {
-      // FIX: Use toNumber() for all Decimal arithmetic.
+      // In the new model, paid installments have isPaid=true and paidAmount=installmentAmount
+      // We need to: (a) delete the auto-created next installment, (b) mark this one back as unpaid
       const reversalAmount = toNumber(installment.paidAmount || installment.installmentAmount);
       totalReversed += reversalAmount;
 
@@ -169,6 +174,7 @@ export async function POST(
       categoryReversals[budgetKey] = (categoryReversals[budgetKey] || 0) + reversalAmount;
 
       // (a) Delete the auto-created next installment (if it exists)
+      // The "next" installment has: same description, same debtId, currentInstallment = this.currentInstallment + 1
       if (installment.currentInstallment < installment.totalInstallments) {
         const nextInstallment = await db.installment.findFirst({
           where: {
@@ -196,11 +202,14 @@ export async function POST(
       });
     }
 
-    // -- 4. Restore debt balance (only by the capital that was paid) --
-    // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
+    // ── 4. Restore debt balance (only by the capital that was paid) ──
+    // For loans: only capital reduces the balance (not interest or otherCharges)
+    // For credit cards: installmentAmount is the capital
     let totalCapitalToRestore = 0;
     for (const installment of installments) {
       if (debt.type === "loan") {
+        // For loans: paidAmount includes capital + interest + otherCharges
+        // We only restore capital (= paidAmount - interestAmount - otherChargesAmount)
         const paidTotal = toNumber(installment.paidAmount || 0);
         const interestPaid = toNumber(installment.interestAmount || 0);
         const otherPaid = toNumber(installment.otherChargesAmount || 0);
@@ -216,7 +225,7 @@ export async function POST(
       });
     }
 
-    // -- 5. Reverse transactions and restore account/subaccount balances --
+    // ── 5. Reverse transactions and restore account/subaccount balances ──
     for (const tx of batchTransactions) {
       // Restore subaccount if present, otherwise restore account
       if (tx.subAccountId) {
@@ -235,7 +244,11 @@ export async function POST(
       await db.transaction.delete({ where: { id: tx.id } });
     }
 
-    // -- 6. Reverse budget spending (LOANS only) --
+    // ── 6. Reverse budget spending (LOANS only) ──
+    // For credit cards: budget was already updated at purchase time (not at payment time),
+    // so we DON'T reverse it here. Reversing the installment (step 3) will cause
+    // the recalculate to properly adjust.
+    // For loans: the payment IS the expense, so we reverse the budget.
     const isLoan = debt.type === "loan";
     if (isLoan) {
       for (const [budgetKey, amount] of Object.entries(categoryReversals)) {

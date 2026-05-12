@@ -83,7 +83,7 @@ export async function POST() {
       let totalSpent = 0;
 
       // Source A: Direct transactions (expense or income) from accounts
-      // Exclude "transfer" type -- CC payments are transfers, not new expenses
+      // Exclude "transfer" type — CC payments are transfers, not new expenses
       const txWhereClause: Record<string, unknown> = {
         userId,
         date: { gte: periodStart, lte: periodEnd },
@@ -106,7 +106,6 @@ export async function POST() {
       });
 
       // Only count non-transfer transactions
-      // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
       for (const tx of transactions) {
         if (tx.type !== "transfer") {
           totalSpent += toNumber(tx.amount);
@@ -114,11 +113,11 @@ export async function POST() {
       }
 
       // Source B: Credit card installments with purchaseDate in the current period
-      // These represent spending committed via TC -- the money is already "spent" at
+      // These represent spending committed via TC — the money is already "spent" at
       // purchase time regardless of whether the CC bill has been paid.
       // We include BOTH paid and unpaid CC installments because:
       //   - CC payments create "transfer" transactions (not expenses), so Source A
-      //     never counts CC purchases -- Source B is the only source for CC spending.
+      //     never counts CC purchases — Source B is the only source for CC spending.
       //   - Loans are excluded because their payment creates "expense" transactions
       //     that are already counted by Source A.
       if (budget.type === "expense") {
@@ -139,7 +138,6 @@ export async function POST() {
           select: { installmentAmount: true },
         });
 
-        // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
         for (const inst of installments) {
           totalSpent += toNumber(inst.installmentAmount);
         }
@@ -150,7 +148,7 @@ export async function POST() {
         data: { spent: totalSpent },
       });
 
-      console.log(`[Recalculate] ${budget.category}${budget.subCategory ? `/${budget.subCategory}` : ""}: ${budget.spent} -> ${totalSpent}`);
+      console.log(`[Recalculate] ${budget.category}${budget.subCategory ? `/${budget.subCategory}` : ""}: ${budget.spent} → ${totalSpent}`);
     }
 
     // Return updated budgets

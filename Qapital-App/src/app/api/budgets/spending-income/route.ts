@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       referenceDate
     );
 
-    // -- Source 1: Transactions --
+    // ── Source 1: Transactions ──
     // Get all non-transfer transactions within the period
     const transactions = await db.transaction.findMany({
       where: {
@@ -74,9 +74,9 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // -- Source 2: Credit card installments --
+    // ── Source 2: Credit card installments ──
     // Include CC installments (both paid and unpaid) with purchaseDate in the period
-    // These represent spending committed via TC -- the money is already "spent"
+    // These represent spending committed via TC — the money is already "spent"
     const ccInstallments = await db.installment.findMany({
       where: {
         purchaseDate: { gte: periodStart, lte: periodEnd },
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    // -- Build daily data --
+    // ── Build daily data ──
     // Group by date string (YYYY-MM-DD)
     const dailyMap = new Map<string, { income: number; expense: number }>();
 
@@ -104,8 +104,6 @@ export async function GET(req: NextRequest) {
     }
 
     // Aggregate transactions
-    // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
-    // Without this: 0 + Decimal("800000") -> "0800000" (string concatenation!)
     let totalIncome = 0;
     let totalExpense = 0;
 
@@ -141,13 +139,13 @@ export async function GET(req: NextRequest) {
       .map(([date, data]) => ({ date, ...data }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // -- Build category breakdown --
+    // ── Build category breakdown ──
     const categoryMap = new Map<string, { category: string; subCategory: string | null; amount: number; type: string }>();
 
     for (const tx of transactions) {
       if (tx.sourceModule === "finance_transfer") continue;
 
-      const cat = tx.category || "Sin categoria";
+      const cat = tx.category || "Sin categoría";
       const sub = tx.subCategory || null;
       const key = `${tx.type}::${cat}::${sub || ""}`;
 
@@ -159,7 +157,7 @@ export async function GET(req: NextRequest) {
 
     // Add CC installments to category breakdown
     for (const inst of ccInstallments) {
-      const cat = inst.category || "Sin categoria";
+      const cat = inst.category || "Sin categoría";
       const sub = inst.subCategory || null;
       const key = `expense::${cat}::${sub || ""}`;
 

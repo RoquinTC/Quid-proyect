@@ -550,17 +550,28 @@ export function FinanceOverview() {
   // COMPUTED VALUES
   // ============================================================
 
-  const totalAccountBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
+  const totalAccountBalance = accounts.reduce((sum, a) => sum + Number(a.balance), 0);
   const totalSubAccountBalance = accounts.reduce(
-    (sum, a) => sum + a.subAccounts.reduce((s, sa) => s + sa.balance, 0),
+    (sum, a) => sum + a.subAccounts.reduce((s, sa) => s + Number(sa.balance), 0),
     0
   );
   const totalBalance = totalAccountBalance + totalSubAccountBalance;
 
   const incomeBudgets = budgets.filter((b) => b.type === "income");
   const expenseBudgets = budgets.filter((b) => b.type === "expense");
-  const monthlyIncome = incomeBudgets.reduce((sum, b) => sum + b.spent, 0);
-  const monthlyExpenses = expenseBudgets.reduce((sum, b) => sum + b.spent, 0);
+
+  // ── Month-aware income/expenses from monthly-summary API ──
+  // The monthly-summary API provides historical income/expenses per month.
+  // Use this to show the correct values for the SELECTED month.
+  const selectedMonthKey = `${selectedDate.year}-${String(selectedDate.month).padStart(2, "0")}`;
+  const selectedMonthData = monthlySummary?.historical?.find((d) => d.month === selectedMonthKey);
+  // Fallback to budget totals if monthly-summary doesn't have data for the selected month
+  const monthlyIncome = selectedMonthData
+    ? selectedMonthData.income
+    : incomeBudgets.reduce((sum, b) => sum + Number(b.spent), 0);
+  const monthlyExpenses = selectedMonthData
+    ? selectedMonthData.expenses
+    : expenseBudgets.reduce((sum, b) => sum + Number(b.spent), 0);
 
   // Month display name
   const selectedMonthName = FULL_MONTH_NAMES[String(selectedDate.month).padStart(2, "0")];
@@ -648,9 +659,16 @@ export function FinanceOverview() {
 
   const totalSpentOnCategories = expenseByCategory.reduce((s, c) => s + c.amount, 0);
 
-  // Recent transactions with date grouping
+  // Recent transactions with date grouping — filtered by selected month
   const groupedTransactions = useMemo(() => {
-    const recent = transactions.slice(0, 10);
+    // Filter transactions by the selected month
+    const filtered = transactions.filter((tx) => {
+      const dateStr = typeof tx.date === "string" ? tx.date.split("T")[0] : "";
+      if (!dateStr) return false;
+      const [year, month] = dateStr.split("-").map(Number);
+      return year === selectedDate.year && month === selectedDate.month;
+    });
+    const recent = filtered.slice(0, 10);
     const groups: Record<string, Transaction[]> = {};
     for (const tx of recent) {
       const dateStr = typeof tx.date === "string" ? tx.date.split("T")[0] : "";
@@ -664,7 +682,7 @@ export function FinanceOverview() {
       groups[key].push(tx);
     }
     return Object.entries(groups);
-  }, [transactions]);
+  }, [transactions, selectedDate]);
 
   // Upcoming recurring payments (next 7 days, Colombia timezone)
   const upcomingRecurring = useMemo(() => {

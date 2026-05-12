@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow, createColombiaDate } from "@/lib/api";
 import { verifyEntityOwnership } from "@/lib/auth-guards";
+import { toNumber } from "@/lib/decimal-serializer";
 
 export async function GET(req: NextRequest) {
   try {
@@ -252,7 +253,7 @@ export async function POST(req: NextRequest) {
       if (updatedSub) {
         updatedBalances.push({
           name: `${updatedSub.account.name} → ${updatedSub.name}`,
-          balance: updatedSub.balance,
+          balance: toNumber(updatedSub.balance),
           isSubAccount: true,
         });
       }
@@ -264,7 +265,7 @@ export async function POST(req: NextRequest) {
       if (updatedAcc) {
         updatedBalances.push({
           name: updatedAcc.name,
-          balance: updatedAcc.balance,
+          balance: toNumber(updatedAcc.balance),
           isSubAccount: false,
         });
       }
@@ -280,7 +281,7 @@ export async function POST(req: NextRequest) {
         if (updatedDestSub) {
           updatedBalances.push({
             name: `${updatedDestSub.account.name} → ${updatedDestSub.name}`,
-            balance: updatedDestSub.balance,
+            balance: toNumber(updatedDestSub.balance),
             isSubAccount: true,
           });
         }
@@ -292,7 +293,7 @@ export async function POST(req: NextRequest) {
         if (updatedDestAcc) {
           updatedBalances.push({
             name: updatedDestAcc.name,
-            balance: updatedDestAcc.balance,
+            balance: toNumber(updatedDestAcc.balance),
             isSubAccount: false,
           });
         }

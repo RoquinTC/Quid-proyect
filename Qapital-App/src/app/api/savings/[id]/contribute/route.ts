@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
 import { syncSavingsBudget } from "@/lib/savings-budget-sync";
+import { toNumber } from "@/lib/decimal-serializer";
 
 /**
  * Recalculate the cuota for a savings goal and update its linked recurring payment
@@ -15,7 +16,7 @@ async function recalculateCuota(goalId: string) {
 
   if (!goal || !goal.deadline) return;
 
-  const remaining = goal.targetAmount - goal.currentAmount;
+  const remaining = toNumber(goal.targetAmount) - toNumber(goal.currentAmount);
   if (remaining <= 0) {
     // Goal is complete — cancel the recurring payment
     await db.recurringPayment.updateMany({

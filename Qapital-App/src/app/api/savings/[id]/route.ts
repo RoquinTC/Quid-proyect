@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { syncSavingsBudget } from '@/lib/savings-budget-sync'
+import { toNumber } from '@/lib/decimal-serializer'
 
 // GET /api/savings/[id] — get a single savings goal
 export async function GET(
@@ -102,20 +103,20 @@ export async function PUT(
     if (targetAmount || deadline || frequency || periodAmounts || biweeklyDays || monthlyDay || weeklyDay) {
       // Get current CDT total for this goal (before any relinking)
       const currentCdts = await db.cDT.findMany({ where: { goalId: id } })
-      const linkedCDTTotal = currentCdts.reduce((sum, cdt) => sum + cdt.amount, 0)
+      const linkedCDTTotal = currentCdts.reduce((sum, cdt) => sum + toNumber(cdt.amount), 0)
 
       // Get current contributions total
       const allContributions = await db.savingsContribution.aggregate({
         where: { goalId: id },
         _sum: { amount: true },
       })
-      const contributionsTotal = allContributions._sum.amount || 0
+      const contributionsTotal = toNumber(allContributions._sum.amount || 0);
 
       const monthsRemaining = Math.max(1, Math.ceil(
         ((goal.deadline || new Date()).getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 30)
       ))
 
-      const remainingAmount = Math.max(0, goal.targetAmount - contributionsTotal - linkedCDTTotal)
+      const remainingAmount = Math.max(0, toNumber(goal.targetAmount) - contributionsTotal - linkedCDTTotal)
       const monthlyQuota = remainingAmount / monthsRemaining
 
       const effectiveFrequency = goal.frequency
@@ -272,8 +273,8 @@ export async function PUT(
         })
 
         const bal = item.subAccountId
-          ? (await db.subAccount.findUnique({ where: { id: item.subAccountId } }))?.balance || 0
-          : (await db.account.findUnique({ where: { id: item.accountId } }))?.balance || 0
+          ? toNumber((await db.subAccount.findUnique({ where: { id: item.subAccountId } }))?.balance || 0)
+          : toNumber((await db.account.findUnique({ where: { id: item.accountId } }))?.balance || 0)
 
         if (bal > 0) {
           await db.savingsContribution.create({

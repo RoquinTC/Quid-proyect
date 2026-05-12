@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { toNumber } from "@/lib/decimal-serializer";
 
 /**
  * Reverse a specific "abono a capital" by its Abono ID.
@@ -62,8 +63,8 @@ export async function POST(
 
       if (installment) {
         // Restore the remainingBalance by the amount that was deducted
-        const currentBalance = installment.remainingBalance ?? installment.totalAmount;
-        const restoredBalance = currentBalance + detail.amount;
+        const currentBalance = toNumber(installment.remainingBalance ?? installment.totalAmount);
+        const restoredBalance = currentBalance + toNumber(detail.amount);
 
         await db.installment.update({
           where: { id: installment.id },
@@ -138,7 +139,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      totalReversed: abono.totalAmount,
+      totalReversed: toNumber(abono.totalAmount),
       reversedDetails: abono.details.length,
     });
   } catch (error) {

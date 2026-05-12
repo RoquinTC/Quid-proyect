@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
 import { Prisma } from "@prisma/client";
 import { syncSavingsBudget } from "@/lib/savings-budget-sync";
+import { toNumber } from "@/lib/decimal-serializer";
 
 // GET: Get linked accounts for a savings goal
 export async function GET(
@@ -107,10 +108,10 @@ export async function POST(
 
     if (subAccountId) {
       const subAccount = await db.subAccount.findUnique({ where: { id: subAccountId } });
-      linkedBalance = subAccount?.balance || 0;
+      linkedBalance = toNumber(subAccount?.balance || 0);
       linkedName = subAccount?.name || "subcuenta";
     } else {
-      linkedBalance = account.balance;
+      linkedBalance = toNumber(account.balance);
       linkedName = account.name;
     }
 
@@ -225,10 +226,10 @@ export async function DELETE(
     let unlinkName = "";
 
     if (link.subAccountId && link.subAccount) {
-      linkedBalance = link.subAccount.balance;
+      linkedBalance = toNumber(link.subAccount.balance);
       unlinkName = link.subAccount.name;
     } else {
-      linkedBalance = link.account.balance;
+      linkedBalance = toNumber(link.account.balance);
       unlinkName = link.account.name;
     }
 
@@ -241,7 +242,7 @@ export async function DELETE(
 
       // Decrement goal.currentAmount by the linked balance, min 0
       if (linkedBalance > 0) {
-        const currentAmount = goal.currentAmount;
+        const currentAmount = toNumber(goal.currentAmount);
         const newAmount = Math.max(currentAmount - linkedBalance, 0);
         await tx.savingsGoal.update({
           where: { id },

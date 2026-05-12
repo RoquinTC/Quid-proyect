@@ -125,8 +125,9 @@ export function CDTForm({ open, onOpenChange, onSuccess, editCDT }: CDTFormProps
   useEffect(() => {
     if (editCDT) {
       setBank(editCDT.bank);
-      setAmount(String(editCDT.amount));
-      setEffectiveRate(String(editCDT.effectiveRate));
+      // Defensive Number() — editCDT.amount may be a Decimal string from the API
+      setAmount(String(Number(editCDT.amount)));
+      setEffectiveRate(String(Number(editCDT.effectiveRate)));
       setStartDate(editCDT.startDate ? editCDT.startDate.split("T")[0] : "");
       setEndDate(editCDT.endDate ? editCDT.endDate.split("T")[0] : "");
       setTermDays(editCDT.termDays);

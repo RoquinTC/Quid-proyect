@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { toNumber } from "@/lib/decimal-serializer";
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const actualYield = yieldRecord.actualYield || 0;
+    const actualYield = toNumber(yieldRecord.actualYield || 0);
     const isSubAccount = !!yieldRecord.subAccountId;
 
     // If there's a linked transaction, delete it and revert balances

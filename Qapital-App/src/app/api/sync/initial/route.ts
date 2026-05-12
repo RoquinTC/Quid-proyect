@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { serializeDecimals } from "@/lib/decimal-serializer";
 
 /**
  * GET /api/sync/initial
@@ -76,11 +77,18 @@ export async function GET() {
       db.sharedAccountUser.findMany({ where: { account: { userId } } }),
     ]);
 
-    // Serialize dates to ISO strings for IndexedDB storage
+    // Serialize dates to ISO strings and Decimals to numbers for IndexedDB storage.
+    // This is critical: without Decimal conversion, Prisma Decimal objects would be
+    // stored as objects in IndexedDB and cause client-side errors when the app tries
+    // to read them. The NextResponse.json patch handles HTTP serialization, but
+    // the serialize() function runs BEFORE that, so we must convert here too.
     const serialize = (records: any[]) =>
       records.map((r: any) => {
+        // First, convert all Decimal objects to numbers (preserves Date objects)
+        const decimalSafe = serializeDecimals(r) as Record<string, unknown>;
+        // Then, convert Date objects to ISO strings for IndexedDB compatibility
         const obj: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(r)) {
+        for (const [key, value] of Object.entries(decimalSafe)) {
           if (value instanceof Date) {
             obj[key] = value.toISOString();
           } else {

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
+import { toNumber } from "@/lib/decimal-serializer";
 
 export async function GET() {
   try {
@@ -50,7 +51,7 @@ export async function GET() {
 
     for (const account of highYieldAccounts) {
       const existingRecord = account.yieldHistory[0];
-      const projectedYield = account.balance * ((account.yieldPercentage || 0) / 100) / 12;
+      const projectedYield = toNumber(account.balance) * ((toNumber(account.yieldPercentage) || 0) / 100) / 12;
       const key = `acc-${account.id}`;
 
       yields.push({
@@ -59,7 +60,7 @@ export async function GET() {
         subAccountId: null,
         parentAccountId: null,
         accountName: account.name,
-        balance: account.balance,
+        balance: toNumber(account.balance),
         yieldPercentage: account.yieldPercentage || 0,
         projectedYield,
         actualYield: existingRecord?.actualYield || null,
@@ -85,7 +86,7 @@ export async function GET() {
 
     for (const subAccount of highYieldSubAccounts) {
       const existingRecord = subAccount.yieldHistory[0];
-      const projectedYield = subAccount.balance * ((subAccount.yieldPercentage || 0) / 100) / 12;
+      const projectedYield = toNumber(subAccount.balance) * ((toNumber(subAccount.yieldPercentage) || 0) / 100) / 12;
       const key = `sub-${subAccount.id}`;
 
       yields.push({
@@ -94,7 +95,7 @@ export async function GET() {
         subAccountId: subAccount.id,
         parentAccountId: subAccount.accountId,
         accountName: `${subAccount.account.name} → ${subAccount.name}`,
-        balance: subAccount.balance,
+        balance: toNumber(subAccount.balance),
         yieldPercentage: subAccount.yieldPercentage || 0,
         projectedYield,
         actualYield: existingRecord?.actualYield || null,
@@ -131,11 +132,11 @@ export async function GET() {
         ? `${record.subAccount.account.name} → ${record.subAccount.name}`
         : record.account?.name || "Unknown";
       const balance = record.subAccountId && record.subAccount
-        ? record.subAccount.balance
-        : record.account?.balance || 0;
+        ? toNumber(record.subAccount.balance)
+        : toNumber(record.account?.balance || 0);
       const yieldPercentage = record.subAccountId && record.subAccount
-        ? (record.subAccount.yieldPercentage || 0)
-        : (record.account?.yieldPercentage || 0);
+        ? (toNumber(record.subAccount.yieldPercentage) || 0)
+        : (toNumber(record.account?.yieldPercentage) || 0);
 
       yields.push({
         id: record.id,
@@ -145,8 +146,8 @@ export async function GET() {
         accountName,
         balance,
         yieldPercentage,
-        projectedYield: record.projectedYield,
-        actualYield: record.actualYield,
+        projectedYield: toNumber(record.projectedYield),
+        actualYield: toNumber(record.actualYield),
         isConfirmed: record.isConfirmed,
         transactionId: record.transactionId,
       });
@@ -178,11 +179,11 @@ export async function GET() {
         ? `${record.subAccount.account.name} → ${record.subAccount.name}`
         : record.account?.name || "Unknown";
       const balance = record.subAccountId && record.subAccount
-        ? record.subAccount.balance
-        : record.account?.balance || 0;
+        ? toNumber(record.subAccount.balance)
+        : toNumber(record.account?.balance || 0);
       const yieldPercentage = record.subAccountId && record.subAccount
-        ? (record.subAccount.yieldPercentage || 0)
-        : (record.account?.yieldPercentage || 0);
+        ? (toNumber(record.subAccount.yieldPercentage) || 0)
+        : (toNumber(record.account?.yieldPercentage) || 0);
 
       yields.push({
         id: record.id,
@@ -192,8 +193,8 @@ export async function GET() {
         accountName,
         balance,
         yieldPercentage,
-        projectedYield: record.projectedYield,
-        actualYield: record.actualYield,
+        projectedYield: toNumber(record.projectedYield),
+        actualYield: toNumber(record.actualYield),
         isConfirmed: false,
         transactionId: record.transactionId,
         isPreviousMonth: true,
@@ -231,11 +232,11 @@ export async function GET() {
         ? `${record.subAccount.account.name} → ${record.subAccount.name}`
         : record.account?.name || "Unknown";
       const balance = record.subAccountId && record.subAccount
-        ? record.subAccount.balance
-        : record.account?.balance || 0;
+        ? toNumber(record.subAccount.balance)
+        : toNumber(record.account?.balance || 0);
       const yieldPercentage = record.subAccountId && record.subAccount
-        ? (record.subAccount.yieldPercentage || 0)
-        : (record.account?.yieldPercentage || 0);
+        ? (toNumber(record.subAccount.yieldPercentage) || 0)
+        : (toNumber(record.account?.yieldPercentage) || 0);
 
       yields.push({
         id: record.id,
@@ -245,8 +246,8 @@ export async function GET() {
         accountName,
         balance,
         yieldPercentage,
-        projectedYield: record.projectedYield,
-        actualYield: record.actualYield,
+        projectedYield: toNumber(record.projectedYield),
+        actualYield: toNumber(record.actualYield),
         isConfirmed: true,
         transactionId: record.transactionId,
         isPreviousMonth: !isCurrentMonth,
@@ -354,7 +355,7 @@ export async function POST(req: NextRequest) {
           select: { balance: true, name: true, account: { select: { name: true } } },
         });
         if (updatedSub) {
-          updatedBalance = updatedSub.balance;
+          updatedBalance = toNumber(updatedSub.balance);
           updatedAccountName = `${updatedSub.account.name} → ${updatedSub.name}`;
         }
       } else {
@@ -369,7 +370,7 @@ export async function POST(req: NextRequest) {
           select: { balance: true, name: true },
         });
         if (updatedAcc) {
-          updatedBalance = updatedAcc.balance;
+          updatedBalance = toNumber(updatedAcc.balance);
           updatedAccountName = updatedAcc.name;
         }
       }

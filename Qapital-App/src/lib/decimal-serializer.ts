@@ -6,17 +6,17 @@
  *   Prisma.Decimal objects have a valueOf() that returns a STRING like "800000.00".
  *   This causes two catastrophic bugs:
  *
- *   1. JSON serialization: Decimal.toJSON() returns a string -> API sends {"balance":"800000"}
+ *   1. JSON serialization: Decimal.toJSON() returns a string → API sends {"balance":"800000"}
  *      instead of {"balance":800000}. Frontend receives strings instead of numbers.
  *
- *   2. Arithmetic: 0 + Decimal("800000") calls valueOf() -> "800000" (string)
- *      -> JavaScript does STRING CONCATENATION: "0" + "800000" = "0800000"
- *      -> Multiple accounts: "0800000" + "500000" = "08000000500000" (8 trillion!)
- *      -> Invalid accumulation: "0800000.00500000.00" -> NaN -> formatCurrency(NaN) = $0
+ *   2. Arithmetic: 0 + Decimal("800000") calls valueOf() → "800000" (string)
+ *      → JavaScript does STRING CONCATENATION: "0" + "800000" = "0800000"
+ *      → Multiple accounts: "0800000" + "500000" = "08000000500000" (8 trillion!)
+ *      → Invalid accumulation: "0800000.00500000.00" → NaN → formatCurrency(NaN) = $0
  *
  * SOLUTION (3 layers of defense):
  *
- *   Layer 1 - NextResponse.json patch with PRE-WALK serialization (PRIMARY, most reliable):
+ *   Layer 1 — NextResponse.json patch with PRE-WALK serialization (PRIMARY, most reliable):
  *     Overrides NextResponse.json to walk the data tree BEFORE JSON.stringify,
  *     converting Decimal objects to numbers by their INTERNAL PROPERTIES (d, e, s arrays),
  *     not by instanceof. This works regardless of how Next.js/Turbopack bundles the Decimal
@@ -28,12 +28,12 @@
  *     a string, and the replacer couldn't detect the original Decimal object.
  *     Pre-walking avoids this by converting Decimal objects BEFORE JSON.stringify sees them.
  *
- *   Layer 2 - Prototype patches (DEFENSE-IN-DEPTH):
+ *   Layer 2 — Prototype patches (DEFENSE-IN-DEPTH):
  *     Patches Decimal.prototype.toJSON and valueOf to return numbers.
  *     Works when the same Decimal class is used throughout the bundle.
  *     May NOT work when Turbopack creates separate copies of the Decimal class.
  *
- *   Layer 3 - Defensive Number() in frontend (SAFETY NET):
+ *   Layer 3 — Defensive Number() in frontend (SAFETY NET):
  *     Frontend reduce/formatCurrency always wraps values in Number()
  *     to handle any remaining string values from stale caches or edge cases.
  *
@@ -59,11 +59,11 @@ import { NextResponse } from 'next/server';
  *   - Internal properties (d, e, s) are consistent across all copies
  *
  * decimal.js internal structure:
- *   d: number[] - array of digits (e.g., [800000, 0] or [1234567, 8900000])
- *   e: number   - exponent (position of decimal point)
- *   s: number   - sign (1 for positive, -1 for negative)
+ *   d: number[] — array of digits (e.g., [800000, 0] or [1234567, 8900000])
+ *   e: number   — exponent (position of decimal point)
+ *   s: number   — sign (1 for positive, -1 for negative)
  */
-function isDecimalLike(value: unknown): boolean {
+export function isDecimalLike(value: unknown): boolean {
   if (value === null || value === undefined || typeof value !== 'object') return false;
   const obj = value as Record<string, unknown>;
   return (
@@ -86,6 +86,7 @@ function isDecimalLike(value: unknown): boolean {
  */
 export function serializeDecimals<T>(obj: T): T {
   if (obj === null || obj === undefined) return obj;
+  if (obj instanceof Date) return obj; // Preserve Date objects (don't iterate keys)
   if (isDecimalLike(obj)) {
     return Number((obj as { toString: () => string }).toString()) as T;
   }
@@ -133,7 +134,7 @@ const originalNextResponseJson = NextResponse.json;
 // for JSON serialization. They MAY NOT work if Turbopack creates
 // separate copies of the Decimal class in different chunks.
 
-// Patch toJSON: Decimal -> number in JSON responses
+// Patch toJSON: Decimal → number in JSON responses
 // Uses toString() to avoid circular call (Number(this) would call valueOf() again)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (Decimal.prototype as any).toJSON = function (this: {
@@ -142,13 +143,13 @@ const originalNextResponseJson = NextResponse.json;
   return Number(this.toString());
 };
 
-// Patch valueOf: Decimal -> number for JS arithmetic operators
-// Without this: 0 + Decimal("100") -> "0100" (string concatenation!)
-// With this:    0 + Decimal("100") -> 100 (number addition!)
+// Patch valueOf: Decimal → number for JS arithmetic operators
+// Without this: 0 + Decimal("100") → "0100" (string concatenation!)
+// With this:    0 + Decimal("100") → 100 (number addition!)
 //
 // Uses Number(this.toString()) instead of Number(this) to avoid INFINITE RECURSION:
-//   Number(decimalObj) -> calls valueOf() -> return Number(this) -> calls valueOf() -> ...
-//   Number(this.toString()) -> toString() returns "100.00" -> Number("100.00") = 100
+//   Number(decimalObj) → calls valueOf() → return Number(this) → calls valueOf() → ...
+//   Number(this.toString()) → toString() returns "100.00" → Number("100.00") = 100 ✓
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 (Decimal.prototype as any).valueOf = function (this: {
   toString: () => string;
@@ -168,10 +169,10 @@ const originalNextResponseJson = NextResponse.json;
  * IMPORTANT: Always use toNumber() when doing arithmetic with Prisma
  * Decimal values in API routes. Example:
  *
- *   // BAD - string concatenation if valueOf patch doesn't apply:
+ *   // BAD — string concatenation if valueOf patch doesn't apply:
  *   total += tx.amount;
  *
- *   // GOOD - always produces a number:
+ *   // GOOD — always produces a number:
  *   total += toNumber(tx.amount);
  */
 export function toNumber(value: unknown): number {

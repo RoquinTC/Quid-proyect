@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
+import { toNumber } from "@/lib/decimal-serializer";
 
 /**
  * Process an "abono a capital" — an extra payment that reduces the remainingBalance
@@ -92,9 +93,9 @@ export async function POST(
         );
       }
 
-      const previousBalance = installment.remainingBalance ?? installment.totalAmount;
+      const previousBalance = toNumber(installment.remainingBalance ?? installment.totalAmount);
 
-      if (payment.amount > previousBalance - installment.installmentAmount) {
+      if (payment.amount > previousBalance - toNumber(installment.installmentAmount)) {
         if (payment.amount > previousBalance) {
           return NextResponse.json(
             { error: `El abono ($${payment.amount.toLocaleString()}) excede el saldo pendiente ($${previousBalance.toLocaleString()}) de "${installment.description}"` },

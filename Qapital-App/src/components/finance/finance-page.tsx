@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Component } from "react";
 import { useAppStore, type FinanceSubView } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock } from "lucide-react";
@@ -14,6 +14,47 @@ import { RecurringView } from "./recurring-view";
 import { AccountDetail } from "./account-detail";
 import { DebtDetail } from "./debt-detail";
 import { SavingsGoalDetail } from "./savings-goal-detail";
+
+// Error boundary component to prevent a single tab crash from breaking the entire app
+class TabErrorBoundary extends Component<{
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}, { hasError: boolean; error: Error | null }> {
+  state: { hasError: boolean; error: Error | null } = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[TabErrorBoundary] Error in tab:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-center">
+          <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-red-100 dark:bg-red-900/30 mb-4">
+            <span className="text-2xl">⚠️</span>
+          </div>
+          <h3 className="font-bold text-gray-900 dark:text-white mb-2">
+            Error al cargar esta sección
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            {this.state.error?.message || "Ocurrió un error inesperado"}
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="px-4 py-2 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const tabs: { id: FinanceSubView; label: string; icon: typeof Wallet }[] = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard },
@@ -78,7 +119,7 @@ export function FinancePage() {
       case "savings":
         return <SavingsView />;
       case "cdts":
-        return <CDTView />;
+        return <TabErrorBoundary><CDTView /></TabErrorBoundary>;
       case "recurring":
         return <RecurringView />;
       default:

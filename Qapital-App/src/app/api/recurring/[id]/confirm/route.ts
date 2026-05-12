@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { syncSavingsBudget } from "@/lib/savings-budget-sync";
 import { verifyEntityOwnership } from "@/lib/auth-guards";
+import { toNumber } from "@/lib/decimal-serializer";
 
 /**
  * Calculate the next scheduled date for a recurring payment.
@@ -285,7 +286,7 @@ export async function POST(
         // Recalculate cuota for the goal
         const goal = await db.savingsGoal.findUnique({ where: { id: linkedGoalId } });
         if (goal && goal.deadline) {
-          const remaining = goal.targetAmount - goal.currentAmount;
+          const remaining = toNumber(goal.targetAmount) - toNumber(goal.currentAmount);
           if (remaining <= 0) {
             // Goal complete — cancel future payments linked to this goal
             await db.recurringPayment.updateMany({

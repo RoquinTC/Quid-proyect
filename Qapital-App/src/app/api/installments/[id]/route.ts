@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { toNumber } from "@/lib/decimal-serializer";
 
 export async function PUT(
   req: NextRequest,
@@ -41,7 +42,7 @@ export async function PUT(
     if (body.purchaseDate !== undefined) updateData.purchaseDate = new Date(body.purchaseDate);
 
     // Financial fields: only editable if no payments have been made (paidAmount === 0)
-    if (existing.paidAmount === 0) {
+    if (toNumber(existing.paidAmount) === 0) {
       if (body.totalAmount !== undefined) {
         const newTotal = parseFloat(body.totalAmount);
         if (isNaN(newTotal) || newTotal <= 0) {
@@ -66,7 +67,7 @@ export async function PUT(
         // Recalculate installmentAmount
         const newTotal = body.totalAmount
           ? parseFloat(body.totalAmount)
-          : existing.totalAmount;
+          : toNumber(existing.totalAmount);
         updateData.installmentAmount = newTotal / newTotalInstallments;
       }
     } else if (body.totalAmount !== undefined || body.totalInstallments !== undefined) {
@@ -78,8 +79,8 @@ export async function PUT(
     }
 
     // If totalAmount changed, update the debt balance (diff)
-    if (updateData.totalAmount !== undefined && existing.paidAmount === 0) {
-      const diff = (updateData.totalAmount as number) - existing.totalAmount;
+    if (updateData.totalAmount !== undefined && toNumber(existing.paidAmount) === 0) {
+      const diff = (updateData.totalAmount as number) - toNumber(existing.totalAmount);
       if (diff !== 0) {
         await db.debt.update({
           where: { id: existing.debtId },
@@ -128,7 +129,7 @@ export async function DELETE(
 
     // Calculate the remaining balance to reverse from the debt
     // remainingAmount = totalAmount - paidAmount
-    const remainingAmount = existing.totalAmount - existing.paidAmount;
+    const remainingAmount = toNumber(existing.totalAmount) - toNumber(existing.paidAmount);
 
     // Delete the installment
     await db.installment.delete({ where: { id } });

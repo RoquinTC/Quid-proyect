@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import { verifyEntityOwnership } from '@/lib/auth-guards'
 import { toNumber } from '@/lib/decimal-serializer'
 
-// GET /api/savings -- list savings goals for authenticated user
+// GET /api/savings — list savings goals for authenticated user
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
@@ -44,7 +44,7 @@ export async function GET() {
   }
 }
 
-// POST /api/savings -- create a savings goal
+// POST /api/savings — create a savings goal
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
@@ -96,7 +96,6 @@ export async function POST(request: Request) {
     }
 
     // Calculate linked account balances
-    // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
     let linkedAccountsTotal = 0
     for (const item of linkedAccountItems) {
       if (item.subAccountId) {
@@ -201,7 +200,7 @@ export async function POST(request: Request) {
       })
     }
 
-    // Create recurring payment(s) linked to this goal -- type transfer
+    // Create recurring payment(s) linked to this goal — type transfer
     // accountId = source (where money leaves), destinationAccountId = destination (where money arrives)
     // For biweekly: create 2 recurring payments (one per day with its amount)
     // For weekly: create 4 recurring payments (one per week with its amount)

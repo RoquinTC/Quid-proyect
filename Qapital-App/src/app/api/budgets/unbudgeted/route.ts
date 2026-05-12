@@ -80,7 +80,6 @@ export async function GET() {
     });
 
     // Aggregate spending by category+subCategory+type
-    // FIX: Use toNumber() to convert Prisma Decimal to number BEFORE arithmetic.
     const spendingMap: Record<
       string,
       {

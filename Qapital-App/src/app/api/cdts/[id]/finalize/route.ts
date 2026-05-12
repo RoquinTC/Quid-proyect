@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { syncSavingsBudget } from "@/lib/savings-budget-sync";
 import { getColombiaNow, createColombiaDate } from "@/lib/api";
+import { toNumber } from "@/lib/decimal-serializer";
 
 /**
  * Finalize (withdraw) a CDT.
@@ -108,7 +109,7 @@ export async function POST(
         sourceModule: "finance",
         sourceId: cdt.id,
         isRecurring: false,
-        notes: `Finalización CDT: invertido ${cdt.amount}, recibido ${wAmount}${destSubAccount ? ` → ${destSubAccount.name}` : ""}`,
+        notes: `Finalización CDT: invertido ${toNumber(cdt.amount)}, recibido ${wAmount}${destSubAccount ? ` → ${destSubAccount.name}` : ""}`,
       },
     });
 
@@ -116,7 +117,7 @@ export async function POST(
     if (cdt.goalId && cdt.goal) {
       // a. Remove the provisional invested amount
       const goal = cdt.goal;
-      const newCurrentAfterRemoval = Math.max(goal.currentAmount - cdt.amount, 0);
+      const newCurrentAfterRemoval = Math.max(toNumber(goal.currentAmount) - toNumber(cdt.amount), 0);
 
       // b. Add the actual received amount (real money now)
       const finalCurrent = newCurrentAfterRemoval + wAmount;
@@ -130,7 +131,7 @@ export async function POST(
       await db.savingsContribution.create({
         data: {
           goalId: cdt.goalId,
-          amount: -cdt.amount,
+          amount: -toNumber(cdt.amount),
           date: now,
           description: `CDT ${cdt.bank} — reversa valor provisional (finalización)`,
         },
