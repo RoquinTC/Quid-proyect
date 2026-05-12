@@ -33,12 +33,13 @@ export function FuelGauge({
 
   // Animation variants for liquid
   const liquidVariants = {
+    initial: { height: '0%' },
     animate: {
+      height: `${normalizedLevel}%`,
       y: [0, -2, 0],
       transition: {
-        duration: 2,
-        repeat: Infinity,
-        ease: "easeInOut"
+        height: { duration: 1.5, ease: "easeInOut" as const },
+        y: { duration: 2, repeat: Infinity, ease: "easeInOut" as const }
       }
     }
   };
@@ -52,7 +53,7 @@ export function FuelGauge({
         duration: 1.5,
         delay: i * 0.3,
         repeat: Infinity,
-        ease: "easeOut"
+        ease: "easeOut" as const
       }
     })
   };
@@ -91,15 +92,13 @@ export function FuelGauge({
               {/* Fuel Level - Liquid Effect */}
               <motion.div
                 className="absolute bottom-0 left-0 right-0"
-                initial={{ height: '0%' }}
-                animate={{ height: `${normalizedLevel}%` }}
-                transition={{ duration: 1.5, ease: "easeInOut" }}
+                variants={liquidVariants}
+                initial="initial"
+                animate="animate"
                 style={{
                   background: `linear-gradient(180deg, ${fuelColor}dd 0%, ${fuelColor} 100%)`,
                   borderRadius: '0 0 12px 12px'
                 }}
-                variants={liquidVariants}
-                animate="animate"
               >
                 {/* Wave Effect on Top */}
                 <div className="absolute -top-2 left-0 right-0 h-4 overflow-hidden">
