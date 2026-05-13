@@ -32,18 +32,30 @@ export async function GET(req: NextRequest) {
     const where: Record<string, unknown> = { userId: session.user.id };
 
     // For shared accounts, also include transactions created by other users
-    // that belong to accounts the current user has access to
-    const accessibleAccountIds = await db.sharedAccountUser.findMany({
+    // that belong to accounts the current user has access to.
+    // Two sources of shared account IDs:
+    // 1. Accounts shared WITH me (via SharedAccountUser)
+    // 2. Accounts I OWN that are shared with others (isShared: true)
+    const accessibleViaSharing = await db.sharedAccountUser.findMany({
       where: { userId: session.user.id },
       select: { accountId: true },
     });
-    const sharedAccountIds = accessibleAccountIds.map((a) => a.accountId);
+    const sharedWithMeIds = accessibleViaSharing.map((a) => a.accountId);
+
+    const ownedSharedAccounts = await db.account.findMany({
+      where: { userId: session.user.id, isShared: true },
+      select: { id: true },
+    });
+    const ownedSharedIds = ownedSharedAccounts.map((a) => a.id);
+
+    // Combine both sources
+    const allSharedAccountIds = [...new Set([...sharedWithMeIds, ...ownedSharedIds])];
 
     // Build the where clause: own transactions OR transactions in shared accounts
-    if (sharedAccountIds.length > 0) {
+    if (allSharedAccountIds.length > 0) {
       where.OR = [
         { userId: session.user.id },
-        { accountId: { in: sharedAccountIds } },
+        { accountId: { in: allSharedAccountIds } },
       ];
       delete where.userId;
     }
@@ -410,7 +422,7 @@ export async function POST(req: NextRequest) {
                 type: "shared_transaction",
                 title: "Nuevo movimiento",
                 message: `${session.user.name} agregó un movimiento en la cuenta compartida "${accountInfo.name}"`,
-                data: JSON.stringify({ accountId, transactionId: transaction.id }),
+                data: JSON.stringify({ accountId, transactionId: transaction.id, transactionType: type }),
               },
             });
           }

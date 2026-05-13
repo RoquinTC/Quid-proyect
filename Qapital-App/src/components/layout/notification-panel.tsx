@@ -181,16 +181,20 @@ export function NotificationPanel() {
           message: "Te has unido a la cuenta compartida correctamente.",
           type: "success",
         });
-        // Mark the notification as read and refresh
-        await markAsRead(notificationId);
-        fetchNotifications();
+        // Delete the notification so it disappears from the panel
+        try {
+          await apiFetch(`/api/notifications/${notificationId}`, { method: "DELETE" });
+        } catch {}
+        // Remove from local state immediately
+        setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+        setUnreadCount((prev) => Math.max(0, prev - 1));
       } catch (err: any) {
         toast.error(err?.message || "Error al aceptar la invitación");
       } finally {
         setActionLoading((prev) => ({ ...prev, [notificationId]: false }));
       }
     },
-    [addNotification, markAsRead, fetchNotifications]
+    [addNotification]
   );
 
   // ---- Reject invitation ----
@@ -207,15 +211,20 @@ export function NotificationPanel() {
           message: "Has rechazado la invitación.",
           type: "info",
         });
-        await markAsRead(notificationId);
-        fetchNotifications();
+        // Delete the notification so it disappears from the panel
+        try {
+          await apiFetch(`/api/notifications/${notificationId}`, { method: "DELETE" });
+        } catch {}
+        // Remove from local state immediately
+        setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+        setUnreadCount((prev) => Math.max(0, prev - 1));
       } catch (err: any) {
         toast.error(err?.message || "Error al rechazar la invitación");
       } finally {
         setActionLoading((prev) => ({ ...prev, [notificationId]: false }));
       }
     },
-    [addNotification, markAsRead, fetchNotifications]
+    [addNotification]
   );
 
   // ---- Derive invitationId from notification data ----
