@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useAppStore } from "@/lib/store";
@@ -18,6 +18,7 @@ import { HealthPage } from "@/components/health/health-page";
 import { PantryPage } from "@/components/pantry/pantry-page";
 import { SettingsPage } from "@/components/settings/settings-page";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
+import { BackupRestorePrompt } from "@/components/settings/backup-restore-prompt";
 import { motion, AnimatePresence } from "framer-motion";
 
 function ModuleContent() {
@@ -56,6 +57,7 @@ export function AppShell() {
   const { data: session, status } = useSession();
   const { authView } = useAppStore();
   const { setTheme: applyTheme } = useTheme();
+  const [showBackupPrompt, setShowBackupPrompt] = useState(false);
 
   // Load user's saved theme from DB on login
   // StrictMode-safe: uses mountedRef to avoid state updates after unmount
@@ -76,6 +78,40 @@ export function AppShell() {
       cancelled = true;
     };
   }, [status, session?.user?.id, applyTheme]);
+
+  // Auto-restore detection: check if DB is empty and user has a previous backup
+  useEffect(() => {
+    let cancelled = false;
+    if (status === "authenticated" && session?.user?.id) {
+      // Check if user dismissed the prompt this session
+      try {
+        if (sessionStorage.getItem("qapital-restore-dismissed") === "true") return;
+      } catch { /* non-critical */ }
+
+      // Check if user has a previous backup in localStorage
+      let hasBackup = false;
+      try {
+        const backupMeta = localStorage.getItem("qapital-last-backup");
+        hasBackup = !!backupMeta;
+      } catch { /* non-critical */ }
+
+      if (!hasBackup) return; // No previous backup, skip check
+
+      // Check if DB is empty
+      apiFetch<{ hasData: boolean; totalRecords: number }>("/api/backup/status")
+        .then((data) => {
+          if (!cancelled && !data.hasData) {
+            setShowBackupPrompt(true);
+          }
+        })
+        .catch(() => {
+          // API might fail, that's fine — user can still import manually
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [status, session?.user?.id]);
 
   // Loading state
   if (status === "loading") {
@@ -112,6 +148,7 @@ export function AppShell() {
       <ModuleContent />
       <BottomNav />
       <AppSidebar />
+      {showBackupPrompt && <BackupRestorePrompt />}
     </div>
   );
 }

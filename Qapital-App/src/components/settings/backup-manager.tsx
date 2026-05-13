@@ -87,6 +87,19 @@ export function BackupManager() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+
+      // Save backup metadata to localStorage for auto-restore detection
+      try {
+        const backupMeta = {
+          date: new Date().toISOString(),
+          filename,
+          userId: "current", // scoped per user in app-shell
+        };
+        localStorage.setItem("qapital-last-backup", JSON.stringify(backupMeta));
+      } catch {
+        // localStorage not available, non-critical
+      }
+
       setExportResult("Respaldo descargado exitosamente");
       setTimeout(() => setExportResult(null), 4000);
     } catch (error) {
