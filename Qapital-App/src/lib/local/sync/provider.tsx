@@ -5,10 +5,14 @@
  *   1. Initial data population from server → IndexedDB
  *   2. Background periodic sync (server → IndexedDB)
  *   3. Offline/online detection
- *   4. Drain sync queue when coming back online
+ *   4. Drain mutation queue when coming back online
  *   5. Pending operations count
  *
  * Place this inside the SessionProvider so it has access to the user session.
+ *
+ * [7B] Unified to use single Dexie DB (qapital-db / db.ts).
+ * Previously used the old qapital_local DB (index.ts) with syncQueue.
+ * Now uses mutationQueue from db.ts — same DB as hooks, engine, and api.ts.
  */
 
 "use client";
@@ -29,15 +33,14 @@ import {
   replaceAllInTable,
   isInitialSyncDone,
   setInitialSyncDone,
-  getPendingSyncItems,
-  removeSyncItem,
-  incrementRetry,
-  getPendingSyncCount,
-  clearLocalData,
-} from "../index";
+  getPendingMutationCount,
+  clearLocalDB,
+} from "../db";
+import type { MutationQueueEntry } from "../db";
+import { generateTempId } from "./utils";
 import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
-import { isBrowserOnline, MAX_RETRY_COUNT, getRetryDelay, sleep } from "./utils";
+import { isBrowserOnline, MAX_RETRY_COUNT, sleep } from "./utils";
 
 // ============================================
 // SYNC CONFIGURATION
@@ -46,7 +49,7 @@ import { isBrowserOnline, MAX_RETRY_COUNT, getRetryDelay, sleep } from "./utils"
 /** How often to do a full background sync (ms) */
 const BACKGROUND_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
-/** How often to drain the sync queue (ms) */
+/** How often to drain the mutation queue (ms) */
 const QUEUE_DRAIN_INTERVAL = 30 * 1000; // 30 seconds
 
 /** API endpoints to sync during initial load and background refresh */
@@ -126,7 +129,16 @@ export function SyncProvider({ children }: SyncProviderProps) {
               await replaceAllInTable(tableName, userId, data);
             } else {
               // Single object (e.g. /api/settings)
-              await localDB[tableName]?.put({ ...(data as Record<string, unknown>), userId });
+              const table = (localDB as any)[tableName];
+              if (table) {
+                await table.put({
+                  ...(data as Record<string, unknown>),
+                  userId,
+                  _syncStatus: "synced",
+                  _version: 1,
+                  _lastModified: Date.now(),
+                });
+              }
             }
           } catch (err) {
             console.warn(`[Sync] Failed to sync ${endpoint}:`, err);
@@ -180,7 +192,16 @@ export function SyncProvider({ children }: SyncProviderProps) {
             if (Array.isArray(data)) {
               await replaceAllInTable(tableName, userId, data);
             } else {
-              await localDB[tableName]?.put({ ...(data as Record<string, unknown>), userId });
+              const table = (localDB as any)[tableName];
+              if (table) {
+                await table.put({
+                  ...(data as Record<string, unknown>),
+                  userId,
+                  _syncStatus: "synced",
+                  _version: 1,
+                  _lastModified: Date.now(),
+                });
+              }
             }
           } catch {
             // Silently fail — local data is still available
@@ -194,67 +215,138 @@ export function SyncProvider({ children }: SyncProviderProps) {
   }, [userId, setSyncStatus]);
 
   // ============================================
-  // QUEUE DRAIN — Push pending operations to server
+  // QUEUE DRAIN — Push pending mutations to server
   // ============================================
+  // [7B] Now uses mutationQueue (from db.ts) instead of the old syncQueue.
+  // The mutationQueue uses string IDs and has fields: operation, tableName,
+  // recordId, payload, apiRoute, apiMethod, status, retryCount, etc.
 
-  const drainSyncQueue = useCallback(async () => {
+  const drainMutationQueue = useCallback(async () => {
     if (!userId || !isBrowserOnline() || isDrainingRef.current) return;
 
     isDrainingRef.current = true;
 
     try {
-      const pending = await getPendingSyncItems();
+      // Get all pending mutations sorted by sequence
+      const pending = await localDB.mutationQueue
+        .where("status")
+        .equals("pending")
+        .sortBy("sequence");
 
-      for (const item of pending) {
+      for (const mutation of pending) {
         // Skip items that have exceeded max retries
-        if (item.retryCount >= MAX_RETRY_COUNT) {
-          console.warn(`[Sync] Dropping item ${item.id} after ${MAX_RETRY_COUNT} retries`);
-          await removeSyncItem(item.id!);
+        if (mutation.retryCount >= MAX_RETRY_COUNT) {
+          console.warn(`[Sync] Dropping mutation ${mutation.id} after ${MAX_RETRY_COUNT} retries`);
+          await localDB.mutationQueue.delete(mutation.id);
           continue;
         }
 
         try {
-          const fetchOptions: RequestInit = {
-            method: item.method,
-            headers: { "Content-Type": "application/json" },
-          };
+          // Mark as in progress
+          await localDB.mutationQueue.update(mutation.id, {
+            status: "in_progress",
+            updatedAt: Date.now(),
+          });
 
-          if (item.body) {
-            fetchOptions.body = item.body;
-          }
+          if (mutation.operation === "complex") {
+            // Complex: replay the full API call as specified
+            const response = await fetch(mutation.apiRoute!, {
+              method: mutation.apiMethod || "POST",
+              headers: { "Content-Type": "application/json" },
+              body: mutation.payload,
+            });
 
-          const response = await fetch(item.serverUrl, fetchOptions);
+            if (!response.ok) {
+              throw new Error(`Server returned ${response.status}`);
+            }
 
-          if (response.ok) {
-            // Success — remove from queue
-            await removeSyncItem(item.id!);
+            // Mark as completed
+            await localDB.mutationQueue.update(mutation.id, {
+              status: "completed",
+              updatedAt: Date.now(),
+            });
+          } else {
+            // Simple CRUD operation
+            const payload = JSON.parse(mutation.payload);
+            const method =
+              mutation.operation === "create" ? "POST" :
+              mutation.operation === "update" ? "PUT" :
+              "DELETE";
 
-            // If this was a create with a tempId, update IndexedDB with server response
-            if (item.tempId && item.operation === "create") {
+            // Determine the URL: use apiRoute if available, otherwise construct
+            const route = mutation.apiRoute || `/api/${mutation.tableName}${mutation.operation !== "create" ? `/${mutation.recordId}` : ""}`;
+
+            const fetchOptions: RequestInit = {
+              method,
+              headers: { "Content-Type": "application/json" },
+            };
+
+            if (method !== "DELETE") {
+              fetchOptions.body = JSON.stringify(payload);
+            }
+
+            const response = await fetch(route, fetchOptions);
+
+            if (!response.ok) {
+              throw new Error(`Server returned ${response.status}`);
+            }
+
+            // Update local record with server response
+            if (method !== "DELETE") {
               try {
                 const serverData = await response.json();
-                const table = (localDB as any)[item.table];
+                const table = (localDB as any)[mutation.tableName];
                 if (table && serverData?.id) {
-                  await table.delete(item.tempId);
-                  await table.put({ ...serverData, userId });
+                  await table.put({
+                    ...serverData,
+                    _syncStatus: "synced",
+                    _version: 1,
+                    _lastModified: Date.now(),
+                  });
                 }
               } catch {
-                // If we can't parse the response, the record still exists with tempId
-                // It'll get replaced on next background sync
+                // Can't parse response — record still exists with pending status
               }
+            } else {
+              // For deletes, remove from local DB
+              const table = (localDB as any)[mutation.tableName];
+              if (table) await table.delete(mutation.recordId);
             }
-          } else {
-            // Server rejected — increment retry
-            await incrementRetry(item.id!, `HTTP ${response.status}`);
+
+            // Mark as completed
+            await localDB.mutationQueue.update(mutation.id, {
+              status: "completed",
+              updatedAt: Date.now(),
+            });
           }
         } catch (err: any) {
-          // Network error — increment retry
-          await incrementRetry(item.id!, err.message);
+          // Failed — increment retry count and mark as pending again
+          await localDB.mutationQueue.update(mutation.id, {
+            status: "pending",
+            retryCount: mutation.retryCount + 1,
+            error: err.message,
+            updatedAt: Date.now(),
+          });
+
+          // Stop processing group on failure (preserve ordering)
+          if (mutation.groupId) break;
         }
       }
 
+      // Clean up old completed mutations (keep last 100)
+      const completed = await localDB.mutationQueue
+        .where("status")
+        .equals("completed")
+        .reverse()
+        .sortBy("createdAt");
+
+      if (completed.length > 100) {
+        const toDelete = completed.slice(100).map((m) => m.id);
+        await localDB.mutationQueue.bulkDelete(toDelete);
+      }
+
       // Update pending count
-      const count = await getPendingSyncCount();
+      const count = await getPendingMutationCount();
       setPendingCount(count);
     } finally {
       isDrainingRef.current = false;
@@ -269,7 +361,7 @@ export function SyncProvider({ children }: SyncProviderProps) {
     const handleOnline = () => {
       setOnline(true);
       // When coming back online, drain the queue
-      drainSyncQueue();
+      drainMutationQueue();
     };
 
     const handleOffline = () => {
@@ -286,7 +378,7 @@ export function SyncProvider({ children }: SyncProviderProps) {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [setOnline, drainSyncQueue]);
+  }, [setOnline, drainMutationQueue]);
 
   // ============================================
   // LIFECYCLE — Start/stop sync based on session
@@ -307,10 +399,6 @@ export function SyncProvider({ children }: SyncProviderProps) {
       return;
     }
 
-    // StrictMode-safe: reset syncing flag on cleanup so the second
-    // invocation isn't blocked by a stale isSyncingRef from the first.
-    // Use a cancelled flag to prevent the first invocation's async work
-    // from interfering with the second.
     let cancelled = false;
 
     // Initial sync
@@ -323,17 +411,16 @@ export function SyncProvider({ children }: SyncProviderProps) {
 
     // Queue drain interval
     queueDrainRef.current = setInterval(() => {
-      drainSyncQueue();
+      drainMutationQueue();
     }, QUEUE_DRAIN_INTERVAL);
 
     // Initial pending count
-    getPendingSyncCount().then((count) => {
+    getPendingMutationCount().then((count) => {
       if (!cancelled) setPendingCount(count);
     });
 
     return () => {
       cancelled = true;
-      // Reset syncing flag so next invocation isn't blocked
       isSyncingRef.current = false;
       if (backgroundSyncRef.current) {
         clearInterval(backgroundSyncRef.current);
@@ -344,14 +431,13 @@ export function SyncProvider({ children }: SyncProviderProps) {
         queueDrainRef.current = null;
       }
     };
-  }, [userId, status, performInitialSync, performBackgroundSync, drainSyncQueue, setPendingCount]);
+  }, [userId, status, performInitialSync, performBackgroundSync, drainMutationQueue, setPendingCount]);
 
   // Clear local data on logout
-  // StrictMode-safe: use a ref to avoid double-clearing
   const lastLogoutStatus = useRef(status);
   useEffect(() => {
     if (status === "unauthenticated" && lastLogoutStatus.current !== "unauthenticated") {
-      clearLocalData("");
+      clearLocalDB();
       setInitialSyncComplete(false);
     }
     lastLogoutStatus.current = status;

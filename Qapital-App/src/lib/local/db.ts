@@ -584,6 +584,74 @@ export async function setSyncMeta(key: string, value: string): Promise<void> {
   await localDB.syncMeta.put({ key, value, updatedAt: Date.now() });
 }
 
+// ─── Helper: Reverse map (table name → API endpoint) ───
+
+export const TABLE_API_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(API_TABLE_MAP).map(([api, table]) => [table, api])
+);
+
+// ─── Helper: Get all records from a table for a specific user ───
+
+export async function getAllFromTable<T>(tableName: string, userId: string): Promise<T[]> {
+  try {
+    const table = (localDB as any)[tableName] as Table<any, string> | undefined;
+    if (!table) return [];
+    return (await table.where("userId").equals(userId).toArray()) as T[];
+  } catch {
+    return [];
+  }
+}
+
+// ─── Helper: Replace all data in a table for a user (full refresh from server) ───
+
+export async function replaceAllInTable<T extends { id: string }>(
+  tableName: string,
+  userId: string,
+  data: T[]
+): Promise<void> {
+  const table = (localDB as any)[tableName] as Table<any, string> | undefined;
+  if (!table) return;
+
+  await localDB.transaction("rw", table, async () => {
+    await table.where("userId").equals(userId).delete();
+    if (data.length > 0) {
+      const enriched = data.map((record) => ({
+        ...record,
+        _syncStatus: "synced" as const,
+        _version: 1,
+        _lastModified: Date.now(),
+      }));
+      await table.bulkPut(enriched);
+    }
+  });
+}
+
+// ─── Helper: Check if initial sync has been completed for a user ───
+
+export async function isInitialSyncDone(userId: string): Promise<boolean> {
+  const value = await getSyncMeta("initialSyncDone");
+  return value === userId;
+}
+
+// ─── Helper: Mark initial sync as done for a user ───
+
+export async function setInitialSyncDone(userId: string): Promise<void> {
+  await localDB.syncMeta.put({
+    key: "initialSyncDone",
+    value: userId,
+    updatedAt: Date.now(),
+  });
+}
+
+// ─── Helper: Get pending mutation count ───
+
+export async function getPendingMutationCount(): Promise<number> {
+  return await localDB.mutationQueue
+    .where("status")
+    .equals("pending")
+    .count();
+}
+
 // ─── Helper: Clear all local data (for logout) ───
 
 export async function clearLocalDB(): Promise<void> {
