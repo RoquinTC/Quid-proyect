@@ -46,8 +46,30 @@ export const MAX_RETRY_COUNT = 5;
 export const BASE_RETRY_DELAY = 1000;
 
 /**
- * Calculate the delay before the next retry using exponential backoff.
+ * Calculate the delay before the next retry using exponential backoff + jitter.
+ * Jitter randomizes the delay to prevent thundering herd when multiple
+ * mutations fail simultaneously and retry at the same time.
+ *
+ * Formula: min(BASE * 2^retryCount, 30s) * random(0.5, 1.0)
  */
 export function getRetryDelay(retryCount: number): number {
-  return Math.min(BASE_RETRY_DELAY * Math.pow(2, retryCount), 30000); // Max 30 seconds
+  const baseDelay = Math.min(BASE_RETRY_DELAY * Math.pow(2, retryCount), 30000);
+  const jitter = 0.5 + Math.random() * 0.5; // Random between 0.5 and 1.0
+  return Math.floor(baseDelay * jitter);
+}
+
+/**
+ * Calculate the absolute timestamp when a mutation should be retried.
+ */
+export function getNextRetryAt(retryCount: number): number {
+  return Date.now() + getRetryDelay(retryCount);
+}
+
+/**
+ * Check if a mutation is ready to be retried (nextRetryAt has passed).
+ * Mutations without nextRetryAt are always ready.
+ */
+export function isReadyForRetry(mutation: { nextRetryAt?: number }): boolean {
+  if (!mutation.nextRetryAt) return true;
+  return Date.now() >= mutation.nextRetryAt;
 }

@@ -1,5 +1,6 @@
 import { localDB, isLocalDBPopulated, getSyncMeta, setSyncMeta } from '../db';
 import type { SyncMeta } from '../db';
+import { MAX_RETRY_COUNT, getNextRetryAt, isReadyForRetry, getRetryDelay } from './utils';
 
 const SYNC_META_DEFAULTS: SyncMeta = {
   _syncStatus: 'synced',
@@ -137,6 +138,16 @@ export async function performPush(): Promise<void> {
 
   for (const mutation of pending) {
     try {
+      // [11] Skip items that are in their backoff period
+      if (!isReadyForRetry(mutation)) continue;
+
+      // Drop items that exceeded max retries
+      if (mutation.retryCount >= MAX_RETRY_COUNT) {
+        console.warn(`[Sync] Dropping mutation ${mutation.id} after ${MAX_RETRY_COUNT} retries`);
+        await localDB.mutationQueue.delete(mutation.id);
+        continue;
+      }
+
       await localDB.mutationQueue.update(mutation.id, {
         status: 'in_progress',
         updatedAt: Date.now(),
@@ -149,6 +160,21 @@ export async function performPush(): Promise<void> {
           headers: { 'Content-Type': 'application/json' },
           body: mutation.payload,
         });
+
+        // Handle 429 (rate limited)
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          const extraDelay = retryAfter ? parseInt(retryAfter) * 1000 : getRetryDelay(mutation.retryCount + 1);
+          await localDB.mutationQueue.update(mutation.id, {
+            status: 'pending',
+            retryCount: mutation.retryCount + 1,
+            nextRetryAt: Date.now() + extraDelay,
+            error: 'Rate limited (429)',
+            updatedAt: Date.now(),
+          });
+          break; // Stop pushing — server is busy
+        }
+
         if (!response.ok) throw new Error(`Server returned ${response.status}`);
       } else {
         // Simple CRUD
@@ -161,6 +187,21 @@ export async function performPush(): Promise<void> {
           headers: { 'Content-Type': 'application/json' },
           body: method !== 'DELETE' ? JSON.stringify(payload) : undefined,
         });
+
+        // Handle 429 (rate limited)
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          const extraDelay = retryAfter ? parseInt(retryAfter) * 1000 : getRetryDelay(mutation.retryCount + 1);
+          await localDB.mutationQueue.update(mutation.id, {
+            status: 'pending',
+            retryCount: mutation.retryCount + 1,
+            nextRetryAt: Date.now() + extraDelay,
+            error: 'Rate limited (429)',
+            updatedAt: Date.now(),
+          });
+          break;
+        }
+
         if (!response.ok) throw new Error(`Server returned ${response.status}`);
 
         // Update local record with server response
@@ -186,12 +227,17 @@ export async function performPush(): Promise<void> {
         updatedAt: Date.now(),
       });
     } catch (error) {
+      // [11] Apply exponential backoff + jitter
+      const nextRetry = getNextRetryAt(mutation.retryCount + 1);
       await localDB.mutationQueue.update(mutation.id, {
-        status: 'failed',
+        status: 'pending',
         retryCount: mutation.retryCount + 1,
+        nextRetryAt: nextRetry,
         error: String(error),
         updatedAt: Date.now(),
       });
+
+      console.warn(`[Sync] Mutation ${mutation.id} failed (retry ${mutation.retryCount + 1}/${MAX_RETRY_COUNT}), next retry at ${new Date(nextRetry).toISOString()}`);
 
       // Stop processing group on failure
       if (mutation.groupId) break;

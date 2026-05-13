@@ -40,7 +40,7 @@ import type { MutationQueueEntry } from "../db";
 import { generateTempId } from "./utils";
 import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
-import { isBrowserOnline, MAX_RETRY_COUNT, sleep } from "./utils";
+import { isBrowserOnline, MAX_RETRY_COUNT, sleep, getNextRetryAt, isReadyForRetry, getRetryDelay } from "./utils";
 
 // ============================================
 // SYNC CONFIGURATION
@@ -241,6 +241,11 @@ export function SyncProvider({ children }: SyncProviderProps) {
           continue;
         }
 
+        // [11] Skip items that are in their backoff period
+        if (!isReadyForRetry(mutation)) {
+          continue;
+        }
+
         try {
           // Mark as in progress
           await localDB.mutationQueue.update(mutation.id, {
@@ -255,6 +260,22 @@ export function SyncProvider({ children }: SyncProviderProps) {
               headers: { "Content-Type": "application/json" },
               body: mutation.payload,
             });
+
+            // Handle 429 (rate limited) — apply extra backoff
+            if (response.status === 429) {
+              const retryAfter = response.headers.get("Retry-After");
+              const extraDelay = retryAfter ? parseInt(retryAfter) * 1000 : getRetryDelay(mutation.retryCount + 1);
+              await localDB.mutationQueue.update(mutation.id, {
+                status: "pending",
+                retryCount: mutation.retryCount + 1,
+                nextRetryAt: Date.now() + extraDelay,
+                error: "Rate limited (429)",
+                updatedAt: Date.now(),
+              });
+              console.warn(`[Sync] Rate limited on mutation ${mutation.id}, retry after ${extraDelay}ms`);
+              // Stop draining — server is busy
+              break;
+            }
 
             if (!response.ok) {
               throw new Error(`Server returned ${response.status}`);
@@ -286,6 +307,21 @@ export function SyncProvider({ children }: SyncProviderProps) {
             }
 
             const response = await fetch(route, fetchOptions);
+
+            // Handle 429 (rate limited)
+            if (response.status === 429) {
+              const retryAfter = response.headers.get("Retry-After");
+              const extraDelay = retryAfter ? parseInt(retryAfter) * 1000 : getRetryDelay(mutation.retryCount + 1);
+              await localDB.mutationQueue.update(mutation.id, {
+                status: "pending",
+                retryCount: mutation.retryCount + 1,
+                nextRetryAt: Date.now() + extraDelay,
+                error: "Rate limited (429)",
+                updatedAt: Date.now(),
+              });
+              console.warn(`[Sync] Rate limited on mutation ${mutation.id}, retry after ${extraDelay}ms`);
+              break;
+            }
 
             if (!response.ok) {
               throw new Error(`Server returned ${response.status}`);
@@ -320,13 +356,17 @@ export function SyncProvider({ children }: SyncProviderProps) {
             });
           }
         } catch (err: any) {
-          // Failed — increment retry count and mark as pending again
+          // [11] Failed — apply exponential backoff + jitter before next retry
+          const nextRetry = getNextRetryAt(mutation.retryCount + 1);
           await localDB.mutationQueue.update(mutation.id, {
             status: "pending",
             retryCount: mutation.retryCount + 1,
+            nextRetryAt: nextRetry,
             error: err.message,
             updatedAt: Date.now(),
           });
+
+          console.warn(`[Sync] Mutation ${mutation.id} failed (retry ${mutation.retryCount + 1}/${MAX_RETRY_COUNT}), next retry at ${new Date(nextRetry).toISOString()}`);
 
           // Stop processing group on failure (preserve ordering)
           if (mutation.groupId) break;

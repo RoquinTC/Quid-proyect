@@ -26,6 +26,8 @@ export interface MutationQueueEntry {
   createdAt: number;
   updatedAt: number;
   groupId?: string;
+  /** Timestamp (ms) after which this mutation should be retried. Set on failure. */
+  nextRetryAt?: number;
 }
 
 export interface SyncMetaRecord {

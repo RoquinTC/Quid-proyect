@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export type ModuleType = "dashboard" | "finance" | "transport" | "health" | "pantry" | "settings";
 
@@ -13,7 +14,8 @@ export interface Notification {
   message: string;
   type: "info" | "success" | "warning" | "error";
   read: boolean;
-  createdAt: Date;
+  /** Timestamp (ms) — stored as number for safe JSON serialization */
+  createdAt: number;
 }
 
 interface AppState {
@@ -64,74 +66,88 @@ interface AppState {
   setSyncStatus: (syncing: boolean) => void;
   pendingCount: number;
   setPendingCount: (count: number) => void;
-  lastSyncAt: Date | null;
-  setLastSyncAt: (date: Date) => void;
+  lastSyncAt: number | null;
+  setLastSyncAt: (date: number) => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
-  // Navigation
-  activeModule: "dashboard",
-  setActiveModule: (module) => set({ activeModule: module }),
+export const useAppStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      // Navigation
+      activeModule: "dashboard",
+      setActiveModule: (module) => set({ activeModule: module }),
 
-  // Sub-views
-  financeSubView: "accounts",
-  setFinanceSubView: (view) => set({ financeSubView: view }),
-  transportSubView: "vehicles",
-  setTransportSubView: (view) => set({ transportSubView: view }),
-  healthSubView: "medications",
-  setHealthSubView: (view) => set({ healthSubView: view }),
-  pantrySubView: "items",
-  setPantrySubView: (view) => set({ pantrySubView: view }),
+      // Sub-views
+      financeSubView: "accounts",
+      setFinanceSubView: (view) => set({ financeSubView: view }),
+      transportSubView: "vehicles",
+      setTransportSubView: (view) => set({ transportSubView: view }),
+      healthSubView: "medications",
+      setHealthSubView: (view) => set({ healthSubView: view }),
+      pantrySubView: "items",
+      setPantrySubView: (view) => set({ pantrySubView: view }),
 
-  // Sidebar
-  sidebarOpen: false,
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+      // Sidebar
+      sidebarOpen: false,
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
-  // User preferences
-  currency: "COP",
-  setCurrency: (currency) => set({ currency }),
-  theme: "light",
-  setTheme: (theme) => set({ theme }),
+      // User preferences
+      currency: "COP",
+      setCurrency: (currency) => set({ currency }),
+      theme: "light",
+      setTheme: (theme) => set({ theme }),
 
-  // Notifications
-  notifications: [],
-  addNotification: (notification) =>
-    set((state) => ({
-      notifications: [
-        {
-          ...notification,
-          id: `notif-${Date.now()}`,
-          read: false,
-          createdAt: new Date(),
-        },
-        ...state.notifications,
-      ],
-    })),
-  markNotificationRead: (id) =>
-    set((state) => ({
-      notifications: state.notifications.map((n) =>
-        n.id === id ? { ...n, read: true } : n
-      ),
-    })),
-  clearNotifications: () => set({ notifications: [] }),
-  unreadCount: () => get().notifications.filter((n) => !n.read).length,
+      // Notifications
+      notifications: [],
+      addNotification: (notification) =>
+        set((state) => ({
+          notifications: [
+            {
+              ...notification,
+              id: `notif-${Date.now()}`,
+              read: false,
+              createdAt: Date.now(),
+            },
+            ...state.notifications,
+          ],
+        })),
+      markNotificationRead: (id) =>
+        set((state) => ({
+          notifications: state.notifications.map((n) =>
+            n.id === id ? { ...n, read: true } : n
+          ),
+        })),
+      clearNotifications: () => set({ notifications: [] }),
+      unreadCount: () => get().notifications.filter((n) => !n.read).length,
 
-  // Auth UI state
-  authView: "login",
-  setAuthView: (view) => set({ authView: view }),
+      // Auth UI state
+      authView: "login",
+      setAuthView: (view) => set({ authView: view }),
 
-  // Onboarding
-  onboardingStep: 0,
-  setOnboardingStep: (step) => set({ onboardingStep: step }),
+      // Onboarding
+      onboardingStep: 0,
+      setOnboardingStep: (step) => set({ onboardingStep: step }),
 
-  // Sync & offline state
-  isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
-  setOnline: (online) => set({ isOnline: online }),
-  isSyncing: false,
-  setSyncStatus: (syncing) => set({ isSyncing: syncing }),
-  pendingCount: 0,
-  setPendingCount: (count) => set({ pendingCount: count }),
-  lastSyncAt: null,
-  setLastSyncAt: (date) => set({ lastSyncAt: date }),
-}));
+      // Sync & offline state
+      isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
+      setOnline: (online) => set({ isOnline: online }),
+      isSyncing: false,
+      setSyncStatus: (syncing) => set({ isSyncing: syncing }),
+      pendingCount: 0,
+      setPendingCount: (count) => set({ pendingCount: count }),
+      lastSyncAt: null,
+      setLastSyncAt: (date) => set({ lastSyncAt: date }),
+    }),
+    {
+      name: "qapital-store",
+      storage: createJSONStorage(() => localStorage),
+      // Only persist notifications and user preferences — not transient UI state
+      partialize: (state) => ({
+        notifications: state.notifications,
+        theme: state.theme,
+        currency: state.currency,
+      }),
+    }
+  )
+);
