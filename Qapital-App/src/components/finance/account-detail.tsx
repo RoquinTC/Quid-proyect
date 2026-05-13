@@ -280,8 +280,8 @@ export function AccountDetail() {
 
   const fetchSubTransactions = useCallback(async (subAccountId: string) => {
     try {
-      const txs = await apiFetch<Transaction[]>(`/api/transactions?subAccountId=${subAccountId}`);
-      setSubTransactions((prev) => ({ ...prev, [subAccountId]: txs }));
+      const data = await apiFetch<{ transactions: Transaction[]; nextCursor: string | null }>(`/api/transactions?subAccountId=${subAccountId}`);
+      setSubTransactions((prev) => ({ ...prev, [subAccountId]: data.transactions ?? [] }));
     } catch (error) {
       console.error("Error fetching sub-account transactions:", error);
     }

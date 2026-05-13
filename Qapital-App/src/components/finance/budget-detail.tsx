@@ -64,7 +64,8 @@ export function BudgetDetail({ budgetId, onBack }: BudgetDetailProps) {
       if (startDate) params.set("startDate", startDate);
       if (endDate) params.set("endDate", endDate);
 
-      const txs = await apiFetch<Transaction[]>(`/api/transactions?${params.toString()}`);
+      const data = await apiFetch<{ transactions: Transaction[]; nextCursor: string | null }>(`/api/transactions?${params.toString()}`);
+      const txs = data.transactions ?? [];
 
       // Filter transactions that match the subCategory if the budget has one
       const filtered = foundBudget.subCategory
