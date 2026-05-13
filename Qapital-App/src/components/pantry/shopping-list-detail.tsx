@@ -25,34 +25,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { motion } from "framer-motion";
-
-interface ShoppingListItem {
-  id: string;
-  name: string;
-  quantity: number;
-  unit: string;
-  estimatedPrice: number | null;
-  actualPrice: number | null;
-  isPurchased: boolean;
-  checked: boolean;
-  pantryItemId: string | null;
-}
-
-interface ShoppingList {
-  id: string;
-  name: string;
-  status: string;
-  profileId: string | null;
-  items: ShoppingListItem[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface HealthProfile {
-  id: string;
-  name: string;
-  type: string;
-}
+import type { ShoppingListItem, ShoppingList, HealthProfile } from "@/lib/types";
 
 const unitLabels: Record<string, string> = {
   unit: "Unidad",

@@ -42,50 +42,7 @@ import {
   X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-interface RecurringPayment {
-  id: string;
-  description: string;
-  amount: number;
-  actualAmount: number | null;
-  type: string;
-  accountId: string | null;
-  debtId: string | null;
-  destinationAccountId: string | null;
-  destinationSubAccountId: string | null;
-  category: string | null;
-  subCategory: string | null;
-  scheduledDate: string;
-  confirmedDate: string | null;
-  status: string;
-  frequency: string;
-  notes: string | null;
-  isRecurring: boolean;
-  payrollGroupId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  account?: {
-    id: string;
-    name: string;
-    type: string;
-    color: string;
-    balance: number;
-  } | null;
-  debt?: {
-    id: string;
-    name: string;
-    type: string;
-    color: string;
-    currentBalance: number;
-  } | null;
-  destinationAccount?: {
-    id: string;
-    name: string;
-    type: string;
-    color: string;
-    balance: number;
-  } | null;
-}
+import type { RecurringPayment } from "@/lib/types";
 
 const containerVariants = {
   hidden: { opacity: 0 },

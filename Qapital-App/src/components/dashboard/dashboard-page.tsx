@@ -17,44 +17,7 @@ import {
 import { useAppStore } from "@/lib/store";
 import { formatCurrency, apiFetch, getColombiaNow } from "@/lib/api";
 import { motion } from "framer-motion";
-
-// ============================================================
-// TYPES
-// ============================================================
-
-interface SubAccount {
-  id: string;
-  name: string;
-  balance: number;
-  excludeFromAvailable?: boolean;
-}
-
-interface Account {
-  id: string;
-  name: string;
-  balance: number;
-  type: string;
-  color: string;
-  excludeFromAvailable?: boolean;
-  subAccounts: SubAccount[];
-}
-
-interface Budget {
-  id: string;
-  type: string;
-  category: string;
-  amount: number;
-  spent: number;
-}
-
-interface Debt {
-  id: string;
-  name: string;
-  type: string;
-  currentBalance: number;
-  monthlyPayment?: number | null;
-  paymentDate?: number | null;
-}
+import type { Account, SubAccount, Budget, Debt } from "@/lib/types";
 
 // ============================================================
 // ANIMATION VARIANTS

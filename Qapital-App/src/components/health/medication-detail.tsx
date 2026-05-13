@@ -18,23 +18,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { formatDate } from "@/lib/api";
-
-interface Medication {
-  id: string;
-  name: string;
-  dosage: string;
-  frequency: string;
-  customSchedule?: string | null;
-  disease?: string | null;
-  howToTake?: string | null;
-  startDate?: string | null;
-  endDate?: string | null;
-  isActive: boolean;
-  reminderEnabled: boolean;
-  reminderTimes?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { Medication } from "@/lib/types";
 
 interface MedicationDetailProps {
   medication: Medication;

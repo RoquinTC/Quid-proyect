@@ -15,24 +15,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format'
 import { apiFetch } from '@/lib/api'
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-interface SubAccount {
-  id: string
-  name: string
-  balance: number
-  color?: string | null
-}
-
-interface Account {
-  id: string
-  name: string
-  type: string
-  balance: number
-  bank?: string
-  color?: string
-  subAccounts?: SubAccount[]
-}
+import type { SubAccount, Account } from '@/lib/types'
 
 interface CDTRecord {
   id: string

@@ -28,23 +28,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
-
-interface SubAccount {
-  id: string;
-  name: string;
-  balance: number;
-}
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  balance: number;
-  excludeFromAvailable: boolean;
-  subAccounts: SubAccount[];
-  createdAt: string;
-}
+import type { Account, SubAccount } from "@/lib/types";
 
 const typeIcons: Record<string, typeof Wallet> = {
   checking: Banknote,

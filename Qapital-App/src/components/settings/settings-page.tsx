@@ -68,22 +68,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { signOut } from "next-auth/react";
+import type { UserSettings } from "@/lib/types";
 
-interface UserSettings {
-  id: string;
+type AppSettings = UserSettings & {
   userId: string;
-  theme: string;
-  budgetCutoffDay: number;
-  respectHolidays: boolean;
-  countryCode: string;
-  notificationsEnabled: boolean;
-  lastBudgetReset: string | null;
   currentPeriod: {
     start: string;
     end: string;
   };
   needsBudgetReset: boolean;
-}
+};
 
 function formatDateShort(dateStr: string): string {
   const date = new Date(dateStr);
@@ -126,7 +120,7 @@ function SectionHeader({
 export function SettingsPage() {
   const { setActiveModule } = useAppStore();
   const { setTheme: applyTheme } = useTheme();
-  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
@@ -162,7 +156,7 @@ export function SettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetch<UserSettings>("/api/settings");
+      const data = await apiFetch<AppSettings>("/api/settings");
       if (mountedRef.current) setSettings(data);
     } catch (err) {
       if (mountedRef.current) {
@@ -187,7 +181,7 @@ export function SettingsPage() {
     setSaving(true);
     setSaveMessage(null);
     try {
-      const updated = await apiFetch<UserSettings>("/api/settings", {
+      const updated = await apiFetch<AppSettings>("/api/settings", {
         method: "PUT",
         body: JSON.stringify({ [key]: value }),
       });

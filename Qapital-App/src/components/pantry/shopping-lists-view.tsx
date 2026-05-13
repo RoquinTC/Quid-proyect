@@ -16,28 +16,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-interface ShoppingListItem {
-  id: string;
-  name: string;
-  quantity: number;
-  unit: string;
-  estimatedPrice: number | null;
-  actualPrice: number | null;
-  isPurchased: boolean;
-  checked: boolean;
-  pantryItemId: string | null;
-}
-
-interface ShoppingList {
-  id: string;
-  name: string;
-  status: string;
-  profileId: string | null;
-  items: ShoppingListItem[];
-  createdAt: string;
-  updatedAt: string;
-}
+import type { ShoppingListItem, ShoppingList } from "@/lib/types";
 
 const statusConfig: Record<string, { label: string; color: string; icon: typeof ClipboardList }> = {
   draft: { label: "Borrador", color: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300", icon: ClipboardList },

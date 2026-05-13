@@ -22,11 +22,7 @@ import {
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency, calcPercentage } from "@/lib/api";
 import { Loader2, Plus, X, Check } from "lucide-react";
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
+import type { CategoryData } from "@/lib/types";
 
 interface BudgetFormProps {
   open: boolean;

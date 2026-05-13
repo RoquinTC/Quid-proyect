@@ -48,18 +48,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-
-interface Budget {
-  id: string;
-  type: string;
-  category: string;
-  subCategory?: string | null;
-  amount: number;
-  spent: number;
-  period: string;
-  icon?: string | null;
-  color?: string | null;
-}
+import type { Budget, Transaction } from "@/lib/types";
 
 interface UnbudgetedCategory {
   category: string;
@@ -71,21 +60,6 @@ interface UnbudgetedCategory {
     totalSpent: number;
     transactionCount: number;
   }>;
-}
-
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  description: string;
-  category?: string | null;
-  subCategory?: string | null;
-  date: string;
-  notes?: string | null;
-  accountId?: string | null;
-  subAccountId?: string | null;
-  account?: { id: string; name: string; type: string; color: string } | null;
-  subAccount?: { id: string; name: string } | null;
 }
 
 const categoryIcons: Record<string, typeof DollarSign> = {

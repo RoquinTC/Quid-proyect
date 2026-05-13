@@ -52,6 +52,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import type { Transaction, SubAccount, Account, CategoryData } from "@/lib/types";
 
 // Color config per transaction type
 const typeConfig = {
@@ -90,40 +91,7 @@ const typeConfig = {
   },
 } as const;
 
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  description: string;
-  category?: string | null;
-  subCategory?: string | null;
-  date: string;
-  accountId?: string | null;
-  subAccountId?: string | null;
-  notes?: string | null;
-  account?: { id: string; name: string; color: string } | null;
-  subAccount?: { id: string; name: string } | null;
-  transferToAccount?: { id: string; name: string; color: string } | null;
-  isTransferCounterpart?: boolean;
-  transferFromAccount?: { id: string; name: string; color: string } | null;
-}
 
-interface SubAccount {
-  id: string;
-  name: string;
-  type: string;
-  balance: number;
-  color?: string | null;
-}
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  balance: number;
-  subAccounts: SubAccount[];
-}
 
 const categoryIcons: Record<string, typeof DollarSign> = {
   Alimentación: Utensils,
@@ -141,11 +109,6 @@ const categoryIcons: Record<string, typeof DollarSign> = {
   Inversiones: DollarSign,
   Ventas: DollarSign,
 };
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
 
 function groupByDate(transactions: Transaction[]) {
   const now = new Date();

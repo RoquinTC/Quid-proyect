@@ -10,23 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Pill, Filter } from "lucide-react";
 import { motion } from "framer-motion";
-
-interface Medication {
-  id: string;
-  name: string;
-  dosage: string;
-  frequency: string;
-  customSchedule?: string | null;
-  disease?: string | null;
-  howToTake?: string | null;
-  startDate?: string | null;
-  endDate?: string | null;
-  isActive: boolean;
-  reminderEnabled: boolean;
-  reminderTimes?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { Medication } from "@/lib/types";
 
 const containerVariants = {
   hidden: { opacity: 0 },

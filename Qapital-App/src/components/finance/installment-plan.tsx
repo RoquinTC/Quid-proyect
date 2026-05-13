@@ -25,27 +25,7 @@ import {
   HandCoins,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-
-interface Installment {
-  id: string;
-  description: string;
-  totalAmount: number;
-  totalInstallments: number;
-  currentInstallment: number;
-  installmentAmount: number;
-  paidAmount: number;
-  interestRate?: number | null;
-  interestAmount?: number | null;
-  otherChargesAmount?: number | null;
-  remainingBalance?: number | null;
-  purchaseDate: string;
-  nextPaymentDate: string;
-  isPaid: boolean;
-  accountId?: string | null;
-  subAccountId?: string | null;
-  category?: string | null;
-  subCategory?: string | null;
-}
+import type { Installment } from "@/lib/types";
 
 interface BillingCycle {
   cycleKey: string; // e.g. "2026-04"

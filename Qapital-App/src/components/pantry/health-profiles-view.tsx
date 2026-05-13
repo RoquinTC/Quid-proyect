@@ -17,17 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { motion } from "framer-motion";
-
-interface HealthProfile {
-  id: string;
-  name: string;
-  type: string;
-  diseases: string | null;
-  restrictions: string | null;
-  aiRestrictions: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { HealthProfile } from "@/lib/types";
 
 interface FoodRestriction {
   food: string;

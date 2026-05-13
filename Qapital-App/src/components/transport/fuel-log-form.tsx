@@ -21,16 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency, getColombiaTodayString } from "@/lib/api";
+import type { Vehicle } from "@/lib/types";
 import { Loader2, Calculator } from "lucide-react";
-
-interface Vehicle {
-  id: string;
-  name: string;
-  type: string;
-  tankCapacity?: number | null;
-  currentKm: number;
-  fuelType?: string | null;
-}
 
 interface FuelLogFormProps {
   open: boolean;

@@ -18,13 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
+import type { HealthProfile } from "@/lib/types";
 import { Loader2 } from "lucide-react";
-
-interface HealthProfile {
-  id: string;
-  name: string;
-  type: string;
-}
 
 interface ShoppingListFormProps {
   open: boolean;

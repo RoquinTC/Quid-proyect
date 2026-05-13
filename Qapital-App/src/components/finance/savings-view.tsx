@@ -20,58 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
-interface SavingsGoal {
-  id: string;
-  name: string;
-  description?: string | null;
-  targetAmount: number;
-  currentAmount: number;
-  deadline?: string | null;
-  type: string;
-  color: string;
-  icon?: string | null;
-  aiSuggestion?: string | null;
-  isActive: boolean;
-  frequency?: string;
-  monthlyDay?: number | null;
-  biweeklyDays?: string | null;
-  weeklyDay?: number | null;
-  periodAmounts?: string | null;
-  sourceAccountId?: string | null;
-  destinationAccountId?: string | null;
-  contributions: Array<{
-    id: string;
-    amount: number;
-    date: string;
-    description?: string | null;
-  }>;
-  cdts?: Array<{
-    id: string;
-    amount: number;
-    termDays: number;
-    effectiveRate: number;
-    bank: string;
-    status: string;
-  }>;
-  linkedAccounts?: Array<{
-    id: string;
-    accountId: string;
-    subAccountId?: string | null;
-    account: {
-      id: string;
-      name: string;
-      type: string;
-      color: string;
-      balance: number;
-    };
-    subAccount?: {
-      id: string;
-      name: string;
-      balance: number;
-    } | null;
-  }>;
-}
+import type { SavingsGoal } from "@/lib/types";
 
 const containerVariants = {
   hidden: { opacity: 0 },

@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { apiFetch, formatCurrency, calculateCDTInterest, getCDTBreakdown, getCurrentCDTInterest, getDaysBetween, calculateCDTReteFuente, getColombiaTodayString, toColombiaDateString } from "@/lib/api";
 import { Loader2, TrendingUp, Landmark, Link2, Banknote } from "lucide-react";
+import type { SubAccount } from "@/lib/types";
 
 const colorOptions = [
   "#14B8A6", "#0D9488", "#10B981", "#22C55E",
@@ -37,14 +38,6 @@ interface CDTGoal {
   name: string;
   targetAmount: number;
   currentAmount: number;
-}
-
-interface SubAccount {
-  id: string;
-  name: string;
-  balance: number;
-  color?: string | null;
-  order: number;
 }
 
 interface CDTAccount {

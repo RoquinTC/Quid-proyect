@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency } from "@/lib/api";
 import { Loader2, Trash2, Pipette, Info, Plus, X, Check } from "lucide-react";
+import type { CategoryData } from "@/lib/types";
 
 const colorPalette = [
   // Reds / Pinks
@@ -54,11 +55,6 @@ const paymentTypes = [
   { value: "fixed", label: "Cuota Fija", description: "Amortización francesa — mismo valor cada mes" },
   { value: "variable", label: "Cuota Variable", description: "El valor de la cuota cambia cada periodo" },
 ];
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
 
 interface AccountOption {
   id: string;

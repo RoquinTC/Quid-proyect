@@ -5,15 +5,7 @@ import { apiFetch, getColombiaTodayString } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Pill, Check } from "lucide-react";
-
-interface Medication {
-  id: string;
-  name: string;
-  dosage: string;
-  frequency: string;
-  reminderTimes?: string | null;
-  isActive: boolean;
-}
+import type { Medication } from "@/lib/types";
 
 interface TodayScheduleProps {
   medications: Medication[];

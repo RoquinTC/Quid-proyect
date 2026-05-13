@@ -47,55 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { motion } from "framer-motion";
 import { FuelGauge } from "./Fuel-gauge";
-
-interface Vehicle {
-  id: string;
-  name: string;
-  type: string;
-  brand?: string | null;
-  model?: string | null;
-  year?: number | null;
-  color?: string | null;
-  tankCapacity?: number | null;
-  fuelType?: string | null;
-  currentKm: number;
-}
-
-interface FuelLog {
-  id: string;
-  date: string;
-  km: number;
-  amount: number;
-  pricePerGallon: number;
-  gallons: number;
-  isFullTank: boolean;
-  notes?: string | null;
-}
-
-interface MaintenanceRecord {
-  id: string;
-  type: string;
-  description: string;
-  cost: number;
-  km: number;
-  date: string;
-  nextDueKm?: number | null;
-  nextDueDate?: string | null;
-  reminderEnabled: boolean;
-}
-
-interface FuelLevelData {
-  fuelLevel: number;
-  currentFuel: number;
-  estimatedRange: number;
-  avgKmPerGallon: number;
-  lastFullTankDate: string | null;
-  lastFullTankKm: number;
-  totalConsumed: number;
-  anomalyDetected: boolean;
-  expectedConsumption: number;
-  actualConsumption: number;
-}
+import type { Vehicle, FuelLog, MaintenanceRecord, FuelLevelData } from "@/lib/types";
 
 interface VehicleDetailProps {
   vehicleId: string;

@@ -50,6 +50,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import type { Account, SubAccount, Transaction, CategoryData } from "@/lib/types";
 
 // Color config per transaction type
 const typeConfig = {
@@ -85,52 +86,7 @@ const typeConfig = {
   },
 } as const;
 
-interface SubAccount {
-  id: string;
-  name: string;
-  type: string;
-  balance: number;
-  isHighYield: boolean;
-  yieldPercentage?: number | null;
-  color?: string | null;
-  icon?: string | null;
-}
 
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  description: string;
-  category?: string | null;
-  subCategory?: string | null;
-  date: string;
-  subAccountId?: string | null;
-  subAccount?: { id: string; name: string } | null;
-  account?: { id: string; name: string; color: string } | null;
-  notes?: string | null;
-  accountId?: string | null;
-  transferToAccount?: { id: string; name: string; color: string } | null;
-  isTransferCounterpart?: boolean;
-  transferFromAccount?: { id: string; name: string; color: string } | null;
-}
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  icon?: string | null;
-  balance: number;
-  isHighYield: boolean;
-  yieldPercentage?: number | null;
-  isShared: boolean;
-  subAccounts: SubAccount[];
-  sharedUsers: Array<{
-    id: string;
-    user: { name: string; email: string };
-  }>;
-  transactions: Transaction[];
-}
 
 const subTypeLabels: Record<string, string> = {
   pocket: "Bolsillo",
@@ -138,11 +94,6 @@ const subTypeLabels: Record<string, string> = {
   savings_box: "Cajita",
   other: "Otro",
 };
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
 
 export function AccountDetail() {
   const { setFinanceSubView } = useAppStore();

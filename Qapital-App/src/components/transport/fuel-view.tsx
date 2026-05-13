@@ -16,24 +16,9 @@ import {
 } from "@/components/ui/select";
 import { Plus, Fuel, TrendingDown, BarChart3 } from "lucide-react";
 import { motion } from "framer-motion";
+import type { Vehicle, FuelLog } from "@/lib/types";
 
-interface Vehicle {
-  id: string;
-  name: string;
-  type: string;
-}
-
-interface FuelLog {
-  id: string;
-  vehicleId: string;
-  date: string;
-  km: number;
-  amount: number;
-  pricePerGallon: number;
-  gallons: number;
-  isFullTank: boolean;
-  notes?: string | null;
-}
+type FuelLogWithVehicle = FuelLog & { vehicleId: string };
 
 interface FuelViewProps {
   onSelectVehicle: (id: string) => void;
@@ -54,7 +39,7 @@ const itemVariants = {
 
 export function FuelView({ onSelectVehicle }: FuelViewProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [fuelLogs, setFuelLogs] = useState<FuelLog[]>([]);
+  const [fuelLogs, setFuelLogs] = useState<FuelLogWithVehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterVehicle, setFilterVehicle] = useState<string>("all");
   const [showFuelLogForm, setShowFuelLogForm] = useState(false);
@@ -65,7 +50,7 @@ export function FuelView({ onSelectVehicle }: FuelViewProps) {
       setVehicles(vehiclesData);
 
       // Fetch fuel logs for all vehicles
-      const allLogs: FuelLog[] = [];
+      const allLogs: FuelLogWithVehicle[] = [];
       for (const v of vehiclesData) {
         try {
           const logs = await apiFetch<FuelLog[]>(`/api/vehicles/${v.id}/fuel-logs`);

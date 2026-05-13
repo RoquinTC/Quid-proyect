@@ -37,11 +37,7 @@ import {
   FolderClosed,
 } from "lucide-react";
 import { toast } from "sonner";
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
+import type { CategoryData } from "@/lib/types";
 
 interface CategoriesByType {
   income: CategoryData[];

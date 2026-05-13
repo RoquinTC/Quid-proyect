@@ -8,35 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, Bike } from "lucide-react";
 import { motion } from "framer-motion";
+import type { Vehicle } from "@/lib/types";
 
-interface Vehicle {
-  id: string;
-  name: string;
-  type: string;
-  brand?: string | null;
-  model?: string | null;
-  year?: number | null;
-  color?: string | null;
-  tankCapacity?: number | null;
-  fuelType?: string | null;
-  currentKm: number;
-  fuelLogs: Array<{
-    id: string;
-    date: string;
-    km: number;
-    amount: number;
-    pricePerGallon: number;
-    gallons: number;
-  }>;
-  maintenanceRecords: Array<{
-    id: string;
-    type: string;
-    description: string;
-    km: number;
-    nextDueKm?: number | null;
-    nextDueDate?: string | null;
-  }>;
-}
+type VehicleWithDetails = Vehicle & {
+  fuelLogs: Array<{ id: string; date: string; km: number; amount: number; pricePerGallon: number; gallons: number }>;
+  maintenanceRecords: Array<{ id: string; type: string; description: string; km: number; nextDueKm?: number | null; nextDueDate?: string | null }>;
+};
 
 interface VehiclesViewProps {
   onSelectVehicle: (id: string) => void;
@@ -56,14 +33,14 @@ const itemVariants = {
 };
 
 export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [showVehicleForm, setShowVehicleForm] = useState(false);
-  const [editVehicle, setEditVehicle] = useState<Vehicle | null>(null);
+  const [editVehicle, setEditVehicle] = useState<VehicleWithDetails | null>(null);
 
   const fetchVehicles = useCallback(async () => {
     try {
-      const data = await apiFetch<Vehicle[]>("/api/vehicles");
+      const data = await apiFetch<VehicleWithDetails[]>("/api/vehicles");
       setVehicles(data);
     } catch (error) {
       console.error("Error fetching vehicles:", error);

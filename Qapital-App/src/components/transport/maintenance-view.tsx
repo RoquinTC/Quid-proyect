@@ -27,26 +27,9 @@ import {
   Clock,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import type { Vehicle, MaintenanceRecord } from "@/lib/types";
 
-interface Vehicle {
-  id: string;
-  name: string;
-  type: string;
-  currentKm: number;
-}
-
-interface MaintenanceRecord {
-  id: string;
-  vehicleId: string;
-  type: string;
-  description: string;
-  cost: number;
-  km: number;
-  date: string;
-  nextDueKm?: number | null;
-  nextDueDate?: string | null;
-  reminderEnabled: boolean;
-}
+type MaintenanceRecordWithVehicle = MaintenanceRecord & { vehicleId: string };
 
 interface MaintenanceViewProps {
   onSelectVehicle: (id: string) => void;
@@ -94,7 +77,7 @@ const itemVariants = {
 
 export function MaintenanceView({ onSelectVehicle }: MaintenanceViewProps) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [records, setRecords] = useState<MaintenanceRecord[]>([]);
+  const [records, setRecords] = useState<MaintenanceRecordWithVehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterVehicle, setFilterVehicle] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
@@ -105,7 +88,7 @@ export function MaintenanceView({ onSelectVehicle }: MaintenanceViewProps) {
       const vehiclesData = await apiFetch<Vehicle[]>("/api/vehicles");
       setVehicles(vehiclesData);
 
-      const allRecords: MaintenanceRecord[] = [];
+      const allRecords: MaintenanceRecordWithVehicle[] = [];
       for (const v of vehiclesData) {
         try {
           const recs = await apiFetch<MaintenanceRecord[]>(`/api/vehicles/${v.id}/maintenance`);

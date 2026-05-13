@@ -24,21 +24,8 @@ import {
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency } from "@/lib/api";
 import { Loader2, Briefcase, Calendar, TrendingUp, Plus, X, Check } from "lucide-react";
+import type { Account, CategoryData } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  balance: number;
-  subAccounts: Array<{ id: string; name: string; balance: number }>;
-}
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
 
 interface PayrollGroupData {
   id: string;

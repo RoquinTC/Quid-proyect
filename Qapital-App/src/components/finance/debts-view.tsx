@@ -9,34 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, CreditCard, Landmark } from "lucide-react";
 import { motion } from "framer-motion";
-
-interface Installment {
-  id: string;
-  description: string;
-  totalAmount: number;
-  totalInstallments: number;
-  currentInstallment: number;
-  installmentAmount: number;
-  isPaid: boolean;
-  nextPaymentDate: string;
-}
-
-interface Debt {
-  id: string;
-  type: string;
-  name: string;
-  color: string;
-  icon?: string | null;
-  bank?: string | null;
-  totalAmount: number;
-  currentBalance: number;
-  interestRate?: number | null;
-  cutoffDate?: number | null;
-  paymentDate?: number | null;
-  monthlyPayment?: number | null;
-  remainingPayments?: number | null;
-  installments: Installment[];
-}
+import type { Debt, Installment } from "@/lib/types";
 
 const containerVariants = {
   hidden: { opacity: 0 },

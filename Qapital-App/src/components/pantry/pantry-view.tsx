@@ -12,20 +12,7 @@ import { Plus, Search, Package, AlertTriangle, Refrigerator } from "lucide-react
 import { motion, AnimatePresence } from "framer-motion";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown } from "lucide-react";
-
-interface PantryItem {
-  id: string;
-  name: string;
-  category: string | null;
-  quantity: number;
-  unit: string;
-  expirationDate: string | null;
-  purchaseDate: string | null;
-  purchasePrice: number | null;
-  minStock: number | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { PantryItem } from "@/lib/types";
 
 const categories = [
   { value: "dairy", label: "Lácteos", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },

@@ -21,14 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch, getColombiaTodayString } from "@/lib/api";
+import type { Vehicle } from "@/lib/types";
 import { Loader2 } from "lucide-react";
-
-interface Vehicle {
-  id: string;
-  name: string;
-  type: string;
-  currentKm: number;
-}
 
 interface MaintenanceFormProps {
   open: boolean;

@@ -24,19 +24,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { formatDate } from "@/lib/api";
+import type { MedicalAppointment } from "@/lib/types";
 
-interface Appointment {
-  id: string;
-  doctorName?: string | null;
-  specialty?: string | null;
-  location?: string | null;
-  date: string;
-  notes?: string | null;
-  reminderEnabled: boolean;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-}
+type Appointment = MedicalAppointment;
 
 const containerVariants = {
   hidden: { opacity: 0 },

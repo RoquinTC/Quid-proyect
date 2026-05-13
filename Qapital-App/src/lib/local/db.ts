@@ -1,14 +1,8 @@
 import Dexie, { type Table } from 'dexie';
+import type { SyncStatus, SyncMeta, MutationOperation, MutationQueueEntry, SyncMetaRecord } from '@/lib/types/sync';
 
-// ─── Sync Metadata added to every local record ───
-
-export type SyncStatus = 'synced' | 'pending_create' | 'pending_update' | 'pending_delete' | 'conflict';
-
-export interface SyncMeta {
-  _syncStatus: SyncStatus;
-  _version: number;
-  _lastModified: number;
-}
+// Re-export for backward compatibility (other files import from here)
+export type { SyncStatus, SyncMeta, MutationOperation, MutationQueueEntry, SyncMetaRecord };
 
 // ─── Local Record Types ───
 
@@ -101,6 +95,12 @@ export interface LocalDebt extends SyncMeta {
   paymentDate?: number | null;
   monthlyPayment?: number | null;
   remainingPayments?: number | null;
+  paymentType?: string | null;
+  otherCharges?: number | null;
+  category?: string | null;
+  subCategory?: string | null;
+  accountId?: string | null;
+  subAccountId?: string | null;
   startDate?: string | null;
   endDate?: string | null;
   createdAt: string;
@@ -438,35 +438,7 @@ export interface LocalSharedAccountUser extends SyncMeta {
   createdAt: string;
 }
 
-// ─── Mutation Queue Entry ───
-
-export type MutationOperation = 'create' | 'update' | 'delete' | 'complex';
-
-export interface MutationQueueEntry {
-  id: string;
-  operation: MutationOperation;
-  tableName: string;
-  recordId: string;
-  payload: string;
-  apiRoute?: string;
-  apiMethod?: string;
-  snapshot?: string;
-  sequence: number;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  retryCount: number;
-  error?: string;
-  createdAt: number;
-  updatedAt: number;
-  groupId?: string;
-}
-
-// ─── Sync Metadata Table ───
-
-export interface SyncMetaRecord {
-  key: string;
-  value: string;
-  updatedAt: number;
-}
+// MutationOperation, MutationQueueEntry, and SyncMetaRecord are now imported from @/lib/types/sync
 
 // ─── Dexie Database Class ───
 

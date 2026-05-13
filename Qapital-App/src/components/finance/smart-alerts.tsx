@@ -5,28 +5,13 @@ import { apiFetch, formatCurrency } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 import { AlertTriangle, Clock, CreditCard, TrendingUp } from "lucide-react";
 import { motion } from "framer-motion";
+import type { Budget, RecurringPayment } from "@/lib/types";
 
 interface Alert {
   id: string;
   type: "overdue" | "budget_limit" | "yield_ready";
   message: string;
   action: () => void;
-}
-
-interface Budget {
-  id: string;
-  type: string;
-  category: string;
-  amount: number;
-  spent: number;
-}
-
-interface RecurringPayment {
-  id: string;
-  description: string;
-  amount: number;
-  status: string;
-  scheduledDate: string;
 }
 
 export function SmartAlerts() {

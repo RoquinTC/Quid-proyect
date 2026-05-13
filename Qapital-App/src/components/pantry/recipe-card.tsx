@@ -15,14 +15,10 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import type { Ingredient as BaseIngredient, Recipe as BaseRecipe } from "@/lib/types";
 
-interface Ingredient {
-  name: string;
-  quantity: string;
-  inPantry: boolean;
-}
-
-interface Recipe {
+type Ingredient = BaseIngredient & { inPantry: boolean };
+type Recipe = Omit<BaseRecipe, 'id' | 'ingredients' | 'instructions' | 'cookingTime' | 'servings'> & {
   name: string;
   ingredients: Ingredient[];
   instructions: string[];
@@ -30,7 +26,7 @@ interface Recipe {
   servings: number;
   difficulty: string;
   compatible: boolean;
-}
+};
 
 interface RecipeCardProps {
   recipe: Recipe;

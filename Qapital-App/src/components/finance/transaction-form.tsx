@@ -28,30 +28,9 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, ArrowUpRight, ArrowDownRight, Repeat, PiggyBank, Plus, X, Check } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
+import type { CategoryData, SubAccount, Account } from "@/lib/types";
 
 const quickAmounts = [10000, 20000, 50000, 100000];
-
-interface SubAccount {
-  id: string;
-  name: string;
-  type: string;
-  balance: number;
-  color?: string | null;
-}
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  balance: number;
-  subAccounts: SubAccount[];
-}
 
 interface TransactionFormProps {
   open: boolean;

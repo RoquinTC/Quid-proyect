@@ -9,32 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, TrendingUp, Receipt, Lightbulb, Loader2 } from "lucide-react";
 import { getCurrentBudgetPeriod } from "@/lib/holidays";
-
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  description: string;
-  category?: string | null;
-  subCategory?: string | null;
-  date: string;
-  excludeFromBudget?: boolean;
-}
-
-interface Budget {
-  id: string;
-  type: string;
-  category: string;
-  subCategory?: string | null;
-  amount: number;
-  spent: number;
-  period: string;
-}
-
-interface UserSettings {
-  budgetCutoffDay: number;
-  respectHolidays: boolean;
-}
+import type { Transaction, Budget, UserSettings } from "@/lib/types";
 
 interface BudgetDetailProps {
   budgetId?: string;

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Landmark, Clock, TrendingUp, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
+import type { CDT } from "@/lib/types";
 
 interface CDTGoal {
   id: string;
@@ -23,27 +24,10 @@ interface CDTAccount {
   color: string;
 }
 
-interface CDT {
-  id: string;
-  bank: string;
-  amount: number;
-  effectiveRate: number;
-  startDate: string;
-  endDate: string;
-  termDays: number;
-  interestEarned: number;
-  status: string;
-  goalId: string | null;
-  accountId: string | null;
-  withdrawnAmount: number | null;
-  withdrawnDate: string | null;
-  notes: string | null;
-  color: string;
-  createdAt: string;
-  updatedAt: string;
+type CDTWithRelations = CDT & {
   goal: CDTGoal | null;
   account: CDTAccount | null;
-}
+};
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -81,14 +65,14 @@ function calculateTimeProgress(startDate: string, endDate: string): number {
 }
 
 export function CDTView() {
-  const [cdts, setCDTs] = useState<CDT[]>([]);
+  const [cdts, setCDTs] = useState<CDTWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editCDT, setEditCDT] = useState<CDT | null>(null);
+  const [editCDT, setEditCDT] = useState<CDTWithRelations | null>(null);
 
   const fetchCDTs = useCallback(async () => {
     try {
-      const data = await apiFetch<CDT[]>("/api/cdts");
+      const data = await apiFetch<CDTWithRelations[]>("/api/cdts");
       setCDTs(data);
     } catch (error) {
       console.error("Error fetching CDTs:", error);
@@ -113,7 +97,7 @@ export function CDTView() {
     0
   );
 
-  const handleCardClick = (cdt: CDT) => {
+  const handleCardClick = (cdt: CDTWithRelations) => {
     setEditCDT(cdt);
     setShowForm(true);
   };

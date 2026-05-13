@@ -39,11 +39,7 @@ import {
   TrendingUp,
   PiggyBank,
 } from "lucide-react";
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
+import type { CategoryData, Account, SubAccount, Debt } from "@/lib/types";
 
 const frequencyOptions = [
   { value: "monthly", label: "Mensual", desc: "1 vez al mes" },
@@ -70,31 +66,6 @@ const frequencyMultiplier: Record<string, number> = {
   yearly: 1,
   one_time: 1,
 };
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  balance: number;
-  subAccounts?: SubAccount[];
-}
-
-interface SubAccount {
-  id: string;
-  name: string;
-  type: string;
-  balance: number;
-  color?: string | null;
-}
-
-interface Debt {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  currentBalance: number;
-}
 
 interface RecurringPaymentData {
   id: string;

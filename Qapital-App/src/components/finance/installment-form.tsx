@@ -21,26 +21,7 @@ import {
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency, getColombiaTodayString, toColombiaDateString } from "@/lib/api";
 import { Loader2, Wallet, Info, AlertTriangle } from "lucide-react";
-
-interface Account {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  balance: number;
-  subAccounts: Array<{
-    id: string;
-    name: string;
-    balance: number;
-    color?: string | null;
-    order: number;
-  }>;
-}
-
-interface CategoryData {
-  name: string;
-  subcategories: string[];
-}
+import type { Account, CategoryData } from "@/lib/types";
 
 interface EditInstallment {
   id: string;

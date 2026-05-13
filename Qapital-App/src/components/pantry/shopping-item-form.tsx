@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
+import type { PantryItem } from "@/lib/types";
 import { Loader2, Sparkles } from "lucide-react";
 
 const unitOptions = [
@@ -33,14 +34,6 @@ const unitOptions = [
   { value: "bottle", label: "Botella" },
   { value: "can", label: "Lata" },
 ];
-
-interface PantryItem {
-  id: string;
-  name: string;
-  quantity: number;
-  unit: string;
-  minStock: number | null;
-}
 
 interface ShoppingItemFormProps {
   open: boolean;
