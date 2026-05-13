@@ -221,8 +221,8 @@ export function AccountDetail() {
     const cycle = getCycleDates(budgetCutoffDay, cycleOffset);
     const params = new URLSearchParams();
     params.set("accountId", selectedAccountId);
-    params.set("startDate", cycle.start.toISOString().split("T")[0]);
-    params.set("endDate", cycle.end.toISOString().split("T")[0]);
+    params.set("startDate", toColombiaDateString(cycle.start));
+    params.set("endDate", toColombiaDateString(cycle.end));
     if (cursor) params.set("cursor", cursor);
     params.set("pageSize", "50");
 
@@ -263,6 +263,13 @@ export function AccountDetail() {
     }
   }, [fetchTransactions, settingsLoaded, selectedAccountId]);
 
+  // Re-fetch sub-account transactions when cycle changes
+  useEffect(() => {
+    if (expandedSubAccount) {
+      fetchSubTransactions(expandedSubAccount);
+    }
+  }, [fetchSubTransactions, expandedSubAccount]);
+
   const fetchCategories = useCallback(async () => {
     try {
       const data = await apiFetch<Record<string, CategoryData[]>>(`/api/categories?type=${editType}`);
@@ -280,12 +287,17 @@ export function AccountDetail() {
 
   const fetchSubTransactions = useCallback(async (subAccountId: string) => {
     try {
-      const data = await apiFetch<{ transactions: Transaction[]; nextCursor: string | null }>(`/api/transactions?subAccountId=${subAccountId}`);
+      const cycle = getCycleDates(budgetCutoffDay, cycleOffset);
+      const params = new URLSearchParams();
+      params.set("subAccountId", subAccountId);
+      params.set("startDate", toColombiaDateString(cycle.start));
+      params.set("endDate", toColombiaDateString(cycle.end));
+      const data = await apiFetch<{ transactions: Transaction[]; nextCursor: string | null }>(`/api/transactions?${params}`);
       setSubTransactions((prev) => ({ ...prev, [subAccountId]: data.transactions ?? [] }));
     } catch (error) {
       console.error("Error fetching sub-account transactions:", error);
     }
-  }, []);
+  }, [budgetCutoffDay, cycleOffset]);
 
   const handleExpandSubAccount = (subId: string) => {
     if (expandedSubAccount === subId) {

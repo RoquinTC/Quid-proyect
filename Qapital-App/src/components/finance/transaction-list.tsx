@@ -278,8 +278,8 @@ export function TransactionList({ accountId }: TransactionListProps) {
       else setLoadingMore(true);
 
       const cycle = getCycleDates(budgetCutoffDay, cycleOffset);
-      const startDateStr = cycle.start.toISOString().split("T")[0];
-      const endDateStr = cycle.end.toISOString().split("T")[0];
+      const startDateStr = toColombiaDateString(cycle.start);
+      const endDateStr = toColombiaDateString(cycle.end);
 
       const params = new URLSearchParams();
       params.set("startDate", startDateStr);
