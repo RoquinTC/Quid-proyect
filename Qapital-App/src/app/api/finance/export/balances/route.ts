@@ -162,10 +162,9 @@ export async function GET() {
     wsTransferencias["!cols"] = [{ wch: 14 }, { wch: 30 }, { wch: 16 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 25 }];
     XLSX.utils.book_append_sheet(wb, wsTransferencias, "Transferencias");
 
-    // ===== Sheet 5: Deudas =====
+    // ===== Sheet 5: Deudas (Resumen) =====
     if (debts.length > 0) {
       const summaryHeaders = ["Deuda", "Tipo", "Banco", "Monto Total", "Saldo Actual", "Cuota Mensual", "Pagos Restantes", "Tasa Interés"];
-      const now = new Date();
 
       const wsDeudas = XLSX.utils.aoa_to_sheet([
         summaryHeaders,
@@ -182,6 +181,32 @@ export async function GET() {
       ]);
       wsDeudas["!cols"] = [{ wch: 22 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }];
       XLSX.utils.book_append_sheet(wb, wsDeudas, "Deudas");
+
+      // ===== Sheet 6: Detalle Cuotas =====
+      const detailHeaders = ["Deuda", "Compra", "Cuota #", "Total Cuotas", "Fecha Próx. Pago", "Monto Cuota", "Pagado", "Saldo Restante", "Estado"];
+      const detailRows: (string | number)[][] = [];
+
+      for (const debt of debts) {
+        for (const inst of debt.installments) {
+          detailRows.push([
+            debt.name,
+            inst.description,
+            inst.currentInstallment,
+            inst.totalInstallments,
+            toColombiaDateString(inst.nextPaymentDate),
+            toNumber(inst.installmentAmount),
+            toNumber(inst.paidAmount),
+            inst.remainingBalance ? toNumber(inst.remainingBalance) : "",
+            inst.isPaid ? "Pagada" : "Pendiente",
+          ]);
+        }
+      }
+
+      if (detailRows.length > 0) {
+        const wsDetail = XLSX.utils.aoa_to_sheet([detailHeaders, ...detailRows]);
+        wsDetail["!cols"] = [{ wch: 22 }, { wch: 25 }, { wch: 10 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 12 }];
+        XLSX.utils.book_append_sheet(wb, wsDetail, "Detalle Cuotas");
+      }
     }
 
     // Generate buffer
