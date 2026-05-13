@@ -42,7 +42,7 @@ import {
   X,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { RecurringPayment } from "@/lib/types";
+import type { RecurringPayment, PayrollGroup } from "@/lib/types";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -104,24 +104,6 @@ function getMonthLabel(monthKey: string): string {
   return date.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
 }
 
-interface PayrollGroupItem {
-  id: string;
-  description: string;
-  frequency: string;
-  totalAmount: number;
-  accountId: string;
-  subAccountId: string | null;
-  category: string;
-  subCategory: string | null;
-  adjustToBusinessDay: boolean;
-  businessDayDirection: string;
-  schedules: string;
-  isActive: boolean;
-  account: { id: string; name: string; color: string } | null;
-  subAccount: { id: string; name: string } | null;
-  recurringPayments: Array<{ id: string; scheduledDate: string; status: string }>;
-}
-
 export function RecurringView() {
   const [payments, setPayments] = useState<RecurringPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,7 +121,7 @@ export function RecurringView() {
   const [reverseLoading, setReverseLoading] = useState<string | null>(null);
   const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
   const [showPayrollForm, setShowPayrollForm] = useState(false);
-  const [editingPayrollGroup, setEditingPayrollGroup] = useState<PayrollGroupItem | null>(null);
+  const [editingPayrollGroup, setEditingPayrollGroup] = useState<PayrollGroup | null>(null);
 
   // Scope dialog state (for edit/delete recurring series)
   const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
@@ -148,7 +130,7 @@ export function RecurringView() {
   const [scopeLoading, setScopeLoading] = useState(false);
 
   // Payroll groups
-  const [payrollGroups, setPayrollGroups] = useState<PayrollGroupItem[]>([]);
+  const [payrollGroups, setPayrollGroups] = useState<PayrollGroup[]>([]);
 
   // Multi-select batch confirm state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -174,7 +156,7 @@ export function RecurringView() {
 
   const fetchPayrollGroups = useCallback(async () => {
     try {
-      const data = await apiFetch<PayrollGroupItem[]>("/api/payroll");
+      const data = await apiFetch<PayrollGroup[]>("/api/payroll");
       setPayrollGroups(data);
     } catch (error) {
       console.error("Error fetching payroll groups:", error);

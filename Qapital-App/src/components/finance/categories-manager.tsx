@@ -37,12 +37,7 @@ import {
   FolderClosed,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { CategoryData } from "@/lib/types";
-
-interface CategoriesByType {
-  income: CategoryData[];
-  expense: CategoryData[];
-}
+import type { CategoryData, CategoriesByType } from "@/lib/types";
 
 export function CategoriesManager() {
   const [categories, setCategories] = useState<CategoriesByType>({ income: [], expense: [] });

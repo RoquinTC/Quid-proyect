@@ -17,7 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { apiFetch, formatCurrency, calculateCDTInterest, getCDTBreakdown, getCurrentCDTInterest, getDaysBetween, calculateCDTReteFuente, getColombiaTodayString, toColombiaDateString } from "@/lib/api";
 import { Loader2, TrendingUp, Landmark, Link2, Banknote } from "lucide-react";
-import type { SubAccount } from "@/lib/types";
+import type { SubAccount, CDTGoal, CDTAccount, CDT } from "@/lib/types";
 
 const colorOptions = [
   "#14B8A6", "#0D9488", "#10B981", "#22C55E",
@@ -33,47 +33,11 @@ const termPresets = [
   { value: 360, label: "360 días" },
 ];
 
-interface CDTGoal {
-  id: string;
-  name: string;
-  targetAmount: number;
-  currentAmount: number;
-}
-
-interface CDTAccount {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  balance: number;
-  subAccounts: SubAccount[];
-}
-
-interface CDTData {
-  id: string;
-  bank: string;
-  amount: number;
-  effectiveRate: number;
-  startDate: string;
-  endDate: string;
-  termDays: number;
-  interestEarned: number;
-  status: string;
-  goalId: string | null;
-  accountId: string | null;
-  withdrawnAmount: number | null;
-  withdrawnDate: string | null;
-  notes: string | null;
-  color: string;
-  goal: CDTGoal | null;
-  account: CDTAccount | null;
-}
-
 interface CDTFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
-  editCDT?: CDTData | null;
+  editCDT?: (CDT & { goal?: CDTGoal | null; account?: CDTAccount | null }) | null;
 }
 
 export function CDTForm({ open, onOpenChange, onSuccess, editCDT }: CDTFormProps) {

@@ -8,21 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Landmark, Clock, TrendingUp, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
-import type { CDT } from "@/lib/types";
-
-interface CDTGoal {
-  id: string;
-  name: string;
-  targetAmount: number;
-  currentAmount: number;
-}
-
-interface CDTAccount {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-}
+import type { CDT, CDTGoal, CDTAccount } from "@/lib/types";
 
 type CDTWithRelations = CDT & {
   goal: CDTGoal | null;

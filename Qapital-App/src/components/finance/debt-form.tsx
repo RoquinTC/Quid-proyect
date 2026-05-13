@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency } from "@/lib/api";
 import { Loader2, Trash2, Pipette, Info, Plus, X, Check } from "lucide-react";
-import type { CategoryData } from "@/lib/types";
+import type { CategoryData, Account } from "@/lib/types";
 
 const colorPalette = [
   // Reds / Pinks
@@ -55,15 +55,6 @@ const paymentTypes = [
   { value: "fixed", label: "Cuota Fija", description: "Amortización francesa — mismo valor cada mes" },
   { value: "variable", label: "Cuota Variable", description: "El valor de la cuota cambia cada periodo" },
 ];
-
-interface AccountOption {
-  id: string;
-  name: string;
-  type: string;
-  color: string;
-  balance: number;
-  subAccounts: Array<{ id: string; name: string; balance: number; color?: string | null; order: number }>;
-}
 
 interface DebtFormProps {
   open: boolean;
@@ -122,7 +113,7 @@ export function DebtForm({ open, onOpenChange, onSuccess, editDebt }: DebtFormPr
   const [loanAccountId, setLoanAccountId] = useState("");
   const [loanSubAccountId, setLoanSubAccountId] = useState("");
   const [categories, setCategories] = useState<CategoryData[]>([]);
-  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [newSubCategory, setNewSubCategory] = useState("");
   const [showNewSubCategory, setShowNewSubCategory] = useState(false);
 
@@ -214,7 +205,7 @@ export function DebtForm({ open, onOpenChange, onSuccess, editDebt }: DebtFormPr
       apiFetch<Record<string, CategoryData[]>>(`/api/categories?type=expense`).then(data => {
         setCategories(data.expense || []);
       }).catch(console.error);
-      apiFetch<AccountOption[]>('/api/accounts').then(data => {
+      apiFetch<Account[]>('/api/accounts').then(data => {
         setAccounts(data || []);
       }).catch(console.error);
     }

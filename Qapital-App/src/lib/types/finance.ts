@@ -225,6 +225,10 @@ export interface PayrollGroup {
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
+  // Nested relations (included when API expands them)
+  account?: { id: string; name: string; color: string } | null;
+  subAccount?: { id: string; name: string } | null;
+  recurringPayments?: Array<{ id: string; scheduledDate: string; status: string }>;
 }
 
 // ─── SavingsGoal ───
@@ -295,6 +299,22 @@ export interface SavingsGoalAccount {
 
 // ─── CDT ───
 
+export interface CDTGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+}
+
+export interface CDTAccount {
+  id: string;
+  name: string;
+  type: string;
+  color: string;
+  balance?: number;
+  subAccounts?: SubAccount[];
+}
+
 export interface CDT {
   id: string;
   bank: string;
@@ -336,6 +356,11 @@ export interface YieldRecord {
 export interface CategoryData {
   name: string;
   subcategories: string[];
+}
+
+export interface CategoriesByType {
+  income: CategoryData[];
+  expense: CategoryData[];
 }
 
 // ─── Monthly Summary (API response) ───

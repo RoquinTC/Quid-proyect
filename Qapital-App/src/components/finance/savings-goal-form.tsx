@@ -15,19 +15,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format'
 import { apiFetch } from '@/lib/api'
-import type { SubAccount, Account } from '@/lib/types'
-
-interface CDTRecord {
-  id: string
-  amount: number
-  termDays: number
-  effectiveRate: number
-  startDate: string
-  endDate: string
-  bank?: string
-  status: string
-  goalId?: string | null
-}
+import type { SubAccount, Account, CDT } from '@/lib/types'
 
 interface LinkedAccountItem {
   accountId: string
@@ -95,7 +83,7 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
 
   // Data
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [cdts, setCDTs] = useState<CDTRecord[]>([])
+  const [cdts, setCDTs] = useState<CDT[]>([])
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -294,7 +282,7 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
 
   const loadCDTs = async () => {
     try {
-      const data = await apiFetch<CDTRecord[]>('/api/cdts')
+      const data = await apiFetch<CDT[]>('/api/cdts')
       setCDTs(data)
     } catch (e) {
       console.error('Error loading CDTs:', e)
@@ -363,7 +351,7 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
     try {
       const startDate = new Date()
       const endDate = new Date(Date.now() + newCDTTerm * 24 * 60 * 60 * 1000)
-      const cdt = await apiFetch<CDTRecord>('/api/cdts', {
+      const cdt = await apiFetch<CDT>('/api/cdts', {
         method: 'POST',
         body: JSON.stringify({
           amount,

@@ -24,32 +24,14 @@ import {
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency } from "@/lib/api";
 import { Loader2, Briefcase, Calendar, TrendingUp, Plus, X, Check } from "lucide-react";
-import type { Account, CategoryData } from "@/lib/types";
+import type { Account, CategoryData, PayrollGroup } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
-
-interface PayrollGroupData {
-  id: string;
-  description: string;
-  frequency: string;
-  totalAmount: number;
-  accountId: string;
-  subAccountId: string | null;
-  category: string;
-  subCategory: string | null;
-  adjustToBusinessDay: boolean;
-  businessDayDirection: string;
-  schedules: string;
-  isActive: boolean;
-  account: { id: string; name: string; color: string } | null;
-  subAccount: { id: string; name: string } | null;
-  recurringPayments: Array<{ id: string; scheduledDate: string; status: string }>;
-}
 
 interface PayrollFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
-  editingGroup?: PayrollGroupData | null;
+  editingGroup?: PayrollGroup | null;
 }
 
 const frequencyOptions = [

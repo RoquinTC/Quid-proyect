@@ -21,28 +21,13 @@ import {
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency, getColombiaTodayString, toColombiaDateString } from "@/lib/api";
 import { Loader2, Wallet, Info, AlertTriangle } from "lucide-react";
-import type { Account, CategoryData } from "@/lib/types";
-
-interface EditInstallment {
-  id: string;
-  description: string;
-  totalAmount: number;
-  totalInstallments: number;
-  currentInstallment: number;
-  installmentAmount: number;
-  paidAmount: number;
-  purchaseDate: string;
-  accountId?: string | null;
-  subAccountId?: string | null;
-  category?: string | null;
-  subCategory?: string | null;
-}
+import type { Account, CategoryData, Installment } from "@/lib/types";
 
 interface InstallmentFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   debtId: string;
-  editInstallment?: EditInstallment | null;
+  editInstallment?: Installment | null;
   onSuccess?: () => void;
 }
 
