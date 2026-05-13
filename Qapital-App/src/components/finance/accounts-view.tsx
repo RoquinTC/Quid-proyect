@@ -872,7 +872,7 @@ export function AccountsView() {
                     Disponible para Gastar
                   </span>
                 </div>
-                <ExportMenu type="balances" variant="onGradient" />
+                <ExportMenu variant="onGradient" />
               </div>
               <p className="text-3xl font-bold tracking-tight">
                 {formatCurrency(availableBalance)}

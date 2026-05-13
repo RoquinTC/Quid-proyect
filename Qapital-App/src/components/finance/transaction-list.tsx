@@ -60,7 +60,6 @@ import {
 import { toast } from "sonner";
 import type { Transaction, SubAccount, Account, CategoryData, UserSettings } from "@/lib/types";
 import { CategoryBreakdown } from "./category-breakdown";
-import { ExportMenu } from "./export-menu";
 
 // Color config per transaction type
 const typeConfig = {
@@ -589,19 +588,6 @@ export function TransactionList({ accountId }: TransactionListProps) {
             </button>
           </div>
 
-          {/* Export */}
-          <ExportMenu
-            type="transactions"
-            filters={{
-              startDate: toColombiaDateString(cycle.start),
-              endDate: toColombiaDateString(cycle.end),
-              accountId: filterAccountId,
-              category: filterCategory,
-              type: filterType,
-            }}
-            hasActiveFilters={activeFilterCount > 0}
-            className="shrink-0"
-          />
         </div>
       </div>
 

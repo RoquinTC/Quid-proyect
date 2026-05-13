@@ -8,7 +8,6 @@ import { DebtForm } from "./debt-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, CreditCard, Landmark } from "lucide-react";
-import { ExportMenu } from "./export-menu";
 import { motion } from "framer-motion";
 import type { Debt, Installment } from "@/lib/types";
 
@@ -85,7 +84,6 @@ export function DebtsView() {
                 <CreditCard className="size-4 text-rose-200" />
                 <span className="text-sm text-rose-100">Deuda Total</span>
               </div>
-              <ExportMenu type="debts" variant="onGradient" />
             </div>
             <p className="text-3xl font-bold tracking-tight">
               {formatCurrency(totalDebt)}
