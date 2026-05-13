@@ -589,18 +589,6 @@ export function TransactionList({ accountId }: TransactionListProps) {
             </button>
           </div>
 
-          {/* Export */}
-          <ExportMenu
-            type="transactions"
-            filters={{
-              startDate: toColombiaDateString(cycle.start),
-              endDate: toColombiaDateString(cycle.end),
-              accountId: filterAccountId,
-              category: filterCategory,
-              type: filterType,
-            }}
-            hasActiveFilters={activeFilterCount > 0}
-          />
         </div>
       </div>
 
@@ -631,6 +619,17 @@ export function TransactionList({ accountId }: TransactionListProps) {
                   </button>
                 )}
               </div>
+              <ExportMenu
+                type="transactions"
+                filters={{
+                  startDate: toColombiaDateString(cycle.start),
+                  endDate: toColombiaDateString(cycle.end),
+                  accountId: filterAccountId,
+                  category: filterCategory,
+                  type: filterType,
+                }}
+                hasActiveFilters={activeFilterCount > 0}
+              />
               <Button
                 variant="outline"
                 size="sm"
