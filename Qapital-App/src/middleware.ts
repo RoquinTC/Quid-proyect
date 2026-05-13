@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
-import createIntlMiddleware from "next-intl/middleware";
-import { routing } from "@/i18n/routing";
 
 // ---------------------------------------------------------------------------
 // Rate Limiting — sliding window counter (in-memory, per user/IP)
@@ -75,26 +73,16 @@ const PUBLIC_ROUTES = [
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
-// [12] Internationalization middleware
-const intlMiddleware = createIntlMiddleware(routing);
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // API routes: auth + rate limiting
-  if (pathname.startsWith("/api/")) {
-    return apiMiddleware(request);
+  // Only process API routes (auth + rate limiting)
+  // Page routes pass through — intl middleware will be activated when
+  // the app is restructured with [locale] route segment in the future.
+  if (!pathname.startsWith("/api/")) {
+    return NextResponse.next();
   }
-
-  // Page routes: intl middleware (locale detection)
-  return intlMiddleware(request);
-}
-
-// ---------------------------------------------------------------------------
-// API Middleware — auth + rate limiting
-// ---------------------------------------------------------------------------
-async function apiMiddleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
 
   // Allow public routes (still apply lighter rate limiting below)
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
@@ -171,6 +159,5 @@ async function apiMiddleware(request: NextRequest) {
 }
 
 export const config = {
-  // Match all routes except static files, _next, and other internal paths
-  matcher: ["/((?!_next|.*\\..*).*)"],
+  matcher: ["/api/:path*"],
 };
