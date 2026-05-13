@@ -542,7 +542,7 @@ export function TransactionList({ accountId }: TransactionListProps) {
   return (
     <div className="space-y-4">
       {/* Cycle Navigator + View Mode Toggle */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm px-1 py-1">
           <button
             onClick={() => setCycleOffset((prev) => prev - 1)}
@@ -589,6 +589,19 @@ export function TransactionList({ accountId }: TransactionListProps) {
             </button>
           </div>
 
+          {/* Export */}
+          <ExportMenu
+            type="transactions"
+            filters={{
+              startDate: toColombiaDateString(cycle.start),
+              endDate: toColombiaDateString(cycle.end),
+              accountId: filterAccountId,
+              category: filterCategory,
+              type: filterType,
+            }}
+            hasActiveFilters={activeFilterCount > 0}
+            className="shrink-0"
+          />
         </div>
       </div>
 
@@ -619,17 +632,6 @@ export function TransactionList({ accountId }: TransactionListProps) {
                   </button>
                 )}
               </div>
-              <ExportMenu
-                type="transactions"
-                filters={{
-                  startDate: toColombiaDateString(cycle.start),
-                  endDate: toColombiaDateString(cycle.end),
-                  accountId: filterAccountId,
-                  category: filterCategory,
-                  type: filterType,
-                }}
-                hasActiveFilters={activeFilterCount > 0}
-              />
               <Button
                 variant="outline"
                 size="sm"
