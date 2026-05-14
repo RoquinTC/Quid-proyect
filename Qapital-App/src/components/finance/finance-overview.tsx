@@ -30,7 +30,9 @@ import {
   ChevronDown,
   GripVertical,
   RotateCcw,
+  User as UserIcon,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { useAppStore } from "@/lib/store";
 import { formatCurrency, apiFetch, calcPercentage, getColombiaNow, parseLocalDate } from "@/lib/api";
 import { motion } from "framer-motion";
@@ -409,6 +411,7 @@ function WidgetCustomizationDialog({
 // ============================================================
 
 export function FinanceOverview() {
+  const { data: session } = useSession();
   const { setFinanceSubView } = useAppStore();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -1223,6 +1226,14 @@ export function FinanceOverview() {
                                               />
                                               <span className="text-[9px] text-violet-500 dark:text-violet-400">
                                                 {tx.subAccount.name}
+                                              </span>
+                                            </span>
+                                          )}
+                                          {tx.user && tx.user.name && tx.userId && tx.userId !== session?.user?.id && (
+                                            <span className="inline-flex items-center gap-0.5 bg-emerald-50 dark:bg-emerald-900/20 rounded px-1 py-px">
+                                              <UserIcon className="size-2" />
+                                              <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                                {tx.user.name}
                                               </span>
                                             </span>
                                           )}

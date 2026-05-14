@@ -40,7 +40,9 @@ import {
   Settings2,
   GripVertical,
   RotateCcw,
+  User as UserIcon,
 } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { ExportMenu } from "./export-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -522,6 +524,7 @@ function SortableSheetItem({
 // ============================================
 
 export function AccountsView() {
+  const { data: session } = useSession();
   const { setFinanceSubView } = useAppStore();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -1311,6 +1314,14 @@ export function AccountsView() {
                                       />
                                       <span className="text-[9px] text-violet-500 dark:text-violet-400">
                                         {tx.subAccount.name}
+                                      </span>
+                                    </span>
+                                  )}
+                                  {tx.user && tx.user.name && tx.userId && tx.userId !== session?.user?.id && (
+                                    <span className="inline-flex items-center gap-0.5 bg-emerald-50 dark:bg-emerald-900/20 rounded px-1 py-px">
+                                      <UserIcon className="size-2" />
+                                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                        {tx.user.name}
                                       </span>
                                     </span>
                                   )}
