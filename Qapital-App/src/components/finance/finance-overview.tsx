@@ -844,6 +844,9 @@ export function FinanceOverview() {
                   <HealthScoreWidget
                     monthlyIncome={monthlyIncome}
                     monthlyExpenses={monthlyExpenses}
+                    monthlyDebtPayments={expenseBudgets
+                      .filter((b) => b.category === "Deudas")
+                      .reduce((sum, b) => sum + Number(b.spent), 0)}
                     totalDebt={debts.reduce((sum, d) => sum + d.currentBalance, 0)}
                     totalBalance={totalBalance}
                   />

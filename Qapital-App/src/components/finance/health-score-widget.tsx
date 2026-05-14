@@ -27,6 +27,7 @@ interface HealthScoreResult {
 interface HealthScoreWidgetProps {
   monthlyIncome: number;
   monthlyExpenses: number;
+  monthlyDebtPayments: number;
   totalDebt: number;
   totalBalance: number;
 }
@@ -38,6 +39,7 @@ interface HealthScoreWidgetProps {
 function calculateHealthScore({
   monthlyIncome,
   monthlyExpenses,
+  monthlyDebtPayments,
   totalDebt,
   totalBalance,
 }: HealthScoreWidgetProps): HealthScoreResult {
@@ -51,8 +53,17 @@ function calculateHealthScore({
     };
   }
 
+  // ── IMPORTANT: Separate living expenses from debt payments ──
+  // Debt payments (category "Deudas") are already measured by the Debt/Income
+  // indicator. Including them in "expenses" would double-count:
+  //   once as expense → hurts Savings ratio
+  //   once as debt balance → hurts Debt ratio
+  // So we calculate Savings based on living expenses ONLY.
+  const livingExpenses = monthlyExpenses - monthlyDebtPayments;
+
   // ── 1. Savings Ratio (ahorro / ingreso) ──
-  const monthlySavings = monthlyIncome - monthlyExpenses;
+  // Uses living expenses only (debt payments measured separately)
+  const monthlySavings = monthlyIncome - livingExpenses;
   const savingsRatio = monthlySavings / monthlyIncome; // 0..1 (can be negative)
   let savingsScore: number;
   let savingsStatus: "healthy" | "warning" | "danger";
@@ -101,6 +112,8 @@ function calculateHealthScore({
   }
 
   // ── 3. Runway Days (días de colchón) ──
+  // Uses ALL expenses (including debt payments) because if you lose income,
+  // you still need to make debt payments to survive.
   const dailyExpenses = monthlyExpenses / 30;
   const runwayDays = dailyExpenses > 0 ? Math.floor(totalBalance / dailyExpenses) : 0;
   let runwayScore: number;
@@ -318,6 +331,7 @@ function IndicatorIcon({ id }: { id: string }) {
 export function HealthScoreWidget({
   monthlyIncome,
   monthlyExpenses,
+  monthlyDebtPayments,
   totalDebt,
   totalBalance,
 }: HealthScoreWidgetProps) {
@@ -326,10 +340,11 @@ export function HealthScoreWidget({
       calculateHealthScore({
         monthlyIncome,
         monthlyExpenses,
+        monthlyDebtPayments,
         totalDebt,
         totalBalance,
       }),
-    [monthlyIncome, monthlyExpenses, totalDebt, totalBalance]
+    [monthlyIncome, monthlyExpenses, monthlyDebtPayments, totalDebt, totalBalance]
   );
 
   // Not enough data to show
