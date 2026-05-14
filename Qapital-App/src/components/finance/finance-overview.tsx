@@ -431,11 +431,24 @@ export function FinanceOverview() {
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
   // Widget configuration with localStorage persistence
+  // Merges new default widgets into saved config so new features appear automatically
   const [widgetConfig, setWidgetConfig] = useState<WidgetConfig[]>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(WIDGET_STORAGE_KEY);
       if (saved) {
-        try { return JSON.parse(saved); } catch { /* fall through */ }
+        try {
+          const parsed = JSON.parse(saved) as WidgetConfig[];
+          // Merge: add any new widgets from DEFAULT_WIDGETS that aren't in saved config
+          const savedIds = new Set(parsed.map((w) => w.id));
+          const maxOrder = parsed.reduce((max, w) => Math.max(max, w.order), -1);
+          const newWidgets = DEFAULT_WIDGETS
+            .filter((dw) => !savedIds.has(dw.id))
+            .map((dw, i) => ({ ...dw, order: maxOrder + 1 + i }));
+          if (newWidgets.length > 0) {
+            return [...parsed, ...newWidgets];
+          }
+          return parsed;
+        } catch { /* fall through */ }
       }
     }
     return DEFAULT_WIDGETS;
