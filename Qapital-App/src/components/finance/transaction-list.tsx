@@ -45,6 +45,7 @@ import {
   LayoutList,
   FolderTree,
   SlidersHorizontal,
+  User as UserIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -58,6 +59,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 import type { Transaction, SubAccount, Account, CategoryData, UserSettings } from "@/lib/types";
 import { CategoryBreakdown } from "./category-breakdown";
 
@@ -219,6 +221,7 @@ interface TransactionListProps {
 type ViewMode = "list" | "category";
 
 export function TransactionList({ accountId }: TransactionListProps) {
+  const { data: session } = useSession();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
@@ -849,10 +852,11 @@ export function TransactionList({ accountId }: TransactionListProps) {
                                       </div>
                                     </>
                                   )}
-                                  {tx.user && tx.user.name && (
+                                  {tx.user && tx.user.name && tx.userId && tx.userId !== session?.user?.id && (
                                     <>
                                       <span className="text-[10px] text-gray-300">·</span>
-                                      <span className="text-[10px] text-blue-500 dark:text-blue-400 font-medium">
+                                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-0.5">
+                                        <UserIcon className="size-2.5" />
                                         {tx.user.name}
                                       </span>
                                     </>
@@ -935,10 +939,11 @@ export function TransactionList({ accountId }: TransactionListProps) {
                                             </span>
                                           </div>
                                         )}
-                                        {tx.user && tx.user.name && (
+                                        {tx.user && tx.user.name && tx.userId && tx.userId !== session?.user?.id && (
                                           <div>
                                             <span className="text-[10px] text-gray-400 uppercase tracking-wider">Creado por</span>
-                                            <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1">
+                                              <UserIcon className="size-3" />
                                               {tx.user.name}
                                             </span>
                                           </div>
