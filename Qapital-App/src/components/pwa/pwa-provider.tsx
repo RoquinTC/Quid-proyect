@@ -5,6 +5,7 @@ import { useServiceWorker } from './use-service-worker';
 import { InstallPrompt } from './install-prompt';
 import { UpdateNotification } from './update-notification';
 import { OfflineIndicator } from './offline-indicator';
+import { RecurringReminder } from './recurring-reminder';
 
 export function PWAProvider({ children }: { children: React.ReactNode }) {
   const { updateAvailable, isOffline, applyUpdate, isSupported } = useServiceWorker();
@@ -18,7 +19,12 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
 
   // Don't render PWA features if not supported
   if (!isSupported) {
-    return <>{children}</>;
+    return (
+      <>
+        {children}
+        <RecurringReminder />
+      </>
+    );
   }
 
   return (
@@ -31,6 +37,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
         onApplyUpdate={applyUpdate}
         onDismiss={handleDismissUpdate}
       />
+      <RecurringReminder />
     </>
   );
 }

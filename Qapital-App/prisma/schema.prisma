@@ -48,6 +48,7 @@ model User {
   sentInvitations     AccountInvitation[]  @relation("SentInvitations")
   receivedInvitations AccountInvitation[]  @relation("ReceivedInvitations")
   notifications       AppNotification[]
+  pushSubscriptions   PushSubscription[]
 }
 
 // ============================================
@@ -148,7 +149,7 @@ model AccountInvitation {
 model AppNotification {
   id          String    @id @default(cuid())
   userId      String    // Who receives the notification
-  type        String    // invitation_sent, invitation_received, invitation_accepted, invitation_rejected, shared_transaction, member_removed, role_changed
+  type        String    // invitation_sent, invitation_received, invitation_accepted, invitation_rejected, shared_transaction, member_removed, role_changed, recurring_due
   title       String
   message     String
   read        Boolean   @default(false)
@@ -725,6 +726,25 @@ model Category {
 
   @@unique([userId, type, name])
   @@map("custom_categories")
+}
+
+// ============================================
+// PUSH NOTIFICATIONS
+// ============================================
+
+model PushSubscription {
+  id          String   @id @default(cuid())
+  userId      String
+  endpoint    String   @unique
+  p256dh      String   // Client public key
+  auth        String   // Client auth secret
+  userAgent   String?  // Browser/device info
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
 }
 
 // ============================================

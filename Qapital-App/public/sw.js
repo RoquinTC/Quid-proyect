@@ -206,32 +206,116 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Handle push notifications (future: Fase 2)
+// Handle push notifications
 self.addEventListener('push', (event) => {
+  let data = {
+    title: 'Qapital',
+    body: 'Tienes una nueva notificación',
+    icon: '/icon-192.png',
+    badge: '/icon-maskable-192.png',
+    url: '/',
+    type: 'general',
+  };
+
   if (event.data) {
-    const data = event.data.json();
-    event.waitUntil(
-      self.registration.showNotification(data.title || 'Qapital', {
-        body: data.body || '',
-        icon: '/icon-192.png',
-        badge: '/icon-maskable-192.png',
-        data: data.url || '/',
-      })
-    );
+    try {
+      data = { ...data, ...event.data.json() };
+    } catch (e) {
+      data.body = event.data.text();
+    }
   }
+
+  // Customize notification appearance based on type
+  let image;
+  let actions;
+
+  switch (data.type) {
+    case 'shared_transaction':
+      actions = [
+        { action: 'view', title: 'Ver movimiento' },
+        { action: 'dismiss', title: 'Descartar' },
+      ];
+      break;
+    case 'invitation_received':
+      actions = [
+        { action: 'accept', title: 'Aceptar' },
+        { action: 'reject', title: 'Rechazar' },
+      ];
+      break;
+    case 'recurring_due':
+      actions = [
+        { action: 'view', title: 'Ver pagos' },
+        { action: 'dismiss', title: 'Recordar después' },
+      ];
+      break;
+    default:
+      actions = [
+        { action: 'view', title: 'Abrir' },
+        { action: 'dismiss', title: 'Descartar' },
+      ];
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: data.icon || '/icon-192.png',
+      badge: data.badge || '/icon-maskable-192.png',
+      image,
+      data: {
+        url: data.url || '/',
+        type: data.type,
+        notificationData: data.data || {},
+      },
+      actions,
+      vibrate: [100, 50, 100],
+      tag: `qapital-${data.type}-${Date.now()}`,
+      renotify: true,
+      requireInteraction: data.type === 'invitation_received',
+    })
+  );
 });
 
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+
+  const action = event.action;
+  const notifData = event.notification.data || {};
+  const url = notifData.url || '/';
+  const type = notifData.type || 'general';
+
+  // If user dismissed, do nothing
+  if (action === 'dismiss') return;
+
+  // For accept/reject actions on invitations, we need to make API calls
+  if (type === 'invitation_received' && notifData.notificationData) {
+    const invitationId = notifData.notificationData.invitationId;
+    if (action === 'accept' && invitationId) {
+      // Accept the invitation via API
+      fetch(`/api/invitations/${invitationId}/accept`, { method: 'POST' })
+        .then(() => console.log('[SW] Invitation accepted'))
+        .catch((err) => console.error('[SW] Error accepting invitation:', err));
+    } else if (action === 'reject' && invitationId) {
+      fetch(`/api/invitations/${invitationId}/reject`, { method: 'POST' })
+        .then(() => console.log('[SW] Invitation rejected'))
+        .catch((err) => console.error('[SW] Error rejecting invitation:', err));
+    }
+  }
+
+  // Open/focus the app at the appropriate URL
   event.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
-      // Focus existing window or open new one
-      const existingClient = clients.find((c) => c.url.includes(self.location.origin));
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      // Focus existing window if open
+      const existingClient = clients.find((c) =>
+        c.url.includes(self.location.origin)
+      );
       if (existingClient) {
+        // Navigate to the relevant page
+        existingClient.navigate(url);
         return existingClient.focus();
       }
-      return self.clients.openWindow(event.notification.data || '/');
+      // No existing window, open new one
+      return self.clients.openWindow(url);
     })
   );
 });

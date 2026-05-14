@@ -6,6 +6,7 @@ import { getColombiaNow, createColombiaDate, getColombiaTodayString } from "@/li
 import { verifyEntityOwnership } from "@/lib/auth-guards";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, transactionCreateSchema } from "@/lib/validations";
+import { createAndPushNotification } from "@/lib/push";
 
 export async function GET(req: NextRequest) {
   try {
@@ -416,14 +417,14 @@ export async function POST(req: NextRequest) {
             ...(ownerUserId ? [ownerUserId] : []),
           ];
           for (const uid of notifyUserIds) {
-            await db.appNotification.create({
-              data: {
-                userId: uid,
-                type: "shared_transaction",
-                title: "Nuevo movimiento",
-                message: `${session.user.name} agregó un movimiento en la cuenta compartida "${accountInfo.name}"`,
-                data: JSON.stringify({ accountId, transactionId: transaction.id, transactionType: type }),
-              },
+            await createAndPushNotification({
+              userId: uid,
+              type: "shared_transaction",
+              title: "Nuevo movimiento",
+              message: `${session.user.name} agregó un movimiento en la cuenta compartida "${accountInfo.name}"`,
+              pushBody: `${session.user.name}: movimiento en "${accountInfo.name}"`,
+              data: { accountId, transactionId: transaction.id, transactionType: type },
+              url: `/?account=${accountId}`,
             });
           }
         }

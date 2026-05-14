@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { createAndPushNotification } from "@/lib/push";
 
 export async function POST(
   req: NextRequest,
@@ -124,18 +125,18 @@ export async function POST(
       },
     });
 
-    // Create notification for the invitee
-    await db.appNotification.create({
+    // Create notification for the invitee (+ push)
+    await createAndPushNotification({
+      userId: targetUser.id,
+      type: "invitation_received",
+      title: "Invitación a cuenta compartida",
+      message: `${inviter?.name || "Alguien"} te ha invitado a compartir la cuenta '${account.name}'`,
+      pushBody: `${inviter?.name || "Alguien"} te invitó a compartir "${account.name}"`,
       data: {
-        userId: targetUser.id,
-        type: "invitation_received",
-        title: "Invitación a cuenta compartida",
-        message: `${inviter?.name || "Alguien"} te ha invitado a compartir la cuenta '${account.name}'`,
-        data: JSON.stringify({
-          accountId,
-          invitationId: invitation.id,
-        }),
+        accountId,
+        invitationId: invitation.id,
       },
+      url: "/",
     });
 
     // Set account as shared

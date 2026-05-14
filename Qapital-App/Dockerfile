@@ -15,6 +15,11 @@ COPY . .
 ARG NEXTAUTH_SECRET=build-time-dummy-not-used-in-production
 ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 
+# VAPID public key needs to be baked into the client bundle at build time.
+# The private key is only used at runtime and comes from docker-compose.
+ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
+
 RUN npx prisma generate
 RUN npm run build
 

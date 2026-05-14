@@ -3,12 +3,21 @@ services:
     build:
       context: ./Qapital-App
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
     ports:
       - "5678:3000"
     environment:
       - DATABASE_URL=file:/data/db/custom.db
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
+<<<<<<< HEAD
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:5678}
+=======
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:qapital@app.com}
+>>>>>>> f2cda447d39775c76e12daf33fed3547e2103bed
     volumes:
       - ./Qapital-App/db:/data/db
     restart: unless-stopped

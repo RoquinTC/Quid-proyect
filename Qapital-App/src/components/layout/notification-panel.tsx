@@ -24,6 +24,7 @@ import {
   ArrowDownRight,
   CheckCheck,
   Loader2,
+  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -88,6 +89,8 @@ function getNotificationIcon(type: string, data: Record<string, any> | null) {
       return { Icon: UserMinus, color: "text-amber-500", bg: "bg-amber-50" };
     case "role_changed":
       return { Icon: Shield, color: "text-purple-500", bg: "bg-purple-50" };
+    case "recurring_due":
+      return { Icon: CalendarClock, color: "text-blue-500", bg: "bg-blue-50" };
     default:
       return { Icon: Bell, color: "text-muted-foreground", bg: "bg-muted" };
   }
