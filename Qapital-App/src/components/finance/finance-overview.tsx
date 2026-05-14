@@ -50,6 +50,7 @@ import {
 import type { Account, SubAccount, Transaction, Budget, Debt, RecurringPayment, MonthlyData, MonthlySummaryResponse } from "@/lib/types";
 import { ExpenseHeatmap } from "./expense-heatmap";
 import { WaterfallChart } from "./waterfall-chart";
+import { HealthScoreWidget } from "./health-score-widget";
 
 // ============================================================
 // WIDGET CONFIGURATION
@@ -64,14 +65,15 @@ interface WidgetConfig {
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: "balance", title: "Balance", visible: true, order: 0 },
-  { id: "waterfall", title: "Gráfico de Cascada", visible: true, order: 1 },
-  { id: "evolution", title: "Evolución Financiera", visible: true, order: 2 },
-  { id: "cashflow", title: "Proyección de Flujo de Caja", visible: true, order: 3 },
-  { id: "expenses", title: "Tus Gastos", visible: true, order: 4 },
-  { id: "heatmap", title: "Mapa de Gastos", visible: true, order: 5 },
-  { id: "budgets", title: "Progreso de Presupuestos", visible: true, order: 6 },
-  { id: "transactions", title: "Transacciones Recientes", visible: true, order: 7 },
-  { id: "bills", title: "Próximos Pagos", visible: true, order: 8 },
+  { id: "health-score", title: "Salud Financiera", visible: true, order: 1 },
+  { id: "waterfall", title: "Gráfico de Cascada", visible: true, order: 2 },
+  { id: "evolution", title: "Evolución Financiera", visible: true, order: 3 },
+  { id: "cashflow", title: "Proyección de Flujo de Caja", visible: true, order: 4 },
+  { id: "expenses", title: "Tus Gastos", visible: true, order: 5 },
+  { id: "heatmap", title: "Mapa de Gastos", visible: true, order: 6 },
+  { id: "budgets", title: "Progreso de Presupuestos", visible: true, order: 7 },
+  { id: "transactions", title: "Transacciones Recientes", visible: true, order: 8 },
+  { id: "bills", title: "Próximos Pagos", visible: true, order: 9 },
 ];
 
 const WIDGET_STORAGE_KEY = "qapital-finance-widgets";
@@ -830,6 +832,21 @@ export function FinanceOverview() {
                       </div>
                     </CardContent>
                   </Card>
+                </motion.div>
+              );
+
+            // ============================================================
+            // HEALTH SCORE
+            // ============================================================
+            case "health-score":
+              return (
+                <motion.div key="health-score" variants={itemVariants}>
+                  <HealthScoreWidget
+                    monthlyIncome={monthlyIncome}
+                    monthlyExpenses={monthlyExpenses}
+                    totalDebt={debts.reduce((sum, d) => sum + d.currentBalance, 0)}
+                    totalBalance={totalBalance}
+                  />
                 </motion.div>
               );
 
