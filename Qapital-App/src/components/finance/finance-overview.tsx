@@ -590,9 +590,15 @@ export function FinanceOverview() {
   }, [monthlySummary]);
 
   // Expense breakdown (Tus Gastos)
+  // Excludes "Deudas" category — loan payments are shown separately in the Waterfall
+  // chart and Health Score. Including them here would double-count because CC purchases
+  // already appear under their own categories (Alimentación, Transporte, etc.) and
+  // loan payments are tracked as "Deudas" budget which is handled separately.
   const expenseByCategory = useMemo(() => {
     const categoryMap = new Map<string, { name: string; amount: number; color: string; emoji: string }>();
     for (const b of expenseBudgets) {
+      // Skip "Deudas" — it's shown separately in Waterfall and Health Score
+      if (b.category === "Deudas") continue;
       const existing = categoryMap.get(b.category);
       if (existing) {
         existing.amount += b.spent;
@@ -682,7 +688,12 @@ export function FinanceOverview() {
   }, [expenseBudgets]);
 
   // ── Waterfall chart computed values ──
-  const FIXED_CATEGORIES = new Set(["Vivienda", "Servicios", "Suscripciones", "Deudas"]);
+  // NOTE: "Deudas" is EXCLUDED from FIXED_CATEGORIES because CC purchases are already
+  // counted in their own categories (Alimentación, Transporte, etc.) via budget installments.
+  // Only LOAN payments create actual "Deudas" expense transactions, and those are
+  // measured separately in the Health Score as monthlyDebtPayments.
+  // Including "Deudas" here would double-count: once in the purchase category, once here.
+  const FIXED_CATEGORIES = new Set(["Vivienda", "Servicios", "Suscripciones"]);
 
   const fixedExpenses = useMemo(() =>
     expenseBudgets
@@ -693,7 +704,19 @@ export function FinanceOverview() {
 
   const variableExpenses = useMemo(() =>
     expenseBudgets
-      .filter((b) => !FIXED_CATEGORIES.has(b.category))
+      .filter((b) => !FIXED_CATEGORIES.has(b.category) && b.category !== "Deudas")
+      .reduce((sum, b) => sum + Number(b.spent), 0),
+    [expenseBudgets]
+  );
+
+  // ── Monthly debt payments (loan payments only) ──
+  // CC purchases are already counted in their own budget categories via installments.
+  // Loan payments create "expense" transactions with category "Deudas".
+  // We extract this separately so the Health Score can use livingExpenses (without loan payments)
+  // for the Savings Ratio, and include them for the Runway Days calculation.
+  const monthlyDebtPayments = useMemo(() =>
+    expenseBudgets
+      .filter((b) => b.category === "Deudas")
       .reduce((sum, b) => sum + Number(b.spent), 0),
     [expenseBudgets]
   );
@@ -857,9 +880,7 @@ export function FinanceOverview() {
                   <HealthScoreWidget
                     monthlyIncome={monthlyIncome}
                     monthlyExpenses={monthlyExpenses}
-                    monthlyDebtPayments={expenseBudgets
-                      .filter((b) => b.category === "Deudas")
-                      .reduce((sum, b) => sum + Number(b.spent), 0)}
+                    monthlyDebtPayments={monthlyDebtPayments}
                     totalDebt={debts.reduce((sum, d) => sum + d.currentBalance, 0)}
                     totalBalance={totalBalance}
                   />
@@ -879,7 +900,7 @@ export function FinanceOverview() {
                         Gráfico de Cascada
                       </CardTitle>
                       <p className="text-[10px] text-gray-400 mt-0.5">
-                        Saldo inicial → Ingresos → Gastos → Saldo final
+                        Saldo inicial → Ingresos → Gastos → Deudas → Saldo final
                       </p>
                     </CardHeader>
                     <CardContent className="px-3 pb-4">
@@ -888,6 +909,7 @@ export function FinanceOverview() {
                         income={monthlyIncome}
                         fixedExpenses={fixedExpenses}
                         variableExpenses={variableExpenses}
+                        debtPayments={monthlyDebtPayments}
                       />
                     </CardContent>
                   </Card>

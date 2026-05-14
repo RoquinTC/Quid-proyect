@@ -408,26 +408,37 @@ export async function POST(
       });
 
       // 3. Update budget spent if category matches
-      const categoryToMatch = payment.category || "Deudas";
-      const subCatToMatch = payment.subCategory || null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let budget: any = null;
-      if (subCatToMatch) {
-        budget = await db.budget.findFirst({
-          where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },
-        });
+      // IMPORTANT: For credit cards (not loans), we do NOT update the budget here because
+      // the recalculate route counts CC installments via Source B (installments with purchaseDate
+      // in period). Updating the budget here would cause double-counting:
+      //   once here (direct increment) + once via recalculate (Source B).
+      // For loans, budget IS updated because loan installments are NOT counted by recalculate
+      // Source B (it only counts CC installments, not loan installments).
+      const isLoan = payment.debt?.type === "loan";
+      if (isLoan) {
+        const categoryToMatch = payment.category || "Deudas";
+        const subCatToMatch = payment.subCategory || null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let budget: any = null;
+        if (subCatToMatch) {
+          budget = await db.budget.findFirst({
+            where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },
+          });
+        }
+        if (!budget) {
+          budget = await db.budget.findFirst({
+            where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: "expense" },
+          });
+        }
+        if (budget) {
+          await db.budget.update({
+            where: { id: budget.id },
+            data: { spent: { increment: confirmedAmount } },
+          });
+        }
       }
-      if (!budget) {
-        budget = await db.budget.findFirst({
-          where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: "expense" },
-        });
-      }
-      if (budget) {
-        await db.budget.update({
-          where: { id: budget.id },
-          data: { spent: { increment: confirmedAmount } },
-        });
-      }
+      // For CC: NO budget update — budget was already updated when the purchase was made
+      // (recalculate Source B counts CC installments)
     } else if (payment.type === "income") {
       // ============================================
       // INCOME TYPE — (Payroll / Nómina)

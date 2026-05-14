@@ -22,6 +22,7 @@ interface WaterfallChartProps {
   income: number;
   fixedExpenses: number;
   variableExpenses: number;
+  debtPayments?: number; // Loan payments only (CC purchases already counted in categories)
 }
 
 interface WaterfallDataPoint {
@@ -77,8 +78,9 @@ export function WaterfallChart({
   income,
   fixedExpenses,
   variableExpenses,
+  debtPayments = 0,
 }: WaterfallChartProps) {
-  const finalBalance = initialBalance + income - fixedExpenses - variableExpenses;
+  const finalBalance = initialBalance + income - fixedExpenses - variableExpenses - debtPayments;
 
   // Build waterfall data points
   const data = useMemo<WaterfallDataPoint[]>(() => {
@@ -135,10 +137,11 @@ export function WaterfallChart({
     }
 
     // 4. - Gastos Variables — bar goes DOWN from previous total
+    const afterVariable = afterFixed - variableExpenses;
     if (variableExpenses >= 0) {
       points.push({
         name: "- Gastos Variables",
-        base: afterFixed - variableExpenses,
+        base: afterVariable,
         value: variableExpenses,
         color: "#F59E0B",
         rawValue: -variableExpenses,
@@ -153,7 +156,19 @@ export function WaterfallChart({
       });
     }
 
-    // 5. = Saldo Final — full bar from 0 (result)
+    // 5. - Pago Deudas (loan payments) — only if there are debt payments
+    const afterDebt = afterVariable - debtPayments;
+    if (debtPayments > 0) {
+      points.push({
+        name: "- Pago Deudas",
+        base: afterDebt,
+        value: debtPayments,
+        color: "#A855F7",
+        rawValue: -debtPayments,
+      });
+    }
+
+    // 6. = Saldo Final — full bar from 0 (result)
     if (finalBalance >= 0) {
       points.push({
         name: "= Saldo Final",
@@ -175,7 +190,7 @@ export function WaterfallChart({
     }
 
     return points;
-  }, [initialBalance, income, fixedExpenses, variableExpenses, finalBalance]);
+  }, [initialBalance, income, fixedExpenses, variableExpenses, debtPayments, finalBalance]);
 
   // Compute Y axis domain
   const allValues = data.flatMap((d) => [d.base, d.base + d.value]);
@@ -196,6 +211,7 @@ export function WaterfallChart({
     { name: "Ingresos", color: "#10B981" },
     { name: "Gastos Fijos", color: "#F43F5E" },
     { name: "Gastos Variables", color: "#F59E0B" },
+    ...(debtPayments > 0 ? [{ name: "Pago Deudas", color: "#A855F7" }] : []),
     {
       name: "Saldo Final",
       color: finalBalance >= 0 ? "#8B5CF6" : "#EF4444",
