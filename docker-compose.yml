@@ -4,11 +4,11 @@ services:
       context: ./Qapital-App
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "5678:3000"
     environment:
       - DATABASE_URL=file:/data/db/custom.db
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:5678}
     volumes:
       - ./Qapital-App/db:/data/db
     restart: unless-stopped
@@ -49,6 +49,6 @@ services:
     container_name: aura-ollama-setup
     volumes:
       - ./ollama-setup.sh:/ollama-setup.sh
-    entrypoint: ["/bin/sh", "/ollama-setup.sh"]
+    entrypoint: [ "/bin/sh", "/ollama-setup.sh" ]
     depends_on:
       - ollama
