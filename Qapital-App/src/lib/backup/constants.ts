@@ -173,7 +173,7 @@ export interface BackupTransaction {
   isRecurring: boolean;
   notes: string | null;
   relatedTransactionId: string | null;
-  excludeFromBudget: boolean;
+  excludeFromBudget: boolean | null;
   createdAt: string;
   updatedAt: string;
 }

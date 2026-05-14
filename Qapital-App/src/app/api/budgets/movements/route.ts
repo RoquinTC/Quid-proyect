@@ -81,6 +81,7 @@ export async function GET(req: NextRequest) {
         ],
       });
     } else {
+      // No subCategory filter: match ALL transactions in this category
       txWhere.category = category;
     }
 
@@ -131,6 +132,8 @@ export async function GET(req: NextRequest) {
           { category, subCategory: null },
         ];
       } else {
+        // No subCategory filter: match ALL installments in this category
+        // regardless of their subCategory
         instWhere.category = category;
       }
 

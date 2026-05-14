@@ -65,6 +65,9 @@ export async function POST() {
       getColombiaNow()
     );
 
+    // Consistent date range: same end boundary for both transactions and installments
+    const periodEndPlus = new Date(periodEnd.getTime() + 24 * 60 * 60 * 1000);
+
     console.log(`[Recalculate] Period: ${periodStart.toISOString()} to ${periodEnd.toISOString()} (cutoff day: ${cutoffDay})`);
 
     // Get all budgets
@@ -82,7 +85,7 @@ export async function POST() {
     for (const budget of regularBudgets) {
       let totalSpent = 0;
 
-      // Source A: Direct transactions (expense or income) from accounts
+      // ── Source A: Direct transactions (expense or income) from accounts ──
       // Exclude "transfer" type — CC payments are transfers, not new expenses
       //
       // IMPORTANT: We use AND with OR sub-conditions instead of top-level
@@ -91,7 +94,7 @@ export async function POST() {
       // Manual transactions have sourceModule=NULL, so they would be silently dropped.
       const txWhereClause: Record<string, unknown> = {
         userId,
-        date: { gte: periodStart, lt: new Date(periodEnd.getTime() + 24 * 60 * 60 * 1000) },
+        date: { gte: periodStart, lt: periodEndPlus },
         type: budget.type, // "expense" or "income"
         AND: [
           // Include sourceModule=NULL (manual) and anything that isn't "finance_transfer"
@@ -122,12 +125,13 @@ export async function POST() {
         });
       } else {
         // For parent budgets (no subCategory): sum ALL transactions in that category
+        // regardless of their subCategory
         txWhereClause.category = budget.category;
       }
 
       const transactions = await db.transaction.findMany({
         where: txWhereClause,
-        select: { amount: true, type: true },
+        select: { amount: true, type: true, id: true, description: true, category: true, subCategory: true, date: true },
       });
 
       // Only count non-transfer transactions
@@ -137,7 +141,9 @@ export async function POST() {
         }
       }
 
-      // Source B: Credit card installments with purchaseDate in the current period
+      console.log(`[Recalculate] ${budget.type}:${budget.category}${budget.subCategory ? `/${budget.subCategory}` : ""} — Source A (transactions): ${transactions.length} txs, total: ${transactions.reduce((s, t) => s + (t.type !== "transfer" ? toNumber(t.amount) : 0), 0)}`);
+
+      // ── Source B: Credit card installments with purchaseDate in the current period ──
       // These represent spending committed via TC — the money is already "spent" at
       // purchase time regardless of whether the CC bill has been paid.
       // We include BOTH paid and unpaid CC installments because:
@@ -145,12 +151,15 @@ export async function POST() {
       //     never counts CC purchases — Source B is the only source for CC spending.
       //   - Loans are excluded because their payment creates "expense" transactions
       //     that are already counted by Source A.
+      //   - CRITICAL: Must filter by userId via the debt relation to only count
+      //     this user's CC installments.
       if (budget.type === "expense") {
         const installmentWhereClause: Record<string, unknown> = {
           purchaseDate: { gte: periodStart, lte: periodEnd },
           // Include BOTH paid and unpaid CC installments
           // Exclude loan installments (their expense transactions are counted in Source A)
-          debt: { type: { not: "loan" } },
+          // CRITICAL FIX: Include userId in debt filter to scope to this user only
+          debt: { type: { not: "loan" }, userId },
         };
 
         if (budget.subCategory) {
@@ -160,17 +169,24 @@ export async function POST() {
             { category: budget.category, subCategory: null },
           ];
         } else {
-          installmentWhereClause.category = budget.category;
+          // For parent budgets (no subCategory): match installments with this category
+          // regardless of subCategory, PLUS installments with no subCategory
+          installmentWhereClause.OR = [
+            { category: budget.category },
+            { category: budget.category, subCategory: null },
+          ];
         }
 
         const installments = await db.installment.findMany({
           where: installmentWhereClause,
-          select: { installmentAmount: true },
+          select: { installmentAmount: true, id: true, description: true, category: true, subCategory: true, purchaseDate: true },
         });
 
         for (const inst of installments) {
           totalSpent += toNumber(inst.installmentAmount);
         }
+
+        console.log(`[Recalculate] ${budget.type}:${budget.category}${budget.subCategory ? `/${budget.subCategory}` : ""} — Source B (installments): ${installments.length} installments, total: ${installments.reduce((s, i) => s + toNumber(i.installmentAmount), 0)}`);
       }
 
       await db.budget.update({

@@ -72,7 +72,7 @@ export interface Transaction {
   sourceModule?: string | null;
   sourceId?: string | null;
   relatedTransactionId?: string | null;
-  excludeFromBudget?: boolean;
+  excludeFromBudget?: boolean | null;
   // Denormalized relation objects from API
   account?: { id: string; name: string; color: string } | null;
   subAccount?: { id: string; name: string; color?: string | null } | null;

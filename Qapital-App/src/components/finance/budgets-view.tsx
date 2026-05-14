@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { apiFetch, formatCurrency, calcPercentage, toColombiaDateString } from "@/lib/api";
+import { apiFetch, formatCurrency, calcPercentage } from "@/lib/api";
 import { BudgetForm } from "./budget-form";
 import { TransactionForm } from "./transaction-form";
 import { SpendingIncomeChart } from "./spending-income-chart";
@@ -48,6 +48,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   CreditCard as TCCard,
+  Filter,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -103,15 +106,16 @@ const categoryIcons: Record<string, typeof DollarSign> = {
   Freelance: Briefcase,
   Inversiones: DollarSign,
   Ventas: DollarSign,
+  Mercado: Receipt,
 };
 
 const containerVariants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.05 } },
+  show: { opacity: 1, transition: { staggerChildren: 0.04 } },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 10 },
+  hidden: { opacity: 0, y: 8 },
   show: { opacity: 1, y: 0 },
 };
 
@@ -127,7 +131,15 @@ function getProgressBg(percentage: number): string {
   return "bg-emerald-100 dark:bg-emerald-900/30";
 }
 
-// ── Tab type ──
+function getProgressText(percentage: number): string {
+  if (percentage >= 90) return "text-red-600 dark:text-red-400";
+  if (percentage >= 75) return "text-amber-600 dark:text-amber-400";
+  return "text-emerald-600 dark:text-emerald-400";
+}
+
+// ── Filter types ──
+type BudgetFilter = "all" | "risk" | "ok";
+type ViewMode = "compact" | "cards";
 type BudgetTab = "expenses" | "income";
 
 // ── Main Component ──
@@ -148,8 +160,10 @@ export function BudgetsView() {
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [recalculating, setRecalculating] = useState(false);
   const [activeTab, setActiveTab] = useState<BudgetTab>("expenses");
+  const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("compact");
 
-  // Movement drill-down state (now uses the movements API with installments)
+  // Movement drill-down state
   const [categoryMovements, setCategoryMovements] = useState<Record<string, BudgetMovement[]>>({});
   const [loadingMovements, setLoadingMovements] = useState<Record<string, boolean>>({});
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -233,7 +247,6 @@ export function BudgetsView() {
       });
       setBudgets(data);
       fetchUnbudgeted();
-      // Clear cached movements
       setCategoryMovements({});
       setExpandedCategories({});
       toast.success("Presupuestos recalculados");
@@ -245,15 +258,12 @@ export function BudgetsView() {
     }
   };
 
-  // ── Toggle & fetch movements using the new API ──
-  // Cache key includes type to differentiate expense vs income for same category
   const movKey = (category: string, type?: string) => `${type || "expense"}:${category}`;
 
   const toggleCategory = (category: string, type?: "income" | "expense", subCategory?: string | null) => {
     const key = movKey(category, type);
     setExpandedCategories((prev) => {
       const newState = { ...prev, [key]: !prev[key] };
-      // Fetch movements when expanding
       if (!prev[key] && !categoryMovements[key]) {
         fetchCategoryMovements(category, subCategory, type);
       }
@@ -326,7 +336,7 @@ export function BudgetsView() {
     return (
       <div className="p-4 space-y-3 pb-24">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-20 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
+          <div key={i} className="h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         ))}
       </div>
     );
@@ -396,7 +406,7 @@ export function BudgetsView() {
           </p>
           {isInstallment && (
             <p className="text-[8px] text-violet-500 dark:text-violet-400">
-              TC {movement.isPaid ? "✓" : "pend."}
+              TC {movement.isPaid ? "pagada" : "pend."}
             </p>
           )}
         </div>
@@ -407,49 +417,45 @@ export function BudgetsView() {
     );
   };
 
-  const renderBudgetCard = (budget: Budget, colorType: "emerald" | "rose", isSubItem?: boolean) => {
+  // ── Compact budget row ──
+  const renderCompactBudgetRow = (budget: Budget, colorType: "emerald" | "rose") => {
     const Icon = categoryIcons[budget.category] || DollarSign;
     const pct = calcPercentage(budget.spent, budget.amount);
     const bgColor = colorType === "emerald" ? "bg-emerald-50 dark:bg-emerald-900/30" : "bg-rose-50 dark:bg-rose-900/30";
     const iconColor = colorType === "emerald" ? "text-emerald-500" : "text-rose-500";
-    const label = budget.subCategory || budget.category;
 
-    if (isSubItem) {
-      return (
-        <div key={budget.id} className="ml-6 pl-3 border-l-2 border-gray-200 dark:border-gray-700 py-1.5">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <div className={`size-6 rounded-md ${bgColor} flex items-center justify-center`}>
-                <Icon className={`size-3 ${iconColor}`} />
+    return (
+      <div
+        key={budget.id}
+        className="flex items-center gap-2.5 py-2 px-1 group"
+      >
+        <div className={`size-7 rounded-lg ${bgColor} flex items-center justify-center shrink-0`}>
+          <Icon className={`size-3.5 ${iconColor}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-0.5">
+            <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+              {budget.subCategory || budget.category}
+            </p>
+            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+              <span className={`text-[10px] font-semibold ${getProgressText(pct)}`}>
+                {formatCurrency(budget.spent)}
+              </span>
+              <span className="text-[10px] text-gray-400">/ {formatCurrency(budget.amount)}</span>
+              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => handleEdit(budget)}
+                  className="size-5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center"
+                >
+                  <Pencil className="size-2.5 text-gray-400" />
+                </button>
+                <button
+                  onClick={() => setDeleteBudgetId(budget.id)}
+                  className="size-5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"
+                >
+                  <Trash2 className="size-2.5 text-gray-400 hover:text-red-500" />
+                </button>
               </div>
-              <div>
-                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                  {label}
-                </p>
-                <p className="text-[9px] text-gray-400">
-                  {formatCurrency(budget.spent)} / {formatCurrency(budget.amount)}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <Badge
-                variant="outline"
-                className={`text-[9px] ${getProgressBg(pct)} border-0`}
-              >
-                {pct}%
-              </Badge>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleEdit(budget); }}
-                className="size-6 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center transition-colors"
-              >
-                <Pencil className="size-2.5 text-gray-400" />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); setDeleteBudgetId(budget.id); }}
-                className="size-6 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors"
-              >
-                <Trash2 className="size-2.5 text-gray-400 hover:text-red-500" />
-              </button>
             </div>
           </div>
           <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -457,76 +463,66 @@ export function BudgetsView() {
               className={`h-full rounded-full bg-gradient-to-r ${getProgressColor(pct)}`}
               initial={{ width: 0 }}
               animate={{ width: `${Math.min(pct, 100)}%` }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
             />
           </div>
         </div>
-      );
-    }
-
-    return (
-      <Card key={budget.id} className="border-0 shadow-sm rounded-2xl">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className={`size-8 rounded-lg ${bgColor} flex items-center justify-center`}>
-                <Icon className={`size-4 ${iconColor}`} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {budget.category}
-                </p>
-                <p className="text-[10px] text-gray-400">
-                  {formatCurrency(budget.spent)} / {formatCurrency(budget.amount)}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Badge
-                variant="outline"
-                className={`text-[10px] ${getProgressBg(pct)} border-0`}
-              >
-                {pct}%
-              </Badge>
-              <button
-                onClick={() => handleEdit(budget)}
-                className="size-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center transition-colors"
-              >
-                <Pencil className="size-3 text-gray-400" />
-              </button>
-              <button
-                onClick={() => setDeleteBudgetId(budget.id)}
-                className="size-7 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors"
-              >
-                <Trash2 className="size-3 text-gray-400 hover:text-red-500" />
-              </button>
-            </div>
-          </div>
-          <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-            <motion.div
-              className={`h-full rounded-full bg-gradient-to-r ${getProgressColor(pct)}`}
-              initial={{ width: 0 }}
-              animate={{ width: `${Math.min(pct, 100)}%` }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      </div>
     );
   };
 
+  // ── Grouped budgets with expand/collapse + status filtering ──
   const renderGroupedBudgets = (budgetList: Budget[], colorType: "emerald" | "rose") => {
     const groups = groupBudgetsByCategory(budgetList);
     const budgetType = colorType === "emerald" ? "income" : "expense";
 
-    return Object.entries(groups).map(([category, group]) => {
+    // Apply filter
+    const filteredGroups = Object.entries(groups).filter(([, group]) => {
+      const totalSpent = group.children.length > 0
+        ? group.children.reduce((s, c) => s + c.spent, 0)
+        : (group.parent?.spent || 0);
+      const totalAmount = group.children.length > 0
+        ? group.children.reduce((s, c) => s + c.amount, 0)
+        : (group.parent?.amount || 0);
+      const pct = calcPercentage(totalSpent, totalAmount);
+
+      if (budgetFilter === "risk") return pct >= 75;
+      if (budgetFilter === "ok") return pct < 75;
+      return true;
+    });
+
+    if (filteredGroups.length === 0) {
+      return (
+        <div className="text-center py-6">
+          <p className="text-xs text-gray-400">
+            {budgetFilter === "risk" ? "Todos los presupuestos están en control" :
+             budgetFilter === "ok" ? "No hay presupuestos en control" :
+             "Sin presupuestos"}
+          </p>
+        </div>
+      );
+    }
+
+    // Sort: risk items first (highest %), then ok items
+    const sortedGroups = filteredGroups.sort(([, a], [, b]) => {
+      const pctA = calcPercentage(
+        a.children.length > 0 ? a.children.reduce((s, c) => s + c.spent, 0) : (a.parent?.spent || 0),
+        a.children.length > 0 ? a.children.reduce((s, c) => s + c.amount, 0) : (a.parent?.amount || 0)
+      );
+      const pctB = calcPercentage(
+        b.children.length > 0 ? b.children.reduce((s, c) => s + c.spent, 0) : (b.parent?.spent || 0),
+        b.children.length > 0 ? b.children.reduce((s, c) => s + c.amount, 0) : (b.parent?.amount || 0)
+      );
+      return pctB - pctA; // Highest risk first
+    });
+
+    return sortedGroups.map(([category, group]) => {
       const hasChildren = group.children.length > 0;
       const key = movKey(category, budgetType);
       const isExpanded = expandedCategories[key] ?? false;
       const isLoading = loadingMovements[key] ?? false;
       const movements = categoryMovements[key] || [];
 
-      // Calculate totals for the category
       const totalSpent = hasChildren
         ? group.children.reduce((s, c) => s + c.spent, 0)
         : (group.parent?.spent || 0);
@@ -539,13 +535,116 @@ export function BudgetsView() {
       const bgColor = colorType === "emerald" ? "bg-emerald-50 dark:bg-emerald-900/30" : "bg-rose-50 dark:bg-rose-900/30";
       const iconColor = colorType === "emerald" ? "text-emerald-500" : "text-rose-500";
 
+      // Compact mode: just show rows without card wrapper
+      if (viewMode === "compact" && !hasChildren) {
+        return (
+          <div key={category}>
+            <div
+              className="flex items-center gap-2.5 py-2.5 px-1 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors group"
+              onClick={() => toggleCategory(category, budgetType, undefined)}
+            >
+              <div className="shrink-0">
+                {isExpanded ? (
+                  <ChevronDown className="size-3.5 text-gray-400" />
+                ) : (
+                  <ChevronRight className="size-3.5 text-gray-400" />
+                )}
+              </div>
+              <div className={`size-7 rounded-lg ${bgColor} flex items-center justify-center shrink-0`}>
+                <Icon className={`size-3.5 ${iconColor}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                    {category}
+                  </p>
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <Badge variant="outline" className={`text-[8px] h-4 px-1 ${getProgressBg(totalPct)} border-0`}>
+                      {totalPct}%
+                    </Badge>
+                    <span className={`text-[10px] font-semibold ${getProgressText(totalPct)}`}>
+                      {formatCurrency(totalSpent)}
+                    </span>
+                    <span className="text-[10px] text-gray-400">/ {formatCurrency(totalAmount)}</span>
+                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); group.parent && handleEdit(group.parent); }}
+                        className="size-5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center"
+                      >
+                        <Pencil className="size-2.5 text-gray-400" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); group.parent && setDeleteBudgetId(group.parent.id); }}
+                        className="size-5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"
+                      >
+                        <Trash2 className="size-2.5 text-gray-400 hover:text-red-500" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <motion.div
+                    className={`h-full rounded-full bg-gradient-to-r ${getProgressColor(totalPct)}`}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(totalPct, 100)}%` }}
+                    transition={{ duration: 0.6, ease: "easeOut" }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Expanded movements */}
+            <AnimatePresence>
+              {isExpanded && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl ml-8">
+                    <CardContent className="p-2">
+                      <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+                        <Eye className="size-3 text-gray-400" />
+                        <p className="text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                          Movimientos del periodo
+                        </p>
+                      </div>
+                      {isLoading ? (
+                        <div className="flex items-center justify-center py-4">
+                          <RefreshCw className="size-4 animate-spin text-gray-400" />
+                        </div>
+                      ) : movements.length === 0 ? (
+                        <div className="text-center py-3">
+                          <p className="text-[10px] text-gray-400">Sin movimientos en este periodo</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {movements.slice(0, 15).map(renderMovementItem)}
+                          {movements.length > 15 && (
+                            <p className="text-[10px] text-center text-gray-400 py-1">
+                              y {movements.length - 15} movimientos más...
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      }
+
+      // Cards mode or grouped budgets with subcategories
       return (
         <div key={category} className="space-y-1">
           <Card className="border-0 shadow-sm rounded-2xl">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
+            <CardContent className="p-3">
+              <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {/* Expand/collapse toggle */}
                   <button
                     onClick={() => toggleCategory(category, budgetType, undefined)}
                     className="size-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center transition-colors shrink-0"
@@ -619,14 +718,53 @@ export function BudgetsView() {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                {/* Sub-budget items */}
                 {hasChildren && (
-                  <div className="space-y-1 mb-1">
-                    {group.children.map((child) => renderBudgetCard(child, colorType, true))}
+                  <div className="space-y-0.5 mb-1">
+                    {group.children.map((child) => {
+                      const childPct = calcPercentage(child.spent, child.amount);
+                      const ChildIcon = categoryIcons[child.category] || DollarSign;
+                      return (
+                        <div key={child.id} className="ml-6 pl-3 border-l-2 border-gray-200 dark:border-gray-700 py-1.5">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <div className={`size-6 rounded-md ${bgColor} flex items-center justify-center`}>
+                                <ChildIcon className={`size-3 ${iconColor}`} />
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                  {child.subCategory}
+                                </p>
+                                <p className="text-[9px] text-gray-400">
+                                  {formatCurrency(child.spent)} / {formatCurrency(child.amount)}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Badge variant="outline" className={`text-[9px] ${getProgressBg(childPct)} border-0`}>
+                                {childPct}%
+                              </Badge>
+                              <button onClick={(e) => { e.stopPropagation(); handleEdit(child); }} className="size-6 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center transition-colors">
+                                <Pencil className="size-2.5 text-gray-400" />
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setDeleteBudgetId(child.id); }} className="size-6 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center transition-colors">
+                                <Trash2 className="size-2.5 text-gray-400 hover:text-red-500" />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <motion.div
+                              className={`h-full rounded-full bg-gradient-to-r ${getProgressColor(childPct)}`}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.min(childPct, 100)}%` }}
+                              transition={{ duration: 0.8, ease: "easeOut" }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
-                {/* Movements (transactions + CC installments) */}
                 <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                   <CardContent className="p-2">
                     <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
@@ -672,18 +810,18 @@ export function BudgetsView() {
 
     return (
       <motion.div variants={itemVariants}>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <Icon className={`size-4 ${colorType === "rose" ? "text-amber-500" : "text-emerald-500"}`} />
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            <Icon className={`size-3.5 ${colorType === "rose" ? "text-amber-500" : "text-emerald-500"}`} />
+            <h3 className="text-xs font-semibold text-gray-900 dark:text-white">
               {typeLabel}
             </h3>
-            <Badge variant="secondary" className="text-[9px]">
+            <Badge variant="secondary" className="text-[8px]">
               {formatCurrency(totalSpent)}
             </Badge>
           </div>
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           {items.map((item) => {
             const CatIcon = categoryIcons[item.category] || DollarSign;
             const catKey = `unbudgeted-${item.type}-${item.category}`;
@@ -700,76 +838,48 @@ export function BudgetsView() {
 
             return (
               <div key={catKey} className="space-y-1">
-                <Card className="border border-amber-200 dark:border-amber-800/40 shadow-none rounded-xl">
-                  <CardContent className="p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <button
-                          onClick={() => {
-                            // Use the actual category name for the cache key (includes type prefix)
-                            const mKey = movKey(item.category, item.type);
-                            setExpandedCategories((prev) => {
-                              const newState = { ...prev, [mKey]: !prev[mKey] };
-                              if (!prev[mKey] && !categoryMovements[mKey]) {
-                                fetchCategoryMovements(item.category, undefined, item.type);
-                              }
-                              return newState;
-                            });
-                          }}
-                          className="size-7 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center transition-colors shrink-0"
-                        >
-                          {isExpanded ? (
-                            <ChevronDown className="size-4 text-gray-500" />
-                          ) : (
-                            <ChevronRight className="size-4 text-gray-500" />
-                          )}
-                        </button>
-                        <div className={`size-8 rounded-lg ${bgColor} flex items-center justify-center shrink-0`}>
-                          <CatIcon className={`size-4 ${iconColor}`} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
-                            {item.category}
-                          </p>
-                          <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                            Sin presupuesto · {formatCurrency(item.totalSpent)} gastado
-                            {item.transactionCount > 0 && ` · ${item.transactionCount} mov.`}
-                          </p>
-                        </div>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl text-[10px] gap-1 h-7 px-2 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/10 shrink-0"
-                        onClick={() => handleCreateBudgetFromUnbudgeted(item)}
-                      >
-                        <CirclePlus className="size-3" />
-                        Crear
-                      </Button>
-                    </div>
-
-                    {/* Subcategories */}
-                    {item.subcategories.length > 0 && (
-                      <div className="mt-2 ml-12 space-y-1">
-                        {item.subcategories.map((sub) => (
-                          <div key={sub.subCategory} className="flex items-center justify-between">
-                            <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                              {sub.subCategory}: {formatCurrency(sub.totalSpent)}
-                            </p>
-                            <button
-                              onClick={() => handleCreateBudgetFromUnbudgeted(item, sub)}
-                              className="text-[9px] text-amber-600 dark:text-amber-400 hover:underline"
-                            >
-                              + Presupuestar
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                <div className="flex items-center gap-2 py-1.5 px-1 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                  <button
+                    onClick={() => {
+                      const mKey = movKey(item.category, item.type);
+                      setExpandedCategories((prev) => {
+                        const newState = { ...prev, [mKey]: !prev[mKey] };
+                        if (!prev[mKey] && !categoryMovements[mKey]) {
+                          fetchCategoryMovements(item.category, undefined, item.type);
+                        }
+                        return newState;
+                      });
+                    }}
+                    className="shrink-0"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="size-3.5 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="size-3.5 text-gray-400" />
                     )}
-                  </CardContent>
-                </Card>
+                  </button>
+                  <div className={`size-7 rounded-lg ${bgColor} flex items-center justify-center shrink-0`}>
+                    <CatIcon className={`size-3.5 ${iconColor}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                      {item.category}
+                    </p>
+                    <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                      Sin presupuesto · {formatCurrency(item.totalSpent)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl text-[9px] gap-1 h-6 px-2 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/10 shrink-0"
+                    onClick={() => handleCreateBudgetFromUnbudgeted(item)}
+                  >
+                    <CirclePlus className="size-2.5" />
+                    Crear
+                  </Button>
+                </div>
 
-                {/* Expanded movements */}
                 <AnimatePresence>
                   {isExpanded && (
                     <motion.div
@@ -779,7 +889,7 @@ export function BudgetsView() {
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
+                      <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl ml-8">
                         <CardContent className="p-2">
                           <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
                             <Eye className="size-3 text-gray-400" />
@@ -821,16 +931,22 @@ export function BudgetsView() {
   const unbudgetedExpenses = unbudgeted.filter((u) => u.type === "expense");
   const unbudgetedIncomes = unbudgeted.filter((u) => u.type === "income");
 
-  // Income percentage
   const incomePct = totalIncomeBudget > 0 ? calcPercentage(totalIncomeSpent, totalIncomeBudget) : 0;
   const expensePct = totalExpenseBudget > 0 ? calcPercentage(totalExpenseSpent, totalExpenseBudget) : 0;
+
+  // Count at-risk budgets for the current tab
+  const currentBudgetList = activeTab === "expenses" ? expenseBudgets : incomeBudgets;
+  const riskCount = currentBudgetList.filter((b) => {
+    const pct = calcPercentage(b.spent, b.amount);
+    return pct >= 75;
+  }).length;
 
   return (
     <motion.div
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="p-4 space-y-4 pb-24"
+      className="p-4 space-y-3 pb-24"
     >
       {/* Monthly Summary — compact */}
       <motion.div variants={itemVariants}>
@@ -886,7 +1002,7 @@ export function BudgetsView() {
       <motion.div variants={itemVariants}>
         <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
           <button
-            onClick={() => setActiveTab("expenses")}
+            onClick={() => { setActiveTab("expenses"); setBudgetFilter("all"); }}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
               activeTab === "expenses"
                 ? "bg-white dark:bg-gray-700 text-rose-600 dark:text-rose-400 shadow-sm"
@@ -902,7 +1018,7 @@ export function BudgetsView() {
             </Badge>
           </button>
           <button
-            onClick={() => setActiveTab("income")}
+            onClick={() => { setActiveTab("income"); setBudgetFilter("all"); }}
             className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
               activeTab === "income"
                 ? "bg-white dark:bg-gray-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
@@ -931,8 +1047,69 @@ export function BudgetsView() {
             transition={{ duration: 0.2 }}
             className="space-y-3"
           >
-            {/* Recalculate button */}
-            <div className="flex justify-end">
+            {/* Toolbar: Recalculate + Filter + View Mode */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
+                {/* Status Filter */}
+                <div className="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setBudgetFilter("all")}
+                    className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                      budgetFilter === "all"
+                        ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                        : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    onClick={() => setBudgetFilter("risk")}
+                    className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all flex items-center gap-0.5 ${
+                      budgetFilter === "risk"
+                        ? "bg-white dark:bg-gray-700 text-amber-600 dark:text-amber-400 shadow-sm"
+                        : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    <AlertTriangle className="size-2.5" />
+                    Riesgo{riskCount > 0 && ` (${riskCount})`}
+                  </button>
+                  <button
+                    onClick={() => setBudgetFilter("ok")}
+                    className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                      budgetFilter === "ok"
+                        ? "bg-white dark:bg-gray-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                        : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    OK
+                  </button>
+                </div>
+                {/* View Mode Toggle */}
+                <div className="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setViewMode("compact")}
+                    className={`p-1 rounded-md transition-all ${
+                      viewMode === "compact"
+                        ? "bg-white dark:bg-gray-700 shadow-sm"
+                        : "text-gray-400"
+                    }`}
+                    title="Vista compacta"
+                  >
+                    <List className="size-3" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("cards")}
+                    className={`p-1 rounded-md transition-all ${
+                      viewMode === "cards"
+                        ? "bg-white dark:bg-gray-700 shadow-sm"
+                        : "text-gray-400"
+                    }`}
+                    title="Vista tarjetas"
+                  >
+                    <LayoutGrid className="size-3" />
+                  </button>
+                </div>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -956,12 +1133,12 @@ export function BudgetsView() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-0.5">
                 {renderGroupedBudgets(expenseBudgets, "rose")}
               </div>
             )}
 
-            {unbudgetedExpenses.length > 0 && renderUnbudgetedSection(unbudgetedExpenses, "Gastos fuera del Presupuesto", "rose")}
+            {unbudgetedExpenses.length > 0 && renderUnbudgetedSection(unbudgetedExpenses, "Gastos sin Presupuesto", "rose")}
           </motion.div>
         ) : (
           <motion.div
@@ -972,8 +1149,67 @@ export function BudgetsView() {
             transition={{ duration: 0.2 }}
             className="space-y-3"
           >
-            {/* Recalculate button */}
-            <div className="flex justify-end">
+            {/* Toolbar: Recalculate + Filter */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setBudgetFilter("all")}
+                    className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                      budgetFilter === "all"
+                        ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
+                        : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    onClick={() => setBudgetFilter("risk")}
+                    className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all flex items-center gap-0.5 ${
+                      budgetFilter === "risk"
+                        ? "bg-white dark:bg-gray-700 text-amber-600 dark:text-amber-400 shadow-sm"
+                        : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    <AlertTriangle className="size-2.5" />
+                    Bajo
+                  </button>
+                  <button
+                    onClick={() => setBudgetFilter("ok")}
+                    className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                      budgetFilter === "ok"
+                        ? "bg-white dark:bg-gray-700 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                        : "text-gray-500 dark:text-gray-400"
+                    }`}
+                  >
+                    Cumplido
+                  </button>
+                </div>
+                <div className="flex items-center gap-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setViewMode("compact")}
+                    className={`p-1 rounded-md transition-all ${
+                      viewMode === "compact"
+                        ? "bg-white dark:bg-gray-700 shadow-sm"
+                        : "text-gray-400"
+                    }`}
+                    title="Vista compacta"
+                  >
+                    <List className="size-3" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("cards")}
+                    className={`p-1 rounded-md transition-all ${
+                      viewMode === "cards"
+                        ? "bg-white dark:bg-gray-700 shadow-sm"
+                        : "text-gray-400"
+                    }`}
+                    title="Vista tarjetas"
+                  >
+                    <LayoutGrid className="size-3" />
+                  </button>
+                </div>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
@@ -997,7 +1233,7 @@ export function BudgetsView() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-0.5">
                 {renderGroupedBudgets(incomeBudgets, "emerald")}
               </div>
             )}
@@ -1055,20 +1291,20 @@ export function BudgetsView() {
         onSuccess={handleTransactionSuccess}
       />
 
-      {/* Delete Budget Dialog */}
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteBudgetId} onOpenChange={() => setDeleteBudgetId(null)}>
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar presupuesto?</AlertDialogTitle>
+            <AlertDialogTitle>Eliminar presupuesto</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminará este presupuesto y su seguimiento. Esta acción no se puede deshacer.
+              Este presupuesto será eliminado permanentemente. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="rounded-xl bg-red-500 hover:bg-red-600"
               onClick={() => deleteBudgetId && handleDelete(deleteBudgetId)}
+              className="rounded-xl bg-red-600 hover:bg-red-700"
             >
               Eliminar
             </AlertDialogAction>

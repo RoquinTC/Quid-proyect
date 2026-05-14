@@ -33,6 +33,8 @@ export async function GET() {
       getColombiaNow()
     );
 
+    const periodEndPlus = new Date(periodEnd.getTime() + 24 * 60 * 60 * 1000);
+
     // Get all existing budget category+subCategory pairs
     const budgets = await db.budget.findMany({
       where: { userId },
@@ -57,7 +59,7 @@ export async function GET() {
     const transactions = await db.transaction.findMany({
       where: {
         userId,
-        date: { gte: periodStart, lt: new Date(periodEnd.getTime() + 24 * 60 * 60 * 1000) },
+        date: { gte: periodStart, lt: periodEndPlus },
         type: { in: ["income", "expense"] },
         category: { not: null },
         AND: [

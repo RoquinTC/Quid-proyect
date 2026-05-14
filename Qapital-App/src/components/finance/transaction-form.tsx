@@ -49,7 +49,7 @@ interface TransactionFormProps {
     subCategory?: string | null;
     date: string;
     notes?: string | null;
-    excludeFromBudget?: boolean;
+    excludeFromBudget?: boolean | null;
   } | null;
   onSuccess?: () => void;
 }
