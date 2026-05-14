@@ -44,6 +44,7 @@ import {
   LayoutList,
   FolderTree,
   Receipt,
+  User as UserIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,6 +60,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 import type { Account, SubAccount, Transaction, CategoryData, UserSettings } from "@/lib/types";
 
 // Color config per transaction type
@@ -169,6 +171,7 @@ function formatDayMonth(dateStr: string): { day: string; month: string } {
 }
 
 export function AccountDetail() {
+  const { data: session } = useSession();
   const { setFinanceSubView } = useAppStore();
   const [account, setAccount] = useState<Account | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -762,10 +765,11 @@ export function AccountDetail() {
                                                   {tx.category}
                                                 </span>
                                               )}
-                                              {tx.user && tx.user.name && (
+                                              {tx.user && tx.user.name && tx.userId && tx.userId !== session?.user?.id && (
                                                 <>
                                                   <span className="text-[9px] text-gray-300">·</span>
-                                                  <span className="text-[9px] text-blue-500 dark:text-blue-400 font-medium">
+                                                  <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-0.5">
+                                                    <UserIcon className="size-2.5" />
                                                     {tx.user.name}
                                                   </span>
                                                 </>
@@ -835,6 +839,15 @@ export function AccountDetail() {
                                                         <span className="text-[9px] text-gray-400 uppercase tracking-wider">Notas</span>
                                                         <span className="block text-[11px] text-gray-700 dark:text-gray-300">
                                                           {tx.notes}
+                                                        </span>
+                                                      </div>
+                                                    )}
+                                                    {tx.user && tx.user.name && tx.userId && tx.userId !== session?.user?.id && (
+                                                      <div>
+                                                        <span className="text-[9px] text-gray-400 uppercase tracking-wider">Creado por</span>
+                                                        <span className="block text-[11px] text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1">
+                                                          <UserIcon className="size-3" />
+                                                          {tx.user.name}
                                                         </span>
                                                       </div>
                                                     )}
@@ -1377,6 +1390,15 @@ export function AccountDetail() {
                                   {tx.category}
                                 </span>
                               )}
+                              {tx.user && tx.user.name && tx.userId && tx.userId !== session?.user?.id && (
+                                <>
+                                  <span className="text-[10px] text-gray-300">·</span>
+                                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-0.5">
+                                    <UserIcon className="size-2.5" />
+                                    {tx.user.name}
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1442,6 +1464,15 @@ export function AccountDetail() {
                                         <span className="text-[10px] text-gray-400 uppercase tracking-wider">Bolsillo</span>
                                         <span className="text-xs text-gray-700 dark:text-gray-300">
                                           {tx.subAccount.name}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {tx.user && tx.user.name && tx.userId && tx.userId !== session?.user?.id && (
+                                      <div>
+                                        <span className="text-[10px] text-gray-400 uppercase tracking-wider">Creado por</span>
+                                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium inline-flex items-center gap-1">
+                                          <UserIcon className="size-3" />
+                                          {tx.user.name}
                                         </span>
                                       </div>
                                     )}

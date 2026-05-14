@@ -150,7 +150,7 @@ export function AccountManager() {
           const Icon = typeIcons[account.type] || Wallet;
           const isDuplicate = duplicateIds.has(account.id);
           const hasTrailingSpace = account.name !== account.name.trim();
-          const totalWithSubs = account.balance + account.subAccounts.reduce((s, sa) => s + sa.balance, 0);
+          const totalWithSubs = account.balance + (account.subAccounts || []).reduce((s, sa) => s + sa.balance, 0);
 
           return (
             <Card

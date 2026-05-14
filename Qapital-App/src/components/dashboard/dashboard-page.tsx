@@ -81,7 +81,7 @@ export function DashboardPage() {
 
   const totalAccountBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
   const totalSubAccountBalance = accounts.reduce(
-    (sum, a) => sum + a.subAccounts.reduce((s, sa) => s + sa.balance, 0),
+    (sum, a) => sum + (a.subAccounts || []).reduce((s, sa) => s + sa.balance, 0),
     0
   );
   const totalBalance = totalAccountBalance + totalSubAccountBalance;
@@ -97,7 +97,7 @@ export function DashboardPage() {
 
   const activeDebts = debts.filter((d) => d.currentBalance > 0);
   const totalSavings = accounts.reduce(
-    (sum, a) => sum + a.subAccounts
+    (sum, a) => sum + (a.subAccounts || [])
       .filter((sa) => !sa.excludeFromAvailable)
       .reduce((s, sa) => s + sa.balance, 0),
     0

@@ -29,9 +29,9 @@ export function RecurringReminder() {
     }
 
     // Trigger the recurring reminder check
-    apiFetch('/api/push/recurring-reminder')
+    apiFetch<{ sent?: boolean; count?: number }>('/api/push/recurring-reminder')
       .then((data) => {
-        if (data.sent) {
+        if (data?.sent) {
           console.log(`[RecurringReminder] ${data.count} payment(s) due today, notification sent`);
         }
       })

@@ -604,14 +604,14 @@ export function AccountsView() {
 
   const totalBalance = accounts.reduce((sum, a) => sum + Number(a.balance), 0);
   const totalSubAccountBalance = accounts.reduce(
-    (sum, a) => sum + a.subAccounts.reduce((s, sa) => s + Number(sa.balance), 0),
+    (sum, a) => sum + (a.subAccounts || []).reduce((s, sa) => s + Number(sa.balance), 0),
     0
   );
   const grandTotal = totalBalance + totalSubAccountBalance;
 
   const availableBalance = accounts.reduce((sum, a) => {
     const accountPortion = a.excludeFromAvailable ? 0 : Number(a.balance);
-    const subAccountPortion = a.subAccounts.reduce(
+    const subAccountPortion = (a.subAccounts || []).reduce(
       (s, sa) => (sa.excludeFromAvailable ? s : s + Number(sa.balance)),
       0
     );

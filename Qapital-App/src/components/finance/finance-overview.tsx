@@ -482,7 +482,7 @@ export function FinanceOverview() {
 
   const totalAccountBalance = accounts.reduce((sum, a) => sum + Number(a.balance), 0);
   const totalSubAccountBalance = accounts.reduce(
-    (sum, a) => sum + a.subAccounts.reduce((s, sa) => s + Number(sa.balance), 0),
+    (sum, a) => sum + (a.subAccounts || []).reduce((s, sa) => s + Number(sa.balance), 0),
     0
   );
   const totalBalance = totalAccountBalance + totalSubAccountBalance;
