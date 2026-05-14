@@ -30,8 +30,9 @@ export const env = {
 
   LOCAL_AI_BASE_URL: getEnv('LOCAL_AI_BASE_URL', false),
   LOCAL_AI_MODEL_EXECUTIVE: getEnv('LOCAL_AI_MODEL_EXECUTIVE', false, 'gemma4:e2b'),
-  LOCAL_AI_MODEL_ANALYST: getEnv('LOCAL_AI_MODEL_ANALYST', false, 'deepseek-r1:1.5b'),
+  LOCAL_AI_MODEL_ANALYST: getEnv('LOCAL_AI_MODEL_ANALYST', false, 'qwen2.5-coder:7b'),
   LOCAL_AI_MODEL_ENGINEER: getEnv('LOCAL_AI_MODEL_ENGINEER', false, 'qwen2.5-coder:7b'),
+  LOCAL_AI_MODEL_REASONER: getEnv('LOCAL_AI_MODEL_REASONER', false, 'deepseek-r1:1.5b'),
   LOCAL_AI_MODEL_SENSES: getEnv('LOCAL_AI_MODEL_SENSES', false, 'llava:7b'),
   LOCAL_AI_MODEL_FAST_ACTION: getEnv('LOCAL_AI_MODEL_FAST_ACTION', false, 'llama3.2:1b'),
 
@@ -52,8 +53,8 @@ console.log('FIREBASE:', env.FIREBASE_SERVICE_ACCOUNT_JSON ? '✅' : '❌');
 console.log('GOOGLE_AUTH:', (env.GOOGLE_CREDENTIALS_JSON || fs.existsSync('./credentials.json')) ? '✅' : '❌');
 console.log('GITHUB_TOKEN:', env.GITHUB_TOKEN ? '✅' : '❌');
 console.log('--- Orquesta de Especialistas ---');
-console.log('EJECUTIVO:', env.LOCAL_AI_MODEL_EXECUTIVE);
-console.log('ANALISTA:', env.LOCAL_AI_MODEL_ANALYST);
-console.log('INGENIERO:', env.LOCAL_AI_MODEL_ENGINEER);
-console.log('SENTIDOS:', env.LOCAL_AI_MODEL_SENSES);
+console.log('EJECUTIVO (Gemma):', env.LOCAL_AI_MODEL_EXECUTIVE);
+console.log('ANALISTA/INGENIERO (Qwen):', env.LOCAL_AI_MODEL_ANALYST);
+console.log('RAZONADOR (DeepSeek):', env.LOCAL_AI_MODEL_REASONER);
+console.log('SENTIDOS (LLaVA):', env.LOCAL_AI_MODEL_SENSES);
 console.log('--------------------------------');
