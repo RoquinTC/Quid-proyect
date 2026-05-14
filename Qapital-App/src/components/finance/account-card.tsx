@@ -4,6 +4,51 @@ import { formatCurrency } from "@/lib/api";
 import { Users, TrendingUp, Banknote, Wallet, Smartphone, CircleDollarSign, CreditCard } from "lucide-react";
 import { motion } from "framer-motion";
 
+// ─── Sparkline (mini gráfico de línea SVG puro) ───
+
+function Sparkline({
+  data,
+  width = 80,
+  height = 24,
+  color = "rgba(255,255,255,0.6)",
+}: {
+  data: number[];
+  width?: number;
+  height?: number;
+  color?: string;
+}) {
+  if (data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = height - ((v - min) / range) * (height - 4) - 2;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// ─── Tipos ───
+
+interface BalanceHistoryPoint {
+  date: string;
+  balance: number;
+}
+
 interface AccountCardProps {
   account: {
     id: string;
@@ -29,6 +74,7 @@ interface AccountCardProps {
       user: { id?: string; name: string; email: string };
     }>;
   };
+  balanceHistory?: BalanceHistoryPoint[];
   onClick?: () => void;
 }
 
@@ -50,9 +96,21 @@ const typeLabels: Record<string, string> = {
   other: "Otra",
 };
 
-export function AccountCard({ account, onClick }: AccountCardProps) {
+export function AccountCard({ account, balanceHistory, onClick }: AccountCardProps) {
   const Icon = typeIcons[account.type] || Wallet;
   const typeLabel = typeLabels[account.type] || "Cuenta";
+
+  // Determinar tendencia del balance
+  const hasHistory = balanceHistory && balanceHistory.length >= 2;
+  const trendUp = hasHistory
+    ? balanceHistory![balanceHistory!.length - 1].balance >= balanceHistory![0].balance
+    : null;
+  const sparklineColor =
+    trendUp === true
+      ? "rgba(74,222,128,0.7)" // verde si sube
+      : trendUp === false
+        ? "rgba(251,113,133,0.7)" // rojo si baja
+        : "rgba(255,255,255,0.6)"; // neutro
 
   // All accounts render as a card visual with the chosen color
   return (
@@ -118,9 +176,20 @@ export function AccountCard({ account, onClick }: AccountCardProps) {
             <span className="block text-[9px] text-white/50 uppercase tracking-wider">
               Balance
             </span>
-            <p className="text-2xl font-bold text-white tracking-tight break-all">
-              {formatCurrency(account.balance)}
-            </p>
+            <div className="flex items-center gap-1">
+              <p className="text-2xl font-bold text-white tracking-tight break-all">
+                {formatCurrency(account.balance)}
+              </p>
+              {hasHistory && (
+                <span
+                  className={`text-xs font-semibold ${
+                    trendUp ? "text-emerald-300" : "text-rose-300"
+                  }`}
+                >
+                  {trendUp ? "▲" : "▼"}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Sub-accounts count */}
@@ -136,8 +205,19 @@ export function AccountCard({ account, onClick }: AccountCardProps) {
           )}
         </div>
 
-        {/* Bottom decorative line */}
-        <div className="mt-4 h-[2px] rounded-full bg-white/10" />
+        {/* Sparkline o línea decorativa */}
+        <div className="mt-4">
+          {hasHistory ? (
+            <Sparkline
+              data={balanceHistory!.map((p) => p.balance)}
+              width={80}
+              height={24}
+              color={sparklineColor}
+            />
+          ) : (
+            <div className="h-[2px] rounded-full bg-white/10" />
+          )}
+        </div>
       </div>
     </motion.button>
   );

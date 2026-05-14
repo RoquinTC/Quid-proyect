@@ -48,6 +48,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { Account, SubAccount, Transaction, Budget, Debt, RecurringPayment, MonthlyData, MonthlySummaryResponse } from "@/lib/types";
+import { ExpenseHeatmap } from "./expense-heatmap";
+import { WaterfallChart } from "./waterfall-chart";
 
 // ============================================================
 // WIDGET CONFIGURATION
@@ -62,12 +64,14 @@ interface WidgetConfig {
 
 const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: "balance", title: "Balance", visible: true, order: 0 },
-  { id: "evolution", title: "Evolución Financiera", visible: true, order: 1 },
-  { id: "cashflow", title: "Proyección de Flujo de Caja", visible: true, order: 2 },
-  { id: "expenses", title: "Tus Gastos", visible: true, order: 3 },
-  { id: "budgets", title: "Progreso de Presupuestos", visible: true, order: 4 },
-  { id: "transactions", title: "Transacciones Recientes", visible: true, order: 5 },
-  { id: "bills", title: "Próximos Pagos", visible: true, order: 6 },
+  { id: "waterfall", title: "Gráfico de Cascada", visible: true, order: 1 },
+  { id: "evolution", title: "Evolución Financiera", visible: true, order: 2 },
+  { id: "cashflow", title: "Proyección de Flujo de Caja", visible: true, order: 3 },
+  { id: "expenses", title: "Tus Gastos", visible: true, order: 4 },
+  { id: "heatmap", title: "Mapa de Gastos", visible: true, order: 5 },
+  { id: "budgets", title: "Progreso de Presupuestos", visible: true, order: 6 },
+  { id: "transactions", title: "Transacciones Recientes", visible: true, order: 7 },
+  { id: "bills", title: "Próximos Pagos", visible: true, order: 8 },
 ];
 
 const WIDGET_STORAGE_KEY = "qapital-finance-widgets";
@@ -662,6 +666,36 @@ export function FinanceOverview() {
       .sort((a, b) => b.percentage - a.percentage);
   }, [expenseBudgets]);
 
+  // ── Waterfall chart computed values ──
+  const FIXED_CATEGORIES = new Set(["Vivienda", "Servicios", "Suscripciones", "Deudas"]);
+
+  const fixedExpenses = useMemo(() =>
+    expenseBudgets
+      .filter((b) => FIXED_CATEGORIES.has(b.category))
+      .reduce((sum, b) => sum + Number(b.spent), 0),
+    [expenseBudgets]
+  );
+
+  const variableExpenses = useMemo(() =>
+    expenseBudgets
+      .filter((b) => !FIXED_CATEGORIES.has(b.category))
+      .reduce((sum, b) => sum + Number(b.spent), 0),
+    [expenseBudgets]
+  );
+
+  const waterfallInitialBalance = useMemo(() => {
+    if (!monthlySummary?.historical || monthlySummary.historical.length < 2) return 0;
+    // Find the previous month's ending balance
+    const selectedIdx = monthlySummary.historical.findIndex(
+      (d) => d.month === selectedMonthKey
+    );
+    if (selectedIdx > 0) {
+      return Number(monthlySummary.historical[selectedIdx - 1].balance) || 0;
+    }
+    // If the selected month is the first in history or not found, use 0
+    return 0;
+  }, [monthlySummary, selectedMonthKey]);
+
   // Format month label for charts
   const formatMonthLabel = (monthStr: string) => {
     const [, mm] = monthStr.split("-");
@@ -794,6 +828,34 @@ export function FinanceOverview() {
                           </div>
                         </div>
                       </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+
+            // ============================================================
+            // WATERFALL CHART
+            // ============================================================
+            case "waterfall":
+              return (
+                <motion.div key="waterfall" variants={itemVariants}>
+                  <Card className="border-0 shadow-md rounded-2xl">
+                    <CardHeader className="pb-2 pt-4 px-5">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <BarChart3 className="size-4 text-blue-500" />
+                        Gráfico de Cascada
+                      </CardTitle>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        Saldo inicial → Ingresos → Gastos → Saldo final
+                      </p>
+                    </CardHeader>
+                    <CardContent className="px-3 pb-4">
+                      <WaterfallChart
+                        initialBalance={waterfallInitialBalance}
+                        income={monthlyIncome}
+                        fixedExpenses={fixedExpenses}
+                        variableExpenses={variableExpenses}
+                      />
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -1096,6 +1158,20 @@ export function FinanceOverview() {
                   </Card>
                 </motion.div>
               ) : null;
+
+            // ============================================================
+            // EXPENSE HEATMAP
+            // ============================================================
+            case "heatmap":
+              return (
+                <motion.div key="heatmap" variants={itemVariants}>
+                  <ExpenseHeatmap
+                    transactions={transactions}
+                    year={selectedDate.year}
+                    month={selectedDate.month}
+                  />
+                </motion.div>
+              );
 
             // ============================================================
             // BUDGET PROGRESS CIRCLES

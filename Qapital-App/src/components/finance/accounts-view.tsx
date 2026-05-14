@@ -6,6 +6,7 @@ import { useAppStore } from "@/lib/store";
 import { AccountForm } from "./account-form";
 import { TransactionForm } from "./transaction-form";
 import { YieldManager } from "./yield-manager";
+import { ExpenseHeatmap } from "./expense-heatmap";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,7 @@ import {
   BarChart3,
   ArrowUpRight,
   ArrowDownRight,
+  Flame,
   Settings2,
   GripVertical,
   RotateCcw,
@@ -74,18 +76,21 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { Account, SubAccount, Budget, Debt, SavingsGoal, RecurringPayment, Transaction, MonthlyData, MonthlySummaryResponse } from "@/lib/types";
+import { WaterfallChart } from "./waterfall-chart";
 
 // Widget configuration types
-export type WidgetId = "balance" | "quickActions" | "evolution" | "expenses" | "accounts" | "transactions" | "yields";
+export type WidgetId = "balance" | "quickActions" | "waterfall" | "evolution" | "expenses" | "heatmap" | "accounts" | "transactions" | "yields";
 
-type IconName = "Wallet" | "Plus" | "Activity" | "BarChart3" | "Landmark" | "Receipt" | "TrendingUp";
+type IconName = "Wallet" | "Plus" | "Activity" | "BarChart3" | "Landmark" | "Receipt" | "TrendingUp" | "BarChart3" | "Flame";
 
 // Icon lookup map — avoids serializing React components to localStorage
 const WIDGET_ICONS: Record<WidgetId, { component: typeof Wallet; name: IconName }> = {
   balance: { component: Wallet, name: "Wallet" },
   quickActions: { component: Plus, name: "Plus" },
+  waterfall: { component: BarChart3, name: "BarChart3" },
   evolution: { component: Activity, name: "Activity" },
   expenses: { component: BarChart3, name: "BarChart3" },
+  heatmap: { component: Flame, name: "Flame" },
   accounts: { component: Landmark, name: "Landmark" },
   transactions: { component: Receipt, name: "Receipt" },
   yields: { component: TrendingUp, name: "TrendingUp" },
@@ -101,11 +106,13 @@ interface WidgetConfig {
 const DEFAULT_WIDGET_ORDER: WidgetConfig[] = [
   { id: "balance", label: "Disponible", visible: true, order: 0 },
   { id: "quickActions", label: "Acciones Rápidas", visible: true, order: 1 },
-  { id: "evolution", label: "Evolución Financiera", visible: true, order: 2 },
-  { id: "expenses", label: "Tus Gastos", visible: true, order: 3 },
-  { id: "accounts", label: "Mis Cuentas", visible: true, order: 4 },
-  { id: "transactions", label: "Transacciones", visible: true, order: 5 },
-  { id: "yields", label: "Rendimientos", visible: true, order: 6 },
+  { id: "waterfall", label: "Gráfico de Cascada", visible: true, order: 2 },
+  { id: "evolution", label: "Evolución Financiera", visible: true, order: 3 },
+  { id: "expenses", label: "Tus Gastos", visible: true, order: 4 },
+  { id: "heatmap", label: "Mapa de Gastos", visible: true, order: 5 },
+  { id: "accounts", label: "Mis Cuentas", visible: true, order: 6 },
+  { id: "transactions", label: "Transacciones", visible: true, order: 7 },
+  { id: "yields", label: "Rendimientos", visible: true, order: 8 },
 ];
 
 // ============================================
@@ -330,12 +337,106 @@ function SortableWidgetItem({ id, children }: { id: WidgetId; children: ReactNod
   );
 }
 
+// ─── Mini Sparkline SVG para carrusel ───
+
+function MiniSparkline({
+  data,
+  width = 60,
+  height = 18,
+  color = "rgba(255,255,255,0.6)",
+}: {
+  data: number[];
+  width?: number;
+  height?: number;
+  color?: string;
+}) {
+  if (data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = height - ((v - min) / range) * (height - 4) - 2;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// ─── Calcular historial de balance a partir de transacciones ───
+
+function computeBalanceHistory(
+  accountId: string,
+  allTransactions: Transaction[],
+  currentBalance: number
+): { date: string; balance: number }[] {
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  // Filtrar transacciones de esta cuenta en los últimos 30 días
+  const accountTxs = allTransactions
+    .filter((tx) => {
+      if (tx.isTransferCounterpart) return false;
+      const txDate = new Date(tx.date);
+      if (txDate > now) return false;
+      const belongsToAccount =
+        tx.accountId === accountId || tx.subAccountId === accountId;
+      return belongsToAccount && txDate >= thirtyDaysAgo;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  if (accountTxs.length < 2) return [];
+
+  // Calcular balance corriendo hacia atrás desde el balance actual
+  // Estimamos el balance de hace 30 días restando todas las transacciones
+  const history: { date: string; balance: number }[] = [];
+
+  let balanceBefore = currentBalance;
+  for (const tx of accountTxs) {
+    const amount = Number(tx.amount);
+    if (tx.type === "income" || tx.type === "transfer_in") {
+      balanceBefore -= amount;
+    } else if (tx.type === "expense" || tx.type === "transfer_out") {
+      balanceBefore += amount;
+    }
+  }
+
+  // Ahora reconstruimos hacia adelante
+  let current = balanceBefore;
+  for (const tx of accountTxs) {
+    const amount = Number(tx.amount);
+    if (tx.type === "income" || tx.type === "transfer_in") {
+      current += amount;
+    } else if (tx.type === "expense" || tx.type === "transfer_out") {
+      current -= amount;
+    }
+    const dateStr = typeof tx.date === "string" ? tx.date.split("T")[0] : tx.date;
+    history.push({ date: dateStr, balance: current });
+  }
+
+  return history;
+}
+
 function SortableAccountCard({
   account,
   onNavigate,
+  transactions,
 }: {
   account: Account;
   onNavigate: (id: string) => void;
+  transactions: Transaction[];
 }) {
   const {
     attributes,
@@ -350,6 +451,22 @@ function SortableAccountCard({
   const typeLabel = typeLabels[account.type] || "Cuenta";
   const isNegative = account.balance < 0;
   const hasSubAccounts = account.subAccounts.length > 0;
+
+  // Calcular historial de balance para el sparkline
+  const balanceHistory = useMemo(
+    () => computeBalanceHistory(account.id, transactions, Number(account.balance)),
+    [account.id, account.balance, transactions]
+  );
+  const hasHistory = balanceHistory.length >= 2;
+  const trendUp = hasHistory
+    ? balanceHistory[balanceHistory.length - 1].balance >= balanceHistory[0].balance
+    : null;
+  const sparklineColor =
+    trendUp === true
+      ? "rgba(74,222,128,0.7)"
+      : trendUp === false
+        ? "rgba(251,113,133,0.7)"
+        : "rgba(255,255,255,0.6)";
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -423,7 +540,27 @@ function SortableAccountCard({
               <span className="text-[8px] text-white/40">
                 {isNegative ? "Negativo" : "Positivo"}
               </span>
+              {/* Sparkline de tendencia 30 días */}
+              {hasHistory && (
+                <div className="ml-auto">
+                  <MiniSparkline
+                    data={balanceHistory.map((p) => p.balance)}
+                    width={60}
+                    height={18}
+                    color={sparklineColor}
+                  />
+                </div>
+              )}
             </div>
+            {/* Indicador de tendencia junto al balance */}
+            {hasHistory && (
+              <div className="flex items-center gap-0.5 mt-0.5">
+                <span className={"text-[8px] font-semibold " + (trendUp ? "text-emerald-300" : "text-rose-300")}>
+                  {trendUp ? "▲" : "▼"}
+                </span>
+                <span className="text-[7px] text-white/30">30d</span>
+              </div>
+            )}
           </div>
         </div>
       </button>
@@ -668,6 +805,35 @@ export function AccountsView() {
   }, [expenseBudgets]);
 
   const totalSpentOnCategories = expenseByCategory.reduce((s, c) => s + Number(c.amount), 0);
+
+  // ── Waterfall chart computed values ──
+  const FIXED_CATEGORIES = new Set(["Vivienda", "Servicios", "Suscripciones", "Deudas"]);
+
+  const fixedExpenses = useMemo(() =>
+    expenseBudgets
+      .filter((b) => FIXED_CATEGORIES.has(b.category))
+      .reduce((sum, b) => sum + Number(b.spent), 0),
+    [expenseBudgets]
+  );
+
+  const variableExpenses = useMemo(() =>
+    expenseBudgets
+      .filter((b) => !FIXED_CATEGORIES.has(b.category))
+      .reduce((sum, b) => sum + Number(b.spent), 0),
+    [expenseBudgets]
+  );
+
+  const waterfallInitialBalance = useMemo(() => {
+    if (!monthlySummary?.historical || monthlySummary.historical.length < 2) return 0;
+    const selectedMonthKey = `${selectedDate.year}-${String(selectedDate.month).padStart(2, "0")}`;
+    const selectedIdx = monthlySummary.historical.findIndex(
+      (d) => d.month === selectedMonthKey
+    );
+    if (selectedIdx > 0) {
+      return Number(monthlySummary.historical[selectedIdx - 1].balance) || 0;
+    }
+    return 0;
+  }, [monthlySummary, selectedDate]);
 
   // Recent transactions with date grouping (last 10)
   const groupedTransactions = useMemo(() => {
@@ -951,6 +1117,29 @@ export function AccountsView() {
           </div>
         );
 
+      case "waterfall":
+        return (
+          <Card className="border-0 shadow-md rounded-2xl">
+            <CardHeader className="pb-2 pt-4 px-5">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <BarChart3 className="size-4 text-blue-500" />
+                Gráfico de Cascada
+              </CardTitle>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                Saldo inicial → Ingresos → Gastos → Saldo final
+              </p>
+            </CardHeader>
+            <CardContent className="px-3 pb-4">
+              <WaterfallChart
+                initialBalance={waterfallInitialBalance}
+                income={monthlyIncome}
+                fixedExpenses={fixedExpenses}
+                variableExpenses={variableExpenses}
+              />
+            </CardContent>
+          </Card>
+        );
+
       case "evolution":
         return (
           <Card className="border-0 shadow-md rounded-2xl">
@@ -1111,6 +1300,15 @@ export function AccountsView() {
           </Card>
         ) : null;
 
+      case "heatmap":
+        return (
+          <ExpenseHeatmap
+            transactions={transactions}
+            year={selectedDate.year}
+            month={selectedDate.month}
+          />
+        );
+
       case "accounts":
         return accounts.length > 0 ? (
           <div>
@@ -1159,6 +1357,7 @@ export function AccountsView() {
                       key={account.id}
                       account={account}
                       onNavigate={handleAccountClick}
+                      transactions={transactions}
                     />
                   ))}
 

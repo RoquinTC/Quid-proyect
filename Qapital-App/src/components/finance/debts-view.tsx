@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { apiFetch, formatCurrency } from "@/lib/api";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { apiFetch, formatCurrency, calcPercentage } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 import { DebtCard } from "./debt-card";
 import { DebtForm } from "./debt-form";
@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, CreditCard, Landmark } from "lucide-react";
 import { motion } from "framer-motion";
-import type { Debt, Installment } from "@/lib/types";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import type { Debt } from "@/lib/types";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -51,11 +52,41 @@ export function DebtsView() {
   const totalUsed = debts
     .filter((d) => d.type === "credit_card")
     .reduce((sum, d) => sum + d.currentBalance, 0);
+  const loanBalance = debts
+    .filter((d) => d.type === "loan")
+    .reduce((sum, d) => sum + d.currentBalance, 0);
 
-  const handleDebtClick = (debtId: string) => {
+  const donutData = useMemo(() => {
+    const available = Math.max(totalCredit - totalUsed, 0);
+    const segments = [
+      { name: "TCs", value: totalUsed, color: "#F43F5E" },
+      { name: "Préstamos", value: loanBalance, color: "#F59E0B" },
+      { name: "Disponible", value: available, color: "#10B981" },
+    ];
+    // Only include segments with positive value
+    return segments.filter((s) => s.value > 0);
+  }, [totalUsed, loanBalance, totalCredit]);
+
+  const firstCreditCard = debts.find((d) => d.type === "credit_card");
+  const firstLoan = debts.find((d) => d.type === "loan");
+
+  const handleDebtClick = useCallback((debtId: string) => {
     sessionStorage.setItem("selectedDebtId", debtId);
     setFinanceSubView("debt-detail");
-  };
+  }, [setFinanceSubView]);
+
+  const handleDonutClick = useCallback(
+    (_data: unknown, index: number) => {
+      const segment = donutData[index];
+      if (!segment) return;
+      if (segment.name === "TCs" && firstCreditCard) {
+        handleDebtClick(firstCreditCard.id);
+      } else if (segment.name === "Préstamos" && firstLoan) {
+        handleDebtClick(firstLoan.id);
+      }
+    },
+    [donutData, firstCreditCard, firstLoan, handleDebtClick]
+  );
 
   if (loading) {
     return (
@@ -79,29 +110,78 @@ export function DebtsView() {
         <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 text-white overflow-hidden relative">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(255,255,255,0.1),transparent)] pointer-events-none" />
           <CardContent className="p-5 relative z-10">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <CreditCard className="size-4 text-rose-200" />
-                <span className="text-sm text-rose-100">Deuda Total</span>
+            <div className="flex items-center justify-between gap-4">
+              {/* Left side: debt info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <CreditCard className="size-4 text-rose-200" />
+                  <span className="text-sm text-rose-100">Deuda Total</span>
+                </div>
+                <p className="text-3xl font-bold tracking-tight">
+                  {formatCurrency(totalDebt)}
+                </p>
+                {totalCredit > 0 && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-rose-200">
+                    <span>Utilización: {calcPercentage(totalUsed, totalCredit)}%</span>
+                  </div>
+                )}
               </div>
+
+              {/* Right side: donut chart */}
+              {donutData.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                  className="flex flex-col items-center shrink-0"
+                >
+                  <div className="relative" style={{ width: 120, height: 120 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={donutData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={32}
+                          outerRadius={50}
+                          paddingAngle={2}
+                          dataKey="value"
+                          onClick={handleDonutClick}
+                          cursor="pointer"
+                          stroke="none"
+                          animationBegin={200}
+                          animationDuration={800}
+                        >
+                          {donutData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    {/* Center label */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <span className="text-[9px] text-rose-200 leading-none">Deuda Total</span>
+                      <span className="text-xs font-bold leading-tight mt-0.5">
+                        {formatCurrency(totalDebt)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-0.5 mt-1.5">
+                    {donutData.map((entry) => (
+                      <div key={entry.name} className="flex items-center gap-1">
+                        <span
+                          className="size-2 rounded-full shrink-0"
+                          style={{ backgroundColor: entry.color }}
+                        />
+                        <span className="text-[9px] text-rose-100 leading-none">{entry.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
             </div>
-            <p className="text-3xl font-bold tracking-tight">
-              {formatCurrency(totalDebt)}
-            </p>
-            {totalCredit > 0 && (
-              <div className="mt-2">
-                <div className="flex items-center justify-between text-[10px] text-rose-200 mb-1">
-                  <span>Crédito usado</span>
-                  <span>{formatCurrency(totalUsed)} / {formatCurrency(totalCredit)}</span>
-                </div>
-                <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-white/60 rounded-full"
-                    style={{ width: `${Math.min((totalUsed / totalCredit) * 100, 100)}%` }}
-                  />
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       </motion.div>
