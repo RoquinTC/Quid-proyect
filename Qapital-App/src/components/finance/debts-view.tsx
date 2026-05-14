@@ -7,7 +7,7 @@ import { DebtCard } from "./debt-card";
 import { DebtForm } from "./debt-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, CreditCard, Landmark } from "lucide-react";
+import { Plus, CreditCard } from "lucide-react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import type { Debt } from "@/lib/types";
@@ -57,18 +57,29 @@ export function DebtsView() {
     .reduce((sum, d) => sum + d.currentBalance, 0);
 
   const donutData = useMemo(() => {
-    const available = Math.max(totalCredit - totalUsed, 0);
-    const segments = [
-      { name: "TCs", value: totalUsed, color: "#F43F5E" },
-      { name: "Préstamos", value: loanBalance, color: "#F59E0B" },
-      { name: "Disponible", value: available, color: "#10B981" },
-    ];
-    // Only include segments with positive value
-    return segments.filter((s) => s.value > 0);
-  }, [totalUsed, loanBalance, totalCredit]);
+    // One segment per debt with its own color
+    const segments: Array<{ name: string; value: number; color: string; debtId: string | null }> = debts
+      .filter((d) => d.currentBalance > 0)
+      .map((d) => ({
+        name: d.name,
+        value: d.currentBalance,
+        color: d.color,
+        debtId: d.id,
+      }));
 
-  const firstCreditCard = debts.find((d) => d.type === "credit_card");
-  const firstLoan = debts.find((d) => d.type === "loan");
+    // Available credit segment (neutral color)
+    const available = Math.max(totalCredit - totalUsed, 0);
+    if (available > 0) {
+      segments.push({
+        name: "Disponible",
+        value: available,
+        color: "#94A3B8", // slate-400 — neutral, works on both light/dark
+        debtId: null,
+      });
+    }
+
+    return segments;
+  }, [debts, totalUsed, totalCredit]);
 
   const handleDebtClick = useCallback((debtId: string) => {
     sessionStorage.setItem("selectedDebtId", debtId);
@@ -79,13 +90,11 @@ export function DebtsView() {
     (_data: unknown, index: number) => {
       const segment = donutData[index];
       if (!segment) return;
-      if (segment.name === "TCs" && firstCreditCard) {
-        handleDebtClick(firstCreditCard.id);
-      } else if (segment.name === "Préstamos" && firstLoan) {
-        handleDebtClick(firstLoan.id);
+      if (segment.debtId) {
+        handleDebtClick(segment.debtId);
       }
     },
-    [donutData, firstCreditCard, firstLoan, handleDebtClick]
+    [donutData, handleDebtClick]
   );
 
   if (loading) {
@@ -148,12 +157,16 @@ export function DebtsView() {
                           dataKey="value"
                           onClick={handleDonutClick}
                           cursor="pointer"
-                          stroke="none"
                           animationBegin={200}
                           animationDuration={800}
                         >
                           {donutData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={entry.color}
+                              stroke="rgba(255,255,255,0.3)"
+                              strokeWidth={1}
+                            />
                           ))}
                         </Pie>
                       </PieChart>
@@ -168,14 +181,15 @@ export function DebtsView() {
                   </div>
 
                   {/* Legend */}
-                  <div className="flex flex-wrap justify-center gap-x-2.5 gap-y-0.5 mt-1.5">
+                  <div className="flex flex-col gap-0.5 mt-1.5 w-full max-w-[160px]">
                     {donutData.map((entry) => (
-                      <div key={entry.name} className="flex items-center gap-1">
+                      <div key={entry.name} className="flex items-center gap-1.5">
                         <span
-                          className="size-2 rounded-full shrink-0"
+                          className="size-2.5 rounded-full shrink-0 border border-white/30"
                           style={{ backgroundColor: entry.color }}
                         />
-                        <span className="text-[9px] text-rose-100 leading-none">{entry.name}</span>
+                        <span className="text-[9px] text-rose-100 leading-none truncate flex-1">{entry.name}</span>
+                        <span className="text-[9px] text-rose-200/80 leading-none font-medium shrink-0">{formatCurrency(entry.value)}</span>
                       </div>
                     ))}
                   </div>
