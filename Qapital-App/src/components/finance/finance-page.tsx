@@ -3,7 +3,7 @@
 import { useState, Component } from "react";
 import { useAppStore, type FinanceSubView } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock, Calculator } from "lucide-react";
+import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock } from "lucide-react";
 import { FinanceOverview } from "./finance-overview";
 import { AccountsView } from "./accounts-view";
 import { BudgetsView } from "./budgets-view";
@@ -64,7 +64,6 @@ const tabs: { id: FinanceSubView; label: string; icon: typeof Wallet }[] = [
   { id: "debts", label: "Deudas", icon: CreditCard },
   { id: "savings", label: "Ahorros", icon: PiggyBank },
   { id: "cdts", label: "CDT", icon: Landmark },
-  { id: "simulator", label: "Simulador", icon: Calculator },
   { id: "recurring", label: "Pagos", icon: Clock },
 ];
 
