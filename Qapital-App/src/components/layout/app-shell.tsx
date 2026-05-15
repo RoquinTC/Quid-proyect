@@ -20,6 +20,7 @@ import { SettingsPage } from "@/components/settings/settings-page";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 import { BackupRestorePrompt } from "@/components/settings/backup-restore-prompt";
 import { LockScreen } from "@/components/security/lock-screen";
+import { useUpdateChecker } from "@/hooks/use-update-checker";
 import { motion, AnimatePresence } from "framer-motion";
 
 function ModuleContent() {
@@ -60,6 +61,9 @@ export function AppShell() {
   const { setTheme: applyTheme } = useTheme();
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
   const [manuallyUnlocked, setManuallyUnlocked] = useState(false);
+
+  // Check for app updates every 60 seconds
+  useUpdateChecker(60000);
 
   // Track whether the user just logged in (vs page reload with existing session)
   // On page reload with existing session → show lock screen
