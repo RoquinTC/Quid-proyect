@@ -74,7 +74,7 @@ export async function GET() {
           {
             OR: [
               { excludeFromBudget: false },
-              { excludeFromBudget: null },
+              { excludeFromBudget: { equals: null } },
             ],
           },
         ],

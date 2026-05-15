@@ -108,7 +108,7 @@ export async function POST() {
           {
             OR: [
               { excludeFromBudget: false },
-              { excludeFromBudget: null },
+              { excludeFromBudget: { equals: null } },
             ],
           },
         ],

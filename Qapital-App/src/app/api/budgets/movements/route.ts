@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
         {
           OR: [
             { excludeFromBudget: false },
-            { excludeFromBudget: null },
+            { excludeFromBudget: { equals: null } },
           ],
         },
       ],
