@@ -85,7 +85,7 @@ export async function POST(
       if (err instanceof Response) return err;
       return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
-    const { amount, description, accountId } = body;
+    const { amount, description, accountId, subAccountId } = body;
 
     if (!amount || amount <= 0) {
       return NextResponse.json({ error: "El monto debe ser mayor a 0" }, { status: 400 });
@@ -123,6 +123,7 @@ export async function POST(
         data: {
           userId: session.user.id,
           accountId,
+          subAccountId: subAccountId || null,
           type: "expense",
           amount,
           description: `Ahorro: ${goal.name}`,
@@ -134,10 +135,18 @@ export async function POST(
         },
       });
 
-      await db.account.update({
-        where: { id: accountId },
-        data: { balance: { increment: -amount } },
-      });
+      // Deduct from sub-account if provided, otherwise from the main account
+      if (subAccountId) {
+        await db.subAccount.update({
+          where: { id: subAccountId },
+          data: { balance: { increment: -amount } },
+        });
+      } else {
+        await db.account.update({
+          where: { id: accountId },
+          data: { balance: { increment: -amount } },
+        });
+      }
     }
 
     // Recalculate cuota (abono a capital — cuota may decrease)

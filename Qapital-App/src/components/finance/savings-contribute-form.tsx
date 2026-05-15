@@ -46,6 +46,7 @@ export function SavingsContributeForm({
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [selectedSubAccountId, setSelectedSubAccountId] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
@@ -59,6 +60,9 @@ export function SavingsContributeForm({
       // If user selected an account, send it so the API creates a transaction and deducts from account
       if (selectedAccountId) {
         body.accountId = selectedAccountId;
+        if (selectedSubAccountId) {
+          body.subAccountId = selectedSubAccountId;
+        }
       }
 
       await apiFetch(`/api/savings/${goalId}/contribute`, {
@@ -109,13 +113,27 @@ export function SavingsContributeForm({
             <div className="space-y-2">
               <Label>Descontar de (opcional)</Label>
               <select
-                value={selectedAccountId}
-                onChange={(e) => setSelectedAccountId(e.target.value)}
+                value={selectedSubAccountId ? `sub-${selectedSubAccountId}` : selectedAccountId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.startsWith("sub-")) {
+                    const subId = val.replace("sub-", "");
+                    const link = linkedAccounts.find((l) => l.subAccountId === subId);
+                    setSelectedAccountId(link?.accountId || "");
+                    setSelectedSubAccountId(subId);
+                  } else if (val) {
+                    setSelectedAccountId(val);
+                    setSelectedSubAccountId(null);
+                  } else {
+                    setSelectedAccountId("");
+                    setSelectedSubAccountId(null);
+                  }
+                }}
                 className="w-full h-10 rounded-xl border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <option value="">No descontar de ninguna cuenta</option>
                 {linkedAccounts.map((link) => (
-                  <option key={link.id} value={link.subAccountId || link.accountId}>
+                  <option key={link.id} value={link.subAccountId ? `sub-${link.subAccountId}` : link.accountId}>
                     {link.subAccount ? link.subAccount.name : link.account.name} ({formatCurrency(link.subAccount ? link.subAccount.balance : link.account.balance)})
                   </option>
                 ))}

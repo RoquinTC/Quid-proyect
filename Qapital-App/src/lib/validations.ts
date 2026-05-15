@@ -393,6 +393,7 @@ export const savingsContributeSchema = z.object({
   amount: z.number().positive("El monto debe ser positivo"),
   description: z.string().optional(),
   accountId: z.string().nullable().optional(),
+  subAccountId: z.string().nullable().optional(),
 });
 
 export const savingsLinkAccountSchema = z.object({
