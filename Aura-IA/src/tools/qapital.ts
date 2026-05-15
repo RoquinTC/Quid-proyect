@@ -6,7 +6,7 @@ export const qapitalTools = {
       type: 'function',
       function: {
         name: 'get_my_finances',
-        description: 'Obtiene el balance total y las transacciones recientes del usuario desde la base de datos de Qapital App.',
+        description: 'CONSULTA OBLIGATORIA para preguntas sobre dinero, saldos, gastos, compras, transacciones o cuánto se ha gastado en un periodo. Devuelve el estado actual de todas las cuentas y las 10 transacciones más recientes.',
         parameters: {
           type: 'object',
           properties: {},
@@ -14,9 +14,14 @@ export const qapitalTools = {
       }
     },
     handler: async () => {
-      const data = await qapital.getUserFinances('cl1234567890');
-      if (!data) return "No se pudo conectar a la base de datos de Qapital.";
-      return JSON.stringify(data);
+      // Intentar obtener el usuario automáticamente
+      const userId = await qapital.getDefaultUser();
+      if (!userId) return "No se encontró ningún usuario registrado en la base de datos de Quid.";
+      
+      const data = await qapital.getUserFinances(userId);
+      if (!data) return "No se pudo conectar a la base de datos de Quid.";
+      
+      return `Datos financieros de usuario ${userId}:\n${JSON.stringify(data, null, 2)}`;
     },
   },
   get_my_health_profile: {
@@ -24,7 +29,7 @@ export const qapitalTools = {
       type: 'function',
       function: {
         name: 'get_my_health_profile',
-        description: 'Obtiene el perfil de salud, enfermedades, restricciones alimenticias y medicamentos del usuario.',
+        description: 'Obtiene el perfil de salud, enfermedades, restricciones alimenticias y medicamentos. Úsala cuando el usuario pregunte qué puede comer o sobre su estado de salud.',
         parameters: {
           type: 'object',
           properties: {},
@@ -32,9 +37,12 @@ export const qapitalTools = {
       }
     },
     handler: async () => {
-      const data = await qapital.getUserHealth('cl1234567890');
+      const userId = await qapital.getDefaultUser();
+      if (!userId) return "No se encontró ningún usuario registrado.";
+      
+      const data = await qapital.getUserHealth(userId);
       if (!data) return "No se encontró perfil de salud.";
-      return JSON.stringify(data);
+      return JSON.stringify(data, null, 2);
     },
   },
 };

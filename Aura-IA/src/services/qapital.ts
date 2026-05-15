@@ -8,6 +8,13 @@ class QapitalService {
     this.connect();
   }
 
+  // Obtener el ID del primer usuario registrado (para desarrollo local)
+  async getDefaultUser() {
+    if (!this.db) return null;
+    const user = this.db.prepare('SELECT id FROM User LIMIT 1').get();
+    return user ? (user as any).id : null;
+  }
+
   private connect() {
     try {
       const dbPath = env.DATABASE_URL.replace('file:', '');

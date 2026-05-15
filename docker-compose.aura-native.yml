@@ -35,7 +35,7 @@ services:
       # Ollama nativo en el host Windows
       - LOCAL_AI_BASE_URL=http://host.docker.internal:11434/v1
       - LOCAL_AI_MODEL_EXECUTIVE=${LOCAL_AI_MODEL_EXECUTIVE:-gemma4:e2b}
-      - LOCAL_AI_MODEL_ANALYST=${LOCAL_AI_MODEL_ANALYST:-qwen2.5-coder:7b}
+      - LOCAL_AI_MODEL_ANALYST=${LOCAL_AI_MODEL_ANALYST:-llama3.2:3b}
       - LOCAL_AI_MODEL_ENGINEER=${LOCAL_AI_MODEL_ENGINEER:-qwen2.5-coder:7b}
       - LOCAL_AI_MODEL_REASONER=${LOCAL_AI_MODEL_REASONER:-deepseek-r1:1.5b}
       - LOCAL_AI_MODEL_SENSES=${LOCAL_AI_MODEL_SENSES:-llava:7b}
@@ -51,4 +51,5 @@ services:
 
 volumes:
   qapital-db:
+    name: qapital-proyect_qapital-db
     external: true

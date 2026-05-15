@@ -64,4 +64,5 @@ services:
 
 volumes:
   qapital-db:
+    name: qapital-proyect_qapital-db
     external: true
