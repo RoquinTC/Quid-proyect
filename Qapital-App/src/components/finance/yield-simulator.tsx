@@ -21,6 +21,7 @@ import {
   Trophy,
   Landmark,
   Info,
+  PiggyBank,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -39,9 +40,22 @@ interface HighYieldAccount {
     name: string;
     balance: number;
     yieldPercentage: number;
+    isHighYield: boolean;
     color?: string | null;
     icon?: string | null;
   }>;
+}
+
+interface YieldItem {
+  id: string;
+  name: string;
+  ea: number;
+  balance: number;
+  color: string;
+  icon?: string | null;
+  isSubAccount: boolean;
+  parentName?: string;
+  parentColor?: string;
 }
 
 interface HypotheticalAccount {
@@ -63,11 +77,7 @@ export function YieldSimulator() {
   const fetchAccounts = useCallback(async () => {
     try {
       const data = await apiFetch<HighYieldAccount[]>("/api/accounts");
-      // Filter to only high-yield accounts (and include sub-accounts that are high-yield)
-      const highYield = data.filter(
-        (a) => a.yieldPercentage && a.yieldPercentage > 0
-      );
-      setAccounts(highYield);
+      setAccounts(data);
     } catch (error) {
       console.error("Error fetching accounts:", error);
     } finally {
@@ -85,34 +95,72 @@ export function YieldSimulator() {
   const daysRemaining = daysInMonth - now.getDate() + 1;
   const amount = parseFloat(simulateAmount) || 0;
 
-  // Calculate yields for each real account
-  const accountResults = useMemo(() => {
-    return accounts.map((account) => {
+  // Flatten all high-yield items (accounts + sub-accounts) into a single list
+  const yieldItems: YieldItem[] = useMemo(() => {
+    const items: YieldItem[] = [];
+    for (const account of accounts) {
+      // Add the account itself if it has a yield percentage
+      if (account.yieldPercentage && account.yieldPercentage > 0) {
+        items.push({
+          id: account.id,
+          name: account.name,
+          ea: Number(account.yieldPercentage),
+          balance: Number(account.balance),
+          color: account.color,
+          icon: account.icon,
+          isSubAccount: false,
+        });
+      }
+      // Add sub-accounts that are high-yield
+      if (account.subAccounts) {
+        for (const sub of account.subAccounts) {
+          if (sub.isHighYield && sub.yieldPercentage && Number(sub.yieldPercentage) > 0) {
+            items.push({
+              id: sub.id,
+              name: sub.name,
+              ea: Number(sub.yieldPercentage),
+              balance: Number(sub.balance),
+              color: sub.color || account.color,
+              icon: sub.icon,
+              isSubAccount: true,
+              parentName: account.name,
+              parentColor: account.color,
+            });
+          }
+        }
+      }
+    }
+    return items;
+  }, [accounts]);
+
+  // Calculate yields for each real yield item (account or sub-account)
+  const itemResults = useMemo(() => {
+    return yieldItems.map((item) => {
       // Yield the current balance will generate in remaining days
       const currentYield = calculateProportionalYield(
-        account.balance,
-        account.yieldPercentage,
+        item.balance,
+        item.ea,
         daysRemaining
       );
-      const combinedBalance = account.balance + amount;
+      const combinedBalance = item.balance + amount;
       const combinedYield = calculateProportionalYield(
         combinedBalance,
-        account.yieldPercentage,
+        item.ea,
         daysRemaining
       );
-      // Extra yield from adding the simulated amount to this account (remaining days)
+      // Extra yield from adding the simulated amount to this item (remaining days)
       const contributionYield = combinedYield - currentYield;
-      // Total yield with combined balance = current yield + contribution yield
+      // Total yield with combined balance
       const totalWithContribution = currentYield + contributionYield;
       // Standalone yield = what the simulated amount would earn on its own for a FULL month
       const standaloneYield = calculateProportionalYield(
         amount,
-        account.yieldPercentage,
+        item.ea,
         daysInMonth
       );
 
       return {
-        ...account,
+        ...item,
         currentYield,
         combinedYield,
         contributionYield,
@@ -121,7 +169,7 @@ export function YieldSimulator() {
         combinedBalance,
       };
     });
-  }, [accounts, amount, daysRemaining, daysInMonth]);
+  }, [yieldItems, amount, daysRemaining, daysInMonth]);
 
   // Calculate yields for hypothetical accounts
   const hypotheticalResults = useMemo(() => {
@@ -152,22 +200,28 @@ export function YieldSimulator() {
       yield: number;
       type: "combined" | "standalone" | "hypothetical";
       color: string;
+      isSubAccount: boolean;
+      parentName?: string;
     }> = [];
 
-    for (const acc of accountResults) {
+    for (const item of itemResults) {
       options.push({
-        name: acc.name,
-        ea: acc.yieldPercentage,
-        yield: acc.totalWithContribution,
+        name: item.name,
+        ea: item.ea,
+        yield: item.totalWithContribution,
         type: "combined",
-        color: acc.color,
+        color: item.color,
+        isSubAccount: item.isSubAccount,
+        parentName: item.parentName,
       });
       options.push({
-        name: acc.name,
-        ea: acc.yieldPercentage,
-        yield: acc.standaloneYield,
+        name: item.name,
+        ea: item.ea,
+        yield: item.standaloneYield,
         type: "standalone",
-        color: acc.color,
+        color: item.color,
+        isSubAccount: item.isSubAccount,
+        parentName: item.parentName,
       });
     }
 
@@ -178,11 +232,12 @@ export function YieldSimulator() {
         yield: hyp.standaloneYield,
         type: "hypothetical",
         color: "#6B7280",
+        isSubAccount: false,
       });
     }
 
     return options.sort((a, b) => b.yield - a.yield);
-  }, [accountResults, hypotheticalResults]);
+  }, [itemResults, hypotheticalResults]);
 
   const bestCombined = allOptions.find((o) => o.type === "combined");
   const bestStandalone = allOptions.find((o) => o.type !== "combined");
@@ -278,65 +333,79 @@ export function YieldSimulator() {
         </CardContent>
       </Card>
 
-      {/* Real Accounts */}
-      {accountResults.length > 0 && (
+      {/* Real Accounts & Sub-accounts */}
+      {itemResults.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <TrendingUp className="size-4 text-emerald-600 dark:text-emerald-400" />
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">
-              Mis cuentas de alto rendimiento
+              Mis cuentas y bolsillos de alto rendimiento
             </h2>
           </div>
 
-          {accountResults.map((acc) => (
+          {itemResults.map((item) => (
             <Card
-              key={acc.id}
+              key={item.id}
               className="border-0 shadow-md rounded-2xl overflow-hidden"
             >
               <div
                 className="px-4 py-3"
                 style={{
-                  background: `linear-gradient(135deg, ${acc.color}15, ${acc.color}08)`,
-                  borderLeft: `4px solid ${acc.color}`,
+                  background: `linear-gradient(135deg, ${item.color}15, ${item.color}08)`,
+                  borderLeft: `4px solid ${item.color}`,
                 }}
               >
-                {/* Account name + EA */}
+                {/* Item name + EA */}
                 <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <div
-                      className="size-7 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: `${acc.color}20` }}
+                      className="size-7 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${item.color}20` }}
                     >
-                      <Landmark
-                        className="size-3.5"
-                        style={{ color: acc.color }}
-                      />
+                      {item.isSubAccount ? (
+                        <PiggyBank
+                          className="size-3.5"
+                          style={{ color: item.color }}
+                        />
+                      ) : (
+                        <Landmark
+                          className="size-3.5"
+                          style={{ color: item.color }}
+                        />
+                      )}
                     </div>
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {acc.name}
-                    </span>
+                    <div className="min-w-0">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white truncate block">
+                        {item.name}
+                      </span>
+                      {item.isSubAccount && item.parentName && (
+                        <span className="text-[10px] text-gray-400 truncate block">
+                          Bolsillo de {item.parentName}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <Badge
                     variant="secondary"
                     className="text-[10px] font-bold shrink-0"
                     style={{
-                      backgroundColor: `${acc.color}20`,
-                      color: acc.color,
+                      backgroundColor: `${item.color}20`,
+                      color: item.color,
                     }}
                   >
-                    {acc.yieldPercentage}% EA
+                    {item.ea}% EA
                   </Badge>
                 </div>
 
                 {/* Balance info */}
                 <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-2">
                   <span>
-                    Saldo actual: {formatCurrency(acc.balance)}
+                    Saldo actual: {formatCurrency(item.balance)}
                     {amount > 0 && (
                       <span className="text-emerald-600 dark:text-emerald-400">
                         {" "}
                         + {formatCurrency(amount)} ={" "}
-                        {formatCurrency(acc.combinedBalance)}
+                        {formatCurrency(item.combinedBalance)}
                       </span>
                     )}
                   </span>
@@ -348,22 +417,22 @@ export function YieldSimulator() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1 min-w-0">
                         <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                          Con tu aporte en esta cuenta
+                          Con tu aporte {item.isSubAccount ? "en este bolsillo" : "en esta cuenta"}
                         </span>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info className="size-3 text-gray-300 dark:text-gray-600 shrink-0 cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[220px] text-[11px] leading-relaxed bg-gray-800 dark:bg-gray-700 text-white">
-                            Lo que rendiría el saldo actual de la cuenta + tu aporte durante los {daysRemaining} días restantes del mes.
+                            Lo que rendiría el saldo actual + tu aporte durante los {daysRemaining} días restantes del mes.
                           </TooltipContent>
                         </Tooltip>
                       </div>
                       <span
                         className="text-sm font-bold shrink-0"
-                        style={{ color: acc.color }}
+                        style={{ color: item.color }}
                       >
-                        +{formatCurrency(acc.totalWithContribution)}
+                        +{formatCurrency(item.totalWithContribution)}
                       </span>
                     </div>
                   )}
@@ -371,19 +440,19 @@ export function YieldSimulator() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1 min-w-0">
                         <span className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                          Tu monto solo (cuenta nueva)
+                          Tu monto solo ({item.isSubAccount ? "bolsillo nuevo" : "cuenta nueva"})
                         </span>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Info className="size-3 text-gray-300 dark:text-gray-600 shrink-0 cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[220px] text-[11px] leading-relaxed bg-gray-800 dark:bg-gray-700 text-white">
-                            Lo que rendiría tu aporte solo, como cuenta independiente, durante un mes completo ({daysInMonth} días).
+                            Lo que rendiría tu aporte solo, como {item.isSubAccount ? "bolsillo independiente" : "cuenta independiente"}, durante un mes completo ({daysInMonth} días).
                           </TooltipContent>
                         </Tooltip>
                       </div>
                       <span className="text-xs font-medium text-gray-700 dark:text-gray-300 shrink-0">
-                        {formatCurrency(acc.standaloneYield)}
+                        {formatCurrency(item.standaloneYield)}
                       </span>
                     </div>
                   )}
@@ -397,12 +466,12 @@ export function YieldSimulator() {
                           <Info className="size-3 text-gray-300 dark:text-gray-600 shrink-0 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[220px] text-[11px] leading-relaxed bg-gray-800 dark:bg-gray-700 text-white">
-                          Lo que la cuenta rinde sin agregar tu aporte, solo con su saldo actual, en los {daysRemaining} días que quedan del mes.
+                          Lo que {item.isSubAccount ? "este bolsillo" : "esta cuenta"} rinde sin agregar tu aporte, solo con su saldo actual, en los {daysRemaining} días que quedan del mes.
                         </TooltipContent>
                       </Tooltip>
                     </div>
                     <span className="text-xs font-medium text-gray-700 dark:text-gray-300 shrink-0">
-                      {formatCurrency(acc.currentYield)}
+                      {formatCurrency(item.currentYield)}
                     </span>
                   </div>
                 </div>
@@ -412,16 +481,16 @@ export function YieldSimulator() {
         </div>
       )}
 
-      {/* No high-yield accounts message */}
-      {accountResults.length === 0 && (
+      {/* No high-yield items message */}
+      {itemResults.length === 0 && (
         <Card className="border-0 shadow-sm rounded-2xl">
           <CardContent className="p-6 text-center">
             <Wallet className="size-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">
-              No tienes cuentas de alto rendimiento registradas
+              No tienes cuentas ni bolsillos de alto rendimiento registrados
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              Crea una cuenta con % EA para ver simulaciones
+              Crea una cuenta o bolsillo con % EA para ver simulaciones
             </p>
           </CardContent>
         </Card>
@@ -560,7 +629,7 @@ export function YieldSimulator() {
                       En saldo conjunto
                     </span>
                     <p className="text-[10px] text-amber-600/70 dark:text-amber-500/70 truncate">
-                      {bestCombined.name} ({bestCombined.ea}% EA) — sumando a su saldo
+                      {bestCombined.name}{bestCombined.isSubAccount ? ` (bolsillo)` : ""} ({bestCombined.ea}% EA) — sumando a su saldo
                     </p>
                   </div>
                   <span className="text-sm font-bold text-amber-700 dark:text-amber-400 shrink-0">
@@ -575,7 +644,7 @@ export function YieldSimulator() {
                       En cuenta independiente
                     </span>
                     <p className="text-[10px] text-amber-600/70 dark:text-amber-500/70 truncate">
-                      {bestStandalone.name} ({bestStandalone.ea}% EA) — solo tu monto
+                      {bestStandalone.name}{bestStandalone.isSubAccount ? ` (bolsillo)` : ""} ({bestStandalone.ea}% EA) — solo tu monto
                     </p>
                   </div>
                   <span className="text-sm font-bold text-amber-700 dark:text-amber-400 shrink-0">
