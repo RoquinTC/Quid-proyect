@@ -78,10 +78,10 @@ export function BackupRestorePrompt() {
         return;
       }
 
-      if (data.magic !== "qapital-backup") {
+      if (data.magic !== "quid-backup") {
         setImportResult({
           success: false,
-          error: "Este archivo no es un respaldo válido de Qapital",
+          error: "Este archivo no es un respaldo válido de Quid",
         });
         return;
       }
@@ -131,7 +131,7 @@ export function BackupRestorePrompt() {
         setImportResult({ success: true, stats: data.stats });
         // Clear backup metadata since data has been restored
         try {
-          localStorage.removeItem("qapital-last-backup");
+          localStorage.removeItem("quid-last-backup");
         } catch { /* non-critical */ }
         // Reload after successful import
         setTimeout(() => window.location.reload(), 2000);
@@ -154,7 +154,7 @@ export function BackupRestorePrompt() {
   const dismiss = () => {
     // Remember dismissal for this session
     try {
-      sessionStorage.setItem("qapital-restore-dismissed", "true");
+      sessionStorage.setItem("quid-restore-dismissed", "true");
     } catch { /* non-critical */ }
     setDismissed(true);
   };

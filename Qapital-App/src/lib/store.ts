@@ -140,7 +140,7 @@ export const useAppStore = create<AppState>()(
       setLastSyncAt: (date) => set({ lastSyncAt: date }),
     }),
     {
-      name: "qapital-store",
+      name: "quid-store",
       storage: createJSONStorage(() => localStorage),
       // Only persist notifications and user preferences — not transient UI state
       partialize: (state) => ({

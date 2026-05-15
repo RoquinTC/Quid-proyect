@@ -35,7 +35,7 @@ import { toast } from "sonner";
 const steps = [
   {
     id: 0,
-    title: "¡Bienvenido a Qapital!",
+    title: "¡Bienvenido a Quid!",
     description:
       "Tu centro de vida personal. Gestiona tus finanzas, transporte, salud y despensa en un solo lugar. Diseñada para simplificar tu día a día.",
     icon: Sparkles,
@@ -107,7 +107,7 @@ const steps = [
     id: 6,
     title: "¡Todo Listo!",
     description:
-      "Ya conoces Qapital. Comienza a organizar tu vida de forma inteligente. Recuerda que puedes volver a ver este tutorial en cualquier momento.",
+      "Ya conoces Quid. Comienza a organizar tu vida de forma inteligente. Recuerda que puedes volver a ver este tutorial en cualquier momento.",
     icon: Check,
     gradient: "from-emerald-500 to-teal-500",
     final: true,

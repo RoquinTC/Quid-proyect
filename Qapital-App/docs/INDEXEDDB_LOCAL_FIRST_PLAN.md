@@ -1,6 +1,6 @@
 # IndexedDB Local-First Architecture Plan
 
-> **App**: Qapital (Finvot) — Next.js Financial Management App  
+> **App**: Quid — Next.js Life Management App  
 > **Current**: Server-first (API → Prisma → SQLite)  
 > **Target**: Local-first (IndexedDB → Optimistic UI → Background Sync → API)  
 > **Date**: 2026-03-05
@@ -519,7 +519,7 @@ export interface SyncMetaRecord {
 
 // ─── Dexie Database Class ───
 
-class QapitalDB extends Dexie {
+class QuidDB extends Dexie {
   accounts!: Table<LocalAccount>;
   subAccounts!: Table<LocalSubAccount>;
   transactions!: Table<LocalTransaction>;
@@ -551,7 +551,7 @@ class QapitalDB extends Dexie {
   syncMeta!: Table<SyncMetaRecord>;
 
   constructor() {
-    super('qapital-db');
+    super('quid-db');
 
     this.version(1).stores({
       // Primary key is `id`. Index frequently queried fields.
@@ -588,7 +588,7 @@ class QapitalDB extends Dexie {
   }
 }
 
-export const localDB = new QapitalDB();
+export const localDB = new QuidDB();
 ```
 
 ---

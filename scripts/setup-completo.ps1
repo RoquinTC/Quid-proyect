@@ -1,15 +1,15 @@
 @echo off
 chcp 65001 >nul
-title Qapital — Configuración Completa
+title Quid — Configuración Completa
 echo ============================================================
-echo   Qapital — Configuración Completa
+echo   Quid — Configuración Completa
 echo ============================================================
 echo.
-echo Este script configura todo para que Qapital funcione como
+echo Este script configura todo para que Quid funcione como
 echo una app real accesible desde internet.
 echo.
 echo Pasos que se realizarán:
-echo   1. Construir y levantar Qapital en Docker
+echo   1. Construir y levantar Quid en Docker
 echo   2. Configurar Cloudflare Tunnel
 echo   3. Configurar auto-inicio con Windows
 echo   4. Instalar como PWA en tu celular
@@ -27,9 +27,9 @@ if %ERRORLEVEL% neq 0 (
 )
 echo ✅ Docker está corriendo
 
-REM ---- Paso 2: Construir Qapital ----
+REM ---- Paso 2: Construir Quid ----
 echo.
-echo [2/4] Construyendo Qapital App en Docker...
+echo [2/4] Construyendo Quid App en Docker...
 echo Esto puede tardar unos minutos la primera vez...
 echo.
 
@@ -37,7 +37,7 @@ cd /d "%~dp0.."
 docker compose up -d --build qapital
 
 echo.
-echo ✅ Qapital App está corriendo en http://localhost:5678
+echo ✅ Quid App está corriendo en http://localhost:5678
 echo.
 
 REM ---- Paso 3: Cloudflare Tunnel ----
@@ -55,7 +55,7 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo ============================================================
-echo   Elije cómo acceder a Qapital:
+echo   Elige cómo acceder a Quid:
 echo ============================================================
 echo.
 echo   1) Quick Tunnel — URL temporal gratuita (cambia cada vez)
@@ -72,7 +72,7 @@ if "%tunnel_choice%"=="1" (
     echo Para instalar como app: Abre la URL en Chrome ^
     echo   Menú (⋮) → "Agregar a pantalla de inicio"
     echo.
-    start "Qapital Tunnel" cmd /c "cloudflared tunnel --url http://localhost:5678"
+    start "Quid Tunnel" cmd /c "cloudflared tunnel --url http://localhost:5678"
     echo ✅ Tunnel iniciado en otra ventana
     echo.
 ) else if "%tunnel_choice%"=="2" (
@@ -82,21 +82,21 @@ if "%tunnel_choice%"=="1" (
     echo.
 ) else (
     echo.
-    echo ✅ Modo local seleccionado. Qapital en http://localhost:5678
+    echo ✅ Modo local seleccionado. Quid en http://localhost:5678
     echo.
 )
 
 REM ---- Paso 4: Auto-inicio ----
 echo [4/4] Configurando auto-inicio con Windows...
 echo.
-echo ¿Quieres que Qapital arranque automáticamente cuando se encienda el PC?
+echo ¿Quieres que Quid arranque automáticamente cuando se encienda el PC?
 echo (Recomendado: Así funciona como app real siempre disponible)
 echo.
 set /p autostart_choice="Configurar auto-inicio? (s/n): "
 
 if /i "%autostart_choice%"=="s" (
     echo Configurando...
-    powershell -ExecutionPolicy Bypass -File "%~dp0setup-qapital-autostart.ps1"
+    powershell -ExecutionPolicy Bypass -File "%~dp0setup-quid-autostart.ps1"
 )
 
 echo.
@@ -104,7 +104,7 @@ echo ============================================================
 echo   ✅ ¡Configuración completada!
 echo ============================================================
 echo.
-echo   Qapital App:    http://localhost:5678
+echo   Quid App:    http://localhost:5678
 echo   Estado Docker:  docker compose ps
 echo   Logs:           docker compose logs -f qapital
 echo.

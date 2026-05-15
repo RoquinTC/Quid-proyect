@@ -33,7 +33,7 @@ export function ExportMenu({ variant = "default", className }: ExportMenuProps) 
       const a = document.createElement("a");
       a.href = blobUrl;
       const contentDisposition = response.headers.get("Content-Disposition");
-      let filename = `qapital-datos-${new Date().toISOString().split("T")[0]}.xlsx`;
+      let filename = `quid-datos-${new Date().toISOString().split("T")[0]}.xlsx`;
       if (contentDisposition) {
         const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
         if (match) filename = match[1].replace(/['"]/g, "");

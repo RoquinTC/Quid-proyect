@@ -194,7 +194,7 @@ const itemVariants = {
 // LOCAL STORAGE HELPERS
 // ============================================
 
-const WIDGET_STORAGE_KEY = "qapital-accounts-widgets";
+const WIDGET_STORAGE_KEY = "quid-accounts-widgets";
 
 function loadWidgetConfig(): WidgetConfig[] {
   if (typeof window === "undefined") return DEFAULT_WIDGET_ORDER;
@@ -241,7 +241,7 @@ function saveWidgetConfig(widgets: WidgetConfig[]) {
 function loadAccountOrder(): string[] {
   if (typeof window === "undefined") return [];
   try {
-    const saved = localStorage.getItem("qapital-account-order");
+    const saved = localStorage.getItem("quid-account-order");
     if (saved) return JSON.parse(saved) as string[];
   } catch {
     // ignore
@@ -252,7 +252,7 @@ function loadAccountOrder(): string[] {
 function saveAccountOrder(order: string[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem("qapital-account-order", JSON.stringify(order));
+    localStorage.setItem("quid-account-order", JSON.stringify(order));
   } catch {
     // ignore
   }

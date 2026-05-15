@@ -127,7 +127,7 @@ export function ForgotPasswordForm() {
             <span className="text-2xl font-bold text-white">Q</span>
           </div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
-            Qapital
+            Quid
           </h1>
           <p className="text-sm text-gray-500 mt-1">Recuperar contraseña</p>
         </div>

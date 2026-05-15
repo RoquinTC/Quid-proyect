@@ -1,8 +1,8 @@
 # ============================================================
-# Qapital + Cloudflare Tunnel — Script de Instalación
+# Quid + Cloudflare Tunnel — Script de Instalación
 # ============================================================
 # Este script configura Cloudflare Tunnel para que tu app
-# Qapital sea accesible desde internet con un dominio real,
+# Quid sea accesible desde internet con un dominio real,
 # sin abrir puertos en tu router.
 #
 # Requisitos:
@@ -15,7 +15,7 @@
 # ============================================================
 
 param(
-    [string]$TunnelName = "qapital-tunnel",
+    [string]$TunnelName = "quid-tunnel",
     [string]$Domain = ""
 )
 
@@ -23,7 +23,7 @@ $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  Qapital + Cloudflare Tunnel — Configuración" -ForegroundColor Cyan
+Write-Host "  Quid + Cloudflare Tunnel — Configuración" -ForegroundColor Cyan
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -111,7 +111,7 @@ if (-not $Domain) {
     $choice = Read-Host "  Elige (1 o 2)"
 
     if ($choice -eq "2") {
-        $Domain = Read-Host "  Ingresa tu dominio (ej: qapital.tudominio.com)"
+        $Domain = Read-Host "  Ingresa tu dominio (ej: quid.tudominio.com)"
     } else {
         $Domain = "auto"
     }
@@ -131,7 +131,7 @@ $configFile = "$configDir\config.yml"
 if ($Domain -eq "auto") {
     # Modo quick tunnel — no necesita config.yml persistente, se ejecuta con --url
     $configContent = @"
-# Qapital Cloudflare Tunnel — Configuración
+# Quid Cloudflare Tunnel — Configuración
 # Modo: Named Tunnel con subdominio temporal
 # Iniciar con: cloudflared tunnel run $TunnelName
 
@@ -146,7 +146,7 @@ ingress:
 } else {
     # Modo dominio propio
     $configContent = @"
-# Qapital Cloudflare Tunnel — Configuración
+# Quid Cloudflare Tunnel — Configuración
 # Dominio: $Domain
 # Iniciar con: cloudflared tunnel run $TunnelName
 
@@ -174,18 +174,18 @@ if ($Domain -ne "auto") {
 Write-Host ""
 Write-Host "[7/7] Creando scripts de inicio..." -ForegroundColor Yellow
 
-$scriptsDir = "$env:USERPROFILE\Desktop\Qapital-Scripts"
+$scriptsDir = "$env:USERPROFILE\Desktop\Quid-Scripts"
 if (-not (Test-Path $scriptsDir)) {
     New-Item -ItemType Directory -Path $scriptsDir | Out-Null
 }
 
-# --- Script: Iniciar Qapital Tunnel ---
+# --- Script: Iniciar Quid Tunnel ---
 if ($Domain -eq "auto") {
     $tunnelScript = @"
 @echo off
-title Qapital Tunnel
+title Quid Tunnel
 echo ============================================================
-echo   Qapital + Cloudflare Tunnel (Quick Tunnel)
+echo   Quid + Cloudflare Tunnel (Quick Tunnel)
 echo ============================================================
 echo.
 echo Iniciando tunnel... Se generara una URL temporal.
@@ -199,9 +199,9 @@ pause
 } else {
     $tunnelScript = @"
 @echo off
-title Qapital Tunnel
+title Quid Tunnel
 echo ============================================================
-echo   Qapital + Cloudflare Tunnel
+echo   Quid + Cloudflare Tunnel
 echo ============================================================
 echo.
 echo Iniciando tunnel para $Domain...
@@ -214,14 +214,14 @@ pause
 "@
 }
 
-Set-Content -Path "$scriptsDir\iniciar-qapital-tunnel.bat" -Value $tunnelScript -Encoding ASCII
+Set-Content -Path "$scriptsDir\iniciar-quid-tunnel.bat" -Value $tunnelScript -Encoding ASCII
 
 # --- Script: Instalar Tunnel como Servicio de Windows ---
 $serviceScript = @"
 @echo off
-title Instalar Qapital Tunnel como Servicio
+title Instalar Quid Tunnel como Servicio
 echo ============================================================
-echo   Qapital Tunnel — Instalar como Servicio de Windows
+echo   Quid Tunnel — Instalar como Servicio de Windows
 echo ============================================================
 echo.
 echo Esto instalara cloudflared como servicio de Windows.
@@ -257,8 +257,8 @@ Write-Host ""
 if ($Domain -eq "auto") {
     Write-Host "  MODO: Quick Tunnel (subdominio temporal gratuito)" -ForegroundColor White
     Write-Host ""
-    Write-Host "  Para usar Qapital como app real:" -ForegroundColor White
-    Write-Host "  1. Ejecuta: $scriptsDir\iniciar-qapital-tunnel.bat" -ForegroundColor Yellow
+    Write-Host "  Para usar Quid como app real:" -ForegroundColor White
+    Write-Host "  1. Ejecuta: $scriptsDir\iniciar-quid-tunnel.bat" -ForegroundColor Yellow
     Write-Host "  2. Copia la URL que aparece (ej: https://xxx.trycloudflare.com)" -ForegroundColor Yellow
     Write-Host "  3. Abre esa URL en tu celular y agrega a pantalla de inicio" -ForegroundColor Yellow
     Write-Host "  4. Como es PWA, la app funcionará offline cuando el tunnel esté caído" -ForegroundColor Yellow
@@ -268,8 +268,8 @@ if ($Domain -eq "auto") {
 } else {
     Write-Host "  MODO: Dominio Propio ($Domain)" -ForegroundColor White
     Write-Host ""
-    Write-Host "  Para usar Qapital como app real:" -ForegroundColor White
-    Write-Host "  1. Ejecuta: $scriptsDir\iniciar-qapital-tunnel.bat" -ForegroundColor Yellow
+    Write-Host "  Para usar Quid como app real:" -ForegroundColor White
+    Write-Host "  1. Ejecuta: $scriptsDir\iniciar-quid-tunnel.bat" -ForegroundColor Yellow
     Write-Host "  2. Abre https://$Domain en tu celular" -ForegroundColor Yellow
     Write-Host "  3. Agrega a pantalla de inicio (funciona como app nativa)" -ForegroundColor Yellow
     Write-Host ""
@@ -277,6 +277,6 @@ if ($Domain -eq "auto") {
     Write-Host "  Ejecuta como Admin: $scriptsDir\instalar-tunnel-servicio.bat" -ForegroundColor Yellow
 }
 Write-Host ""
-Write-Host "  Qapital App:    http://localhost:5678" -ForegroundColor White
+Write-Host "  Quid App:    http://localhost:5678" -ForegroundColor White
 Write-Host "  Tunnel config:  $configFile" -ForegroundColor Gray
 Write-Host ""

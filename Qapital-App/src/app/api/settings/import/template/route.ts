@@ -341,7 +341,7 @@ export async function GET(request: Request) {
     const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
     // Return as downloadable file
-    const filename = `qapital-plantilla-${type}.xlsx`;
+    const filename = `quid-plantilla-${type}.xlsx`;
     return new NextResponse(buffer, {
       status: 200,
       headers: {

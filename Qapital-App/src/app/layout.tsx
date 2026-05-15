@@ -29,14 +29,14 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Qapital - Tu Centro Financiero",
+  title: "Quid - Todo converge aquí",
   description:
     "Gestión financiera, transporte, salud y despensa en una sola app",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Qapital",
+    title: "Quid",
   },
   icons: {
     icon: "/icon-192.png",

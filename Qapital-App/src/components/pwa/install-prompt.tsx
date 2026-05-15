@@ -35,7 +35,7 @@ export function InstallPrompt() {
   // Check if user already installed (localStorage flag)
   const getWasInstalled = useCallback(() => {
     if (typeof window === 'undefined') return false;
-    return localStorage.getItem('qapital-installed') === 'true';
+    return localStorage.getItem('quid-installed') === 'true';
   }, []);
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function InstallPrompt() {
     }
 
     // Check if user previously dismissed
-    const dismissedTime = localStorage.getItem('qapital-install-dismissed');
+    const dismissedTime = localStorage.getItem('quid-install-dismissed');
     if (dismissedTime) {
       const dismissed = parseInt(dismissedTime, 10);
       const hoursSinceDismissed = (Date.now() - dismissed) / (1000 * 60 * 60);
@@ -73,7 +73,7 @@ export function InstallPrompt() {
 
     // Listen for successful install
     const installedHandler = () => {
-      localStorage.setItem('qapital-installed', 'true');
+      localStorage.setItem('quid-installed', 'true');
       setShowBanner(false);
       setDeferredPrompt(null);
       console.log('[PWA] App installed successfully');
@@ -93,7 +93,7 @@ export function InstallPrompt() {
   // If standalone mode changed to true (app opened as installed), mark as installed
   useEffect(() => {
     if (isStandalone) {
-      localStorage.setItem('qapital-installed', 'true');
+      localStorage.setItem('quid-installed', 'true');
       setShowBanner(false);
       setDeferredPrompt(null);
     }
@@ -108,7 +108,7 @@ export function InstallPrompt() {
 
       if (outcome === 'accepted') {
         console.log('[PWA] User accepted install prompt');
-        localStorage.setItem('qapital-installed', 'true');
+        localStorage.setItem('quid-installed', 'true');
       } else {
         console.log('[PWA] User dismissed install prompt');
       }
@@ -122,7 +122,7 @@ export function InstallPrompt() {
 
   const handleDismiss = useCallback(() => {
     setShowBanner(false);
-    localStorage.setItem('qapital-install-dismissed', Date.now().toString());
+    localStorage.setItem('quid-install-dismissed', Date.now().toString());
   }, []);
 
   // Don't show if already in standalone, already installed, or no prompt available
@@ -151,7 +151,7 @@ export function InstallPrompt() {
               {/* Content */}
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-semibold text-gray-900">
-                  Instalar Qapital
+                  Instalar Quid
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
                   Accede más rápido y úsala sin conexión. Se instala en segundos.

@@ -10,8 +10,8 @@
  *
  * Place this inside the SessionProvider so it has access to the user session.
  *
- * [7B] Unified to use single Dexie DB (qapital-db / db.ts).
- * Previously used the old qapital_local DB (index.ts) with syncQueue.
+ * [7B] Unified to use single Dexie DB (quid-db / db.ts).
+ * Previously used the old quid_local DB (index.ts) with syncQueue.
  * Now uses mutationQueue from db.ts — same DB as hooks, engine, and api.ts.
  */
 

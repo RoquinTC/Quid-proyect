@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "🚀 Iniciando Qapital App..."
+echo "🚀 Iniciando Quid App..."
 
 # Fix permissions on database directory (may be owned by root if volume was seeded externally)
 echo "🔧 Verificando permisos de /data/db..."

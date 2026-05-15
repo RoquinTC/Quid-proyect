@@ -40,7 +40,7 @@ export function UpdateNotification({
                   ¡Actualización disponible!
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Hay una nueva versión de Qapital lista para usar.
+                  Hay una nueva versión de Quid lista para usar.
                 </p>
               </div>
 

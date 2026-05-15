@@ -1,5 +1,5 @@
 /**
- * Currency formatting utilities for Qapital.
+ * Currency formatting utilities for Quid.
  *
  * NOTE: The primary formatCurrency is in api.ts (used by most components).
  * This file provides alternative formats and is the canonical location for

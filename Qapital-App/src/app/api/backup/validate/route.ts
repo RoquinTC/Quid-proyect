@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     // ── Validate magic identifier ──
     if (!backup.magic) {
-      issues.push("Falta el campo 'magic' — el archivo no parece ser un respaldo de Qapital");
+      issues.push("Falta el campo 'magic' — el archivo no parece ser un respaldo de Quid");
     } else if (backup.magic !== BACKUP_MAGIC) {
       issues.push(`Identificador incorrecto: esperado "${BACKUP_MAGIC}", obtenido "${backup.magic}"`);
     }

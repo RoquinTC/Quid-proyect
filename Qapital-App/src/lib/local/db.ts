@@ -442,7 +442,7 @@ export interface LocalSharedAccountUser extends SyncMeta {
 
 // ─── Dexie Database Class ───
 
-class QapitalDB extends Dexie {
+class QuidDB extends Dexie {
   accounts!: Table<LocalAccount>;
   subAccounts!: Table<LocalSubAccount>;
   transactions!: Table<LocalTransaction>;
@@ -474,7 +474,7 @@ class QapitalDB extends Dexie {
   syncMeta!: Table<SyncMetaRecord>;
 
   constructor() {
-    super('qapital-db');
+    super('quid-db');
 
     this.version(1).stores({
       accounts: 'id, userId, type, order, _syncStatus, _lastModified',
@@ -511,7 +511,7 @@ class QapitalDB extends Dexie {
 }
 
 // Singleton — reused across the app
-export const localDB = new QapitalDB();
+export const localDB = new QuidDB();
 
 // ─── API path → Table name mapping ───
 

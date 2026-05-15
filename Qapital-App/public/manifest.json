@@ -1,7 +1,7 @@
 {
-  "name": "Qapital - Tu Centro Financiero",
-  "short_name": "Qapital",
-  "description": "Gestión financiera personal: cuentas, presupuestos, ahorros, deudas y más en una sola app",
+  "name": "Quid - Todo converge aquí",
+  "short_name": "Quid",
+  "description": "Gestión financiera personal con Quid: cuentas, presupuestos, ahorros, deudas y más en una sola app",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

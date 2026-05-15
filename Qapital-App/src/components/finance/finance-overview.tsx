@@ -76,7 +76,7 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: "bills", title: "Próximos Pagos", visible: true, order: 9 },
 ];
 
-const WIDGET_STORAGE_KEY = "qapital-finance-widgets";
+const WIDGET_STORAGE_KEY = "quid-finance-widgets";
 
 // ============================================================
 // CONSTANTS

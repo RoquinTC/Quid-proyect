@@ -49,7 +49,7 @@ export function Header() {
             <div className="size-8 rounded-xl bg-white/20 flex items-center justify-center backdrop-blur-sm">
               <span className="text-sm font-bold">Q</span>
             </div>
-            <h1 className="text-lg font-bold tracking-tight">Qapital</h1>
+            <h1 className="text-lg font-bold tracking-tight">Quid</h1>
           </div>
         </div>
 

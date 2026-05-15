@@ -116,7 +116,7 @@ export function BackupManager() {
       const a = document.createElement("a");
       a.href = url;
       const contentDisposition = response.headers.get("Content-Disposition");
-      let filename = `qapital-backup-${new Date().toISOString().split("T")[0]}.json`;
+      let filename = `quid-backup-${new Date().toISOString().split("T")[0]}.json`;
       if (contentDisposition) {
         const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
         if (match) {
@@ -203,10 +203,10 @@ export function BackupManager() {
         return;
       }
 
-      if (data.magic !== "qapital-backup") {
+      if (data.magic !== "quid-backup") {
         setImportResult({
           success: false,
-          error: "Este archivo no es un respaldo válido de Qapital",
+          error: "Este archivo no es un respaldo válido de Quid",
         });
         setTimeout(() => setImportResult(null), 5000);
         return;

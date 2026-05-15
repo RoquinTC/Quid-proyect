@@ -85,13 +85,13 @@ export function AppShell() {
     if (status === "authenticated" && session?.user?.id) {
       // Check if user dismissed the prompt this session
       try {
-        if (sessionStorage.getItem("qapital-restore-dismissed") === "true") return;
+        if (sessionStorage.getItem("quid-restore-dismissed") === "true") return;
       } catch { /* non-critical */ }
 
       // Check if user has a previous backup in localStorage
       let hasBackup = false;
       try {
-        const backupMeta = localStorage.getItem("qapital-last-backup");
+        const backupMeta = localStorage.getItem("quid-last-backup");
         hasBackup = !!backupMeta;
       } catch { /* non-critical */ }
 

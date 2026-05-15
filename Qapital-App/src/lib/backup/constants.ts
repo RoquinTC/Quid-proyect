@@ -19,8 +19,8 @@
 /** Current backup schema version — increment when Prisma schema changes */
 export const BACKUP_SCHEMA_VERSION = 1;
 
-/** Magic string to verify a file is a valid Qapital backup */
-export const BACKUP_MAGIC = "qapital-backup";
+/** Magic string to verify a file is a valid Quid backup */
+export const BACKUP_MAGIC = "quid-backup";
 
 /**
  * Complete backup data structure.

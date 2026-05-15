@@ -192,7 +192,7 @@ export async function GET() {
     };
 
     // Return as downloadable JSON
-    const filename = `qapital-backup-${new Date().toISOString().split("T")[0]}.json`;
+    const filename = `quid-backup-${new Date().toISOString().split("T")[0]}.json`;
     const body = JSON.stringify(backup, null, 2);
 
     return new NextResponse(body, {

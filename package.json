@@ -1,12 +1,12 @@
 {
-  "name": "qapital-monorepo",
+  "name": "quid-monorepo",
   "version": "1.0.0",
   "private": true,
-  "description": "Qapital Finance App + Aura IA Agent — Monorepo",
+  "description": "Quid Finance App + Aura IA Agent — Monorepo",
   "scripts": {
-    "dev:qapital": "npm run dev --prefix Qapital-App",
+    "dev:quid": "npm run dev --prefix Qapital-App",
     "dev:aura": "npm run dev --prefix Aura-IA",
-    "build:qapital": "npm run build --prefix Qapital-App",
+    "build:quid": "npm run build --prefix Qapital-App",
     "build:aura": "npm run build --prefix Aura-IA",
     "test": "npm run test --prefix Qapital-App",
     "test:watch": "npm run test:watch --prefix Qapital-App",
@@ -16,7 +16,7 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:build": "docker compose build --no-cache",
-    "docker:build:qapital": "docker compose build --no-cache qapital",
+    "docker:build:quid": "docker compose build --no-cache qapital",
     "docker:build:aura": "docker compose build --no-cache aura-ia",
     "docker:logs": "docker compose logs -f"
   }

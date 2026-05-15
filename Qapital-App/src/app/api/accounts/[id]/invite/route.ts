@@ -55,7 +55,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "No se encontró un usuario con ese correo electrónico. El usuario debe estar registrado en Qapital.",
+            "No se encontró un usuario con ese correo electrónico. El usuario debe estar registrado en Quid.",
         },
         { status: 404 }
       );

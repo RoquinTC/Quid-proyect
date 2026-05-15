@@ -18,14 +18,14 @@ export function RecurringReminder() {
     // Only check once per day (store the date we last checked)
     const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Bogota' });
     const lastChecked = typeof window !== 'undefined'
-      ? localStorage.getItem('qapital-recurring-checked')
+      ? localStorage.getItem('quid-recurring-checked')
       : null;
 
     if (lastChecked === today) return;
 
     // Mark as checked for today
     if (typeof window !== 'undefined') {
-      localStorage.setItem('qapital-recurring-checked', today);
+      localStorage.setItem('quid-recurring-checked', today);
     }
 
     // Trigger the recurring reminder check

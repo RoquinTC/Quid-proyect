@@ -1,9 +1,9 @@
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'qapital-v1';
-const STATIC_CACHE = 'qapital-static-v1';
-const DYNAMIC_CACHE = 'qapital-dynamic-v1';
-const API_CACHE = 'qapital-api-v1';
+const CACHE_NAME = 'quid-v1';
+const STATIC_CACHE = 'quid-static-v1';
+const DYNAMIC_CACHE = 'quid-dynamic-v1';
+const API_CACHE = 'quid-api-v1';
 
 // Assets to cache on install (app shell)
 const APP_SHELL = [
@@ -39,7 +39,7 @@ self.addEventListener('activate', (event) => {
           .filter((name) => {
             // Delete old versions of our caches
             return (
-              name.startsWith('qapital-') &&
+              name.startsWith('quid-') &&
               name !== STATIC_CACHE &&
               name !== DYNAMIC_CACHE &&
               name !== API_CACHE
@@ -209,7 +209,7 @@ self.addEventListener('message', (event) => {
 // Handle push notifications
 self.addEventListener('push', (event) => {
   let data = {
-    title: 'Qapital',
+    title: 'Quid',
     body: 'Tienes una nueva notificación',
     icon: '/icon-192.png',
     badge: '/icon-maskable-192.png',
@@ -293,7 +293,7 @@ self.addEventListener('push', (event) => {
       },
       actions,
       vibrate: [100, 50, 100],
-      tag: `qapital-${data.type}-${Date.now()}`,
+      tag: `quid-${data.type}-${Date.now()}`,
       renotify: true,
       requireInteraction: data.type === 'invitation_received',
     })

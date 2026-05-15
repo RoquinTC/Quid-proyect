@@ -1,7 +1,7 @@
 # ============================================================
-# Qapital App — Docker Compose (Production)
+# Quid App — Docker Compose (Production)
 # ============================================================
-# Este archivo SOLO levanta Qapital App, que arranca automáticamente
+# Este archivo SOLO levanta Quid App, que arranca automáticamente
 # con Windows (restart: unless-stopped).
 #
 # Para Aura IA + Ollama, usar docker-compose.aura.yml
@@ -24,7 +24,7 @@ services:
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:5678}
       - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
-      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:qapital@app.com}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:quid@app.com}
     volumes:
       - qapital-db:/data/db
     restart: unless-stopped

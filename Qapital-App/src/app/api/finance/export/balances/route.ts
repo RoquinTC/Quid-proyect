@@ -212,7 +212,7 @@ export async function GET() {
     // Generate buffer
     const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
     const today = new Date().toISOString().split("T")[0];
-    const filename = `qapital-datos-${today}.xlsx`;
+    const filename = `quid-datos-${today}.xlsx`;
 
     return new NextResponse(buffer, {
       status: 200,

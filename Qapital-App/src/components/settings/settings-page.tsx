@@ -336,7 +336,7 @@ export function SettingsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `qapital-plantilla-${type}.xlsx`;
+      a.download = `quid-plantilla-${type}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -392,7 +392,7 @@ export function SettingsPage() {
           </Button>
           <div>
             <h1 className="text-lg font-bold text-gray-900 dark:text-white">Ajustes</h1>
-            <p className="text-xs text-gray-400">Configura tu experiencia en Qapital</p>
+            <p className="text-xs text-gray-400">Configura tu experiencia en Quid</p>
           </div>
         </div>
         <Card className="border-0 shadow-sm rounded-xl">
@@ -423,7 +423,7 @@ export function SettingsPage() {
         </Button>
         <div>
           <h1 className="text-lg font-bold text-gray-900 dark:text-white">Ajustes</h1>
-          <p className="text-xs text-gray-400">Configura tu experiencia en Qapital</p>
+          <p className="text-xs text-gray-400">Configura tu experiencia en Quid</p>
         </div>
         {saving && <Loader2 className="size-4 animate-spin text-emerald-500 ml-auto" />}
         {saveMessage && (
@@ -488,7 +488,7 @@ export function SettingsPage() {
                       </div>
                       <div>
                         <p className="text-xs font-medium text-gray-900 dark:text-white">Notificaciones en la app</p>
-                        <p className="text-[10px] text-gray-400">Recibir alertas y recordatorios dentro de Qapital</p>
+                        <p className="text-[10px] text-gray-400">Recibir alertas y recordatorios dentro de Quid</p>
                       </div>
                     </div>
                     <Switch checked={settings.notificationsEnabled} onCheckedChange={(val) => updateSetting("notificationsEnabled", val)} />
@@ -1086,7 +1086,7 @@ export function SettingsPage() {
           <div className="inline-flex items-center justify-center size-7 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-sm mb-1.5">
             <span className="text-[10px] font-bold text-white">Q</span>
           </div>
-          <p className="text-[11px] font-semibold text-gray-900 dark:text-white">Qapital</p>
+          <p className="text-[11px] font-semibold text-gray-900 dark:text-white">Quid</p>
           <p className="text-[9px] text-gray-400">v1.1.0</p>
         </CardContent>
       </Card>
