@@ -65,8 +65,36 @@ export function LoginForm() {
   const handleBiometricLogin = useCallback(async () => {
     setBiometricLoading(true);
     try {
-      // Step 1: Get authentication options
-      const optionsRes = await fetch("/api/auth/webauthn/auth-options");
+      // We need the user's email to look up their WebAuthn credentials
+      // If they haven't typed their email yet, ask for it
+      let loginEmail = email;
+      if (!loginEmail) {
+        // Prompt user for email
+        loginEmail = window.prompt("Ingresa tu correo electrónico para buscar tu huella registrada:") || "";
+        if (!loginEmail) {
+          setBiometricLoading(false);
+          return;
+        }
+      }
+
+      // Step 0: Look up user by email to get their userId
+      const lookupRes = await fetch(`/api/auth/webauthn/lookup?email=${encodeURIComponent(loginEmail)}`);
+      if (!lookupRes.ok) {
+        toast.error("No se encontró huella registrada para este correo");
+        setBiometricLoading(false);
+        return;
+      }
+      const lookupData = await lookupRes.json();
+      const userId = lookupData.userId;
+
+      if (!userId) {
+        toast.error("No se encontró huella registrada para este correo");
+        setBiometricLoading(false);
+        return;
+      }
+
+      // Step 1: Get authentication options with the user's credentials
+      const optionsRes = await fetch(`/api/auth/webauthn/auth-options?userId=${userId}`);
       if (!optionsRes.ok) {
         throw new Error("No se pudieron obtener las opciones de autenticación");
       }
@@ -79,22 +107,21 @@ export function LoginForm() {
       const verifyRes = await fetch("/api/auth/webauthn/auth-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credential: asseResp }),
+        body: JSON.stringify({ credential: asseResp, userId }),
       });
 
       const verifyData = await verifyRes.json();
 
       if (verifyData.verified && verifyData.email) {
         // Sign in via next-auth credentials with a special biometric flow
-        // We use the email returned by the server verification
         const result = await signIn("credentials", {
           email: verifyData.email,
-          password: "__webauthn_bypass__", // Special marker — handled by auth
+          password: "__webauthn_bypass__",
           redirect: false,
         });
 
         if (result?.ok) {
-          toast.success("¡Sesión iniciada con huella!");
+          toast.success("Sesión iniciada con huella!");
           setTimeout(() => {
             window.location.href = window.location.origin + "/";
           }, 600);
@@ -113,7 +140,7 @@ export function LoginForm() {
     } finally {
       setBiometricLoading(false);
     }
-  }, []);
+  }, [email]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">

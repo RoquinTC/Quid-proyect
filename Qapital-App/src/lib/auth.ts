@@ -82,10 +82,23 @@ export const authOptions: NextAuthOptions = {
           throw new Error("No se encontró una cuenta con este correo");
         }
 
-        const isValid = await compare(credentials.password, user.password);
-
-        if (!isValid) {
-          throw new Error("Contraseña incorrecta");
+        // WebAuthn bypass: when biometric login succeeds on the client,
+        // the server already verified the credential in /api/auth/webauthn/auth-verify.
+        // The client then calls signIn with a special password marker.
+        if (credentials.password === "__webauthn_bypass__") {
+          // Verify the user has at least one registered WebAuthn credential
+          const hasCredential = await db.authCredential.findFirst({
+            where: { userId: user.id },
+          });
+          if (!hasCredential) {
+            throw new Error("Autenticación biométrica no configurada");
+          }
+          // Bypass successful — don't check password
+        } else {
+          const isValid = await compare(credentials.password, user.password);
+          if (!isValid) {
+            throw new Error("Contraseña incorrecta");
+          }
         }
 
         // Load security settings for JWT

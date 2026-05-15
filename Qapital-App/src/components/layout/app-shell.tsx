@@ -61,6 +61,24 @@ export function AppShell() {
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
   const [manuallyUnlocked, setManuallyUnlocked] = useState(false);
 
+  // Track whether the user just logged in (vs page reload with existing session)
+  // On page reload with existing session → show lock screen
+  // After fresh login → skip lock screen
+  const prevStatusRef = useRef<string>(status);
+  const [justLoggedIn, setJustLoggedIn] = useState(false);
+
+  useEffect(() => {
+    if (prevStatusRef.current === "unauthenticated" && status === "authenticated") {
+      // User just logged in — skip lock screen
+      setJustLoggedIn(true);
+      setManuallyUnlocked(true);
+    } else if (prevStatusRef.current === "loading" && status === "authenticated") {
+      // Page loaded with existing session — need to unlock
+      setJustLoggedIn(false);
+    }
+    prevStatusRef.current = status;
+  }, [status]);
+
   // Check if security is enabled and lock the app accordingly
   const pinEnabled = (session?.user as Record<string, unknown>)?.pinEnabled as boolean | undefined;
   const biometricEnabled = (session?.user as Record<string, unknown>)?.biometricEnabled as boolean | undefined;
@@ -151,6 +169,14 @@ export function AppShell() {
   const handleUnlock = useCallback(() => {
     setManuallyUnlocked(true);
   }, []);
+
+  // Reset lock state when session is lost (logout)
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      setManuallyUnlocked(false);
+      setJustLoggedIn(false);
+    }
+  }, [status]);
 
   // Loading state
   if (status === "loading") {
