@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useAppStore } from "@/lib/store";
 import { apiFetch } from "@/lib/api";
+import { cacheOfflineSession, getCachedSession, clearOfflineSession } from "@/lib/offline-session";
 import { LoginForm } from "@/components/auth/login-form";
 import { RegisterForm } from "@/components/auth/register-form";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
@@ -20,6 +21,7 @@ import { SettingsPage } from "@/components/settings/settings-page";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 import { BackupRestorePrompt } from "@/components/settings/backup-restore-prompt";
 import { LockScreen } from "@/components/security/lock-screen";
+import { OfflineLockScreen } from "@/components/security/offline-lock-screen";
 import { useUpdateChecker } from "@/hooks/use-update-checker";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -217,11 +219,23 @@ export function AppShell() {
     setManuallyUnlocked(true);
   }, []);
 
+  // Cache session for offline access whenever it's available
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      cacheOfflineSession(session as any);
+    }
+  }, [status, session]);
+
   // Reset lock state when session is lost (logout)
   useEffect(() => {
     if (status === "unauthenticated") {
       setManuallyUnlocked(false);
       setJustLoggedIn(false);
+      clearOfflineSession();
+      // Notify Service Worker to clear cached session
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_SESSION' });
+      }
     }
   }, [status]);
 
@@ -245,7 +259,18 @@ export function AppShell() {
   }
 
   // Not authenticated - show auth forms
+  // But if we're offline and have a cached session, try to use it
   if (!session) {
+    const cachedSession = getCachedSession();
+    if (cachedSession && !navigator.onLine) {
+      // We're offline but have a cached session — show offline lock screen
+      // The user can unlock with PIN to access their data
+      return <OfflineLockScreen cachedSession={cachedSession} onUnlock={() => {
+        // Inject cached session into next-auth by setting a flag
+        // The SW will serve the cached session on next /api/auth/session call
+        window.location.reload();
+      }} />;
+    }
     if (authView === "register") return <RegisterForm />;
     if (authView === "forgot-password") return <ForgotPasswordForm />;
     return <LoginForm />;

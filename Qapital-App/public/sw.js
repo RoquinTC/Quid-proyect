@@ -4,6 +4,7 @@ const CACHE_NAME = 'quid-v1';
 const STATIC_CACHE = 'quid-static-v1';
 const DYNAMIC_CACHE = 'quid-dynamic-v1';
 const API_CACHE = 'quid-api-v1';
+const AUTH_CACHE = 'quid-auth-v1';
 
 // Assets to cache on install (app shell)
 const APP_SHELL = [
@@ -17,6 +18,52 @@ const APP_SHELL = [
   '/favicon-32.png',
   '/favicon-16.png',
 ];
+
+// ─── Offline Session Cache ───
+// Store the last known session so we can serve it when the server is unreachable.
+// This is the key to offline authentication.
+
+const OFFLINE_SESSION_KEY = 'quid-offline-session';
+const OFFLINE_SESSION_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 days (matches JWT maxAge)
+
+async function getCachedSession() {
+  try {
+    const cache = await caches.open(AUTH_CACHE);
+    const response = await cache.match(OFFLINE_SESSION_KEY);
+    if (!response) return null;
+    
+    const data = await response.json();
+    const now = Date.now();
+    
+    // Check if cached session has expired
+    if (data.cachedAt && (now - data.cachedAt) > OFFLINE_SESSION_EXPIRY) {
+      await cache.delete(OFFLINE_SESSION_KEY);
+      return null;
+    }
+    
+    return data.session;
+  } catch {
+    return null;
+  }
+}
+
+async function cacheSession(session) {
+  try {
+    const cache = await caches.open(AUTH_CACHE);
+    const wrapper = {
+      session,
+      cachedAt: Date.now(),
+    };
+    await cache.put(
+      OFFLINE_SESSION_KEY,
+      new Response(JSON.stringify(wrapper), {
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+  } catch (err) {
+    console.warn('[SW] Failed to cache session:', err);
+  }
+}
 
 // Install event — cache app shell
 self.addEventListener('install', (event) => {
@@ -42,7 +89,8 @@ self.addEventListener('activate', (event) => {
               name.startsWith('quid-') &&
               name !== STATIC_CACHE &&
               name !== DYNAMIC_CACHE &&
-              name !== API_CACHE
+              name !== API_CACHE &&
+              name !== AUTH_CACHE
             );
           })
           .map((name) => {
@@ -59,6 +107,11 @@ self.addEventListener('activate', (event) => {
 // Helper: determine caching strategy based on request
 function getStrategy(request) {
   const url = new URL(request.url);
+
+  // Auth routes — special handling (see fetch handler)
+  if (url.pathname.startsWith('/api/auth/')) {
+    return 'auth';
+  }
 
   // API routes — Network First
   if (url.pathname.startsWith('/api/')) {
@@ -84,13 +137,21 @@ function getStrategy(request) {
 
 // Fetch event — apply caching strategies
 self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests (except for auth which we handle specially)
+  const url = new URL(event.request.url);
+  const strategy = getStrategy(event.request);
+
+  // Auth routes need special handling for offline support
+  if (strategy === 'auth') {
+    event.respondWith(handleAuthRequest(event.request));
+    return;
+  }
+
   // Skip non-GET requests
   if (event.request.method !== 'GET') return;
 
   // Skip chrome-extension and other non-http(s) requests
   if (!event.request.url.startsWith('http')) return;
-
-  const strategy = getStrategy(event.request);
 
   switch (strategy) {
     case 'cache-first':
@@ -106,6 +167,91 @@ self.addEventListener('fetch', (event) => {
       event.respondWith(networkFirst(event.request));
   }
 });
+
+// ─── Auth Request Handler ───
+// This is the critical piece for offline authentication.
+// When the server is unreachable, we serve the cached session
+// so the app thinks the user is still authenticated.
+
+async function handleAuthRequest(request) {
+  const url = new URL(request.url);
+  
+  // For POST requests (sign-in, sign-out, etc.) — always pass through
+  if (request.method !== 'GET') {
+    try {
+      return await fetch(request);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Sin conexión al servidor' }),
+        { status: 503, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // GET /api/auth/session — the critical one
+  if (url.pathname === '/api/auth/session') {
+    try {
+      const networkResponse = await fetch(request);
+      
+      if (networkResponse.ok) {
+        // Cache the successful session response for offline use
+        const cloned = networkResponse.clone();
+        try {
+          const sessionData = await cloned.json();
+          if (sessionData && sessionData.user) {
+            await cacheSession(sessionData);
+          }
+        } catch {
+          // Session might be empty/unauthenticated — don't cache
+        }
+      }
+      
+      return networkResponse;
+    } catch {
+      // Network failed — try to serve cached session
+      const cachedSession = await getCachedSession();
+      
+      if (cachedSession) {
+        console.log('[SW] Serving cached session (offline mode)');
+        return new Response(JSON.stringify(cachedSession), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Offline-Session': 'true',
+          },
+        });
+      }
+      
+      // No cached session — return unauthenticated
+      return new Response(
+        JSON.stringify({}),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // GET /api/auth/csrf — serve a fake CSRF token when offline
+  if (url.pathname === '/api/auth/csrf') {
+    try {
+      return await fetch(request);
+    } catch {
+      return new Response(
+        JSON.stringify({ csrfToken: 'offline-csrf-token' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // Other auth GET routes — try network, fall back to empty response
+  try {
+    return await fetch(request);
+  } catch {
+    return new Response(
+      JSON.stringify({}),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+}
 
 // Cache First Strategy — for static assets
 async function cacheFirst(request) {
@@ -140,7 +286,7 @@ async function networkFirst(request) {
     const networkResponse = await fetch(request);
 
     if (networkResponse.ok) {
-      // Cache successful API responses for 5 minutes
+      // Cache successful API responses
       const responseToCache = networkResponse.clone();
       cache.put(request, responseToCache);
     }
@@ -202,6 +348,13 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'CLEAR_CACHE') {
     caches.keys().then((names) => {
       names.forEach((name) => caches.delete(name));
+    });
+  }
+
+  // Clear cached session (for logout)
+  if (event.data?.type === 'CLEAR_SESSION') {
+    caches.open(AUTH_CACHE).then((cache) => {
+      cache.delete(OFFLINE_SESSION_KEY);
     });
   }
 });
