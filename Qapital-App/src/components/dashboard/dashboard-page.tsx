@@ -91,17 +91,25 @@ export function DashboardPage() {
   const monthlyIncome = incomeBudgets.reduce((sum, b) => sum + b.spent, 0);
   const monthlyExpenses = expenseBudgets.reduce((sum, b) => sum + b.spent, 0);
   const totalExpenseBudget = expenseBudgets.reduce((sum, b) => sum + b.amount, 0);
+  const totalIncomeBudget = incomeBudgets.reduce((sum, b) => sum + b.amount, 0);
   const budgetPercentage = totalExpenseBudget > 0
     ? Math.round((monthlyExpenses / totalExpenseBudget) * 100)
     : 0;
 
   const activeDebts = debts.filter((d) => d.currentBalance > 0);
-  const totalSavings = accounts.reduce(
-    (sum, a) => sum + (a.subAccounts || [])
-      .filter((sa) => !sa.excludeFromAvailable)
-      .reduce((s, sa) => s + sa.balance, 0),
+  const totalMonthlyDebtPayments = activeDebts.reduce(
+    (sum, d) => sum + (d.monthlyPayment || 0),
     0
   );
+  const debtPercentage = totalIncomeBudget > 0
+    ? Math.round((totalMonthlyDebtPayments / totalIncomeBudget) * 100)
+    : 0;
+
+  const savingsBudgetEntries = expenseBudgets.filter((b) => b.category === "Ahorros");
+  const savingsBudgetAmount = savingsBudgetEntries.reduce((sum, b) => sum + b.amount, 0);
+  const savingsPercentage = totalIncomeBudget > 0
+    ? Math.round((savingsBudgetAmount / totalIncomeBudget) * 100)
+    : 0;
 
   // Upcoming bills from debts
   const upcomingBills = activeDebts
@@ -238,7 +246,7 @@ export function DashboardPage() {
           <CardContent className="p-3 text-center">
             <CreditCard className="size-5 text-rose-500 mx-auto mb-1" />
             <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
-              {activeDebts.length}
+              {debtPercentage}%
             </p>
             <p className="text-[10px] text-gray-500 dark:text-gray-400">Deudas</p>
           </CardContent>
@@ -252,8 +260,8 @@ export function DashboardPage() {
         >
           <CardContent className="p-3 text-center">
             <PiggyBank className="size-5 text-emerald-500 mx-auto mb-1" />
-            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-              {formatCurrency(totalSavings)}
+            <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {savingsPercentage}%
             </p>
             <p className="text-[10px] text-gray-500 dark:text-gray-400">Ahorros</p>
           </CardContent>
