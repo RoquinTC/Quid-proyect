@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import { apiFetch, formatCurrency, formatDate, parseLocalDate, toColombiaDateString, calculateProportionalYield, getDaysInMonth } from "@/lib/api";
+import { useLocalSingleQuery } from "@/lib/local/hooks/queries";
 import { AccountCard } from "./account-card";
 import { AccountForm } from "./account-form";
 import { SubAccountForm } from "./sub-account-form";
@@ -174,7 +175,6 @@ function formatDayMonth(dateStr: string): { day: string; month: string } {
 export function AccountDetail() {
   const { data: session } = useSession();
   const { setFinanceSubView } = useAppStore();
-  const [account, setAccount] = useState<Account | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -230,8 +230,11 @@ export function AccountDetail() {
     return null;
   });
 
-  const [refreshKey, setRefreshKey] = useState(0);
-  const fetchAccount = useCallback(() => setRefreshKey((k) => k + 1), []);
+  const { data: account, refetch: fetchAccount } = useLocalSingleQuery<Account>(
+    selectedAccountId ? `/api/accounts/${selectedAccountId}` : "",
+    selectedAccountId,
+    "accounts"
+  );
 
   // Fetch user settings for budgetCutoffDay
   useEffect(() => {
@@ -269,21 +272,6 @@ export function AccountDetail() {
       console.error("Error fetching transactions:", error);
     }
   }, [selectedAccountId, budgetCutoffDay, cycleOffset]);
-
-  // Fetch account info
-  useEffect(() => {
-    if (!selectedAccountId) return;
-    let cancelled = false;
-    apiFetch<Account[]>("/api/accounts")
-      .then((accounts) => {
-        if (cancelled) return;
-        const found = accounts.find((a) => a.id === selectedAccountId);
-        if (found) setAccount(found);
-      })
-      .catch((error) => console.error("Error fetching account:", error));
-
-    return () => { cancelled = true; };
-  }, [selectedAccountId, refreshKey]);
 
   // Fetch transactions when settings are loaded or cycle changes
   useEffect(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,8 @@ import {
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useAppStore } from "@/lib/store";
-import { formatCurrency, apiFetch, calcPercentage, getColombiaNow, parseLocalDate } from "@/lib/api";
+import { formatCurrency, calcPercentage, getColombiaNow, parseLocalDate } from "@/lib/api";
+import { useMultiQuery } from "@/lib/local/hooks/queries";
 import { motion } from "framer-motion";
 import {
   LineChart,
@@ -418,15 +419,27 @@ function WidgetCustomizationDialog({
 
 export function FinanceOverview() {
   const { data: session } = useSession();
-  const { setFinanceSubView } = useAppStore();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([]);
-  const [monthlySummary, setMonthlySummary] = useState<MonthlySummaryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const mountedRef = useRef(true);
+  const { setFinanceSubView, isOnline } = useAppStore();
+
+  // ── Local-first data fetching via useMultiQuery ──
+  const { data: multiData, loading, syncing } = useMultiQuery({
+    accounts: "/api/accounts",
+    transactions: "/api/transactions",
+    budgets: "/api/budgets",
+    debts: "/api/debts",
+    recurring: "/api/recurring",
+    monthlySummary: "/api/dashboard/monthly-summary?months=12",
+  });
+
+  // Extract and cast data from useMultiQuery results
+  const accounts = (multiData.accounts || []) as Account[];
+  const txRaw = multiData.transactions as unknown as { transactions: Transaction[]; nextCursor: string | null } | undefined;
+  const transactions = txRaw?.transactions ?? (Array.isArray(multiData.transactions) ? multiData.transactions as unknown as Transaction[] : []);
+  const budgets = (multiData.budgets || []) as Budget[];
+  const debts = (multiData.debts || []) as Debt[];
+  const recurringPayments = (multiData.recurring || []) as RecurringPayment[];
+  const monthlySummary = (multiData.monthlySummary as unknown as MonthlySummaryResponse | undefined) ?? null;
+
   const [evolutionRange, setEvolutionRange] = useState<"6M" | "12M">("6M");
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
@@ -464,39 +477,6 @@ export function FinanceOverview() {
     const now = getColombiaNow();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
-
-  const fetchData = useCallback(async () => {
-    try {
-      const [accs, txs, bdgs, dbts, recs, summary] = await Promise.allSettled([
-        apiFetch<Account[]>("/api/accounts"),
-        apiFetch<{ transactions: Transaction[]; nextCursor: string | null }>("/api/transactions"),
-        apiFetch<Budget[]>("/api/budgets"),
-        apiFetch<Debt[]>("/api/debts"),
-        apiFetch<RecurringPayment[]>("/api/recurring"),
-        apiFetch<MonthlySummaryResponse>("/api/dashboard/monthly-summary?months=12"),
-      ]);
-
-      if (!mountedRef.current) return;
-      if (accs.status === "fulfilled") setAccounts(accs.value);
-      if (txs.status === "fulfilled") setTransactions(txs.value.transactions ?? txs.value as unknown as Transaction[]);
-      if (bdgs.status === "fulfilled") setBudgets(bdgs.value);
-      if (dbts.status === "fulfilled") setDebts(dbts.value);
-      if (recs.status === "fulfilled") setRecurringPayments(recs.value);
-      if (summary.status === "fulfilled") setMonthlySummary(summary.value);
-    } catch (error) {
-      console.error("Error fetching finance overview data:", error);
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    fetchData();
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [fetchData]);
 
   // ============================================================
   // COMPUTED VALUES
@@ -798,10 +778,20 @@ export function FinanceOverview() {
         {/* HEADER WITH MONTH SELECTOR & SETTINGS */}
         {/* ============================================================ */}
         <motion.div variants={itemVariants} className="flex items-center justify-between">
-          <div>
+          <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
               Resumen Financiero
             </h2>
+            {!isOnline && (
+              <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-full">
+                Sin conexión
+              </span>
+            )}
+            {syncing && (
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full animate-pulse">
+                Sincronizando...
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm px-1 py-1">

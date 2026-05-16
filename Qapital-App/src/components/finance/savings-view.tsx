@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { apiFetch, formatCurrency } from "@/lib/api";
+import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
 import { SavingsGoalCard } from "./savings-goal-card";
 import { SavingsGoalForm } from "./savings-goal-form";
@@ -34,8 +35,7 @@ const itemVariants = {
 
 export function SavingsView() {
   const { setFinanceSubView } = useAppStore();
-  const [goals, setGoals] = useState<SavingsGoal[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: goals, loading, refetch: fetchGoals } = useLocalQuery<SavingsGoal>("/api/savings");
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [editingGoal, setEditingGoal] = useState<SavingsGoal | null>(null);
   const [contributeGoalId, setContributeGoalId] = useState<string | null>(null);
@@ -43,23 +43,6 @@ export function SavingsView() {
   const [contributeLinkedAccounts, setContributeLinkedAccounts] = useState<any[]>([]);
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  const fetchGoals = useCallback(async () => {
-    try {
-      const data = await apiFetch<SavingsGoal[]>("/api/savings");
-      setGoals(data);
-    } catch (error) {
-      console.error("Error fetching savings goals:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchGoals().then(() => { if (cancelled) return; });
-    return () => { cancelled = true; };
-  }, [fetchGoals]);
 
   const totalSaved = goals.reduce((sum, g) => sum + g.currentAmount, 0);
   const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0);

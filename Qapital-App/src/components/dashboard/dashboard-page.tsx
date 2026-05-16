@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,11 +12,14 @@ import {
   PiggyBank,
   Receipt,
   LayoutDashboard,
+  WifiOff,
+  CloudOff,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
-import { formatCurrency, apiFetch, getColombiaNow } from "@/lib/api";
+import { formatCurrency } from "@/lib/api";
+import { useMultiQuery } from "@/lib/local/hooks/queries";
+import type { Account, Budget, Debt } from "@/lib/types";
 import { motion } from "framer-motion";
-import type { Account, SubAccount, Budget, Debt } from "@/lib/types";
 
 // ============================================================
 // ANIMATION VARIANTS
@@ -41,39 +43,18 @@ const itemVariants = {
 // ============================================================
 
 export function DashboardPage() {
-  const { setActiveModule, setFinanceSubView } = useAppStore();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [loading, setLoading] = useState(true);
-  const mountedRef = useRef(true);
+  const { setActiveModule, setFinanceSubView, isOnline, pendingCount } = useAppStore();
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [accs, bdgs, dbts] = await Promise.allSettled([
-        apiFetch<Account[]>("/api/accounts"),
-        apiFetch<Budget[]>("/api/budgets"),
-        apiFetch<Debt[]>("/api/debts"),
-      ]);
+  // Local-first data: reads from IndexedDB instantly, syncs with server in background
+  const { data, loading, syncing } = useMultiQuery({
+    accounts: "/api/accounts",
+    budgets: "/api/budgets",
+    debts: "/api/debts",
+  });
 
-      if (!mountedRef.current) return;
-      if (accs.status === "fulfilled") setAccounts(accs.value);
-      if (bdgs.status === "fulfilled") setBudgets(bdgs.value);
-      if (dbts.status === "fulfilled") setDebts(dbts.value);
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error);
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    fetchData();
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [fetchData]);
+  const accounts = (data.accounts || []) as Account[];
+  const budgets = (data.budgets || []) as Budget[];
+  const debts = (data.debts || []) as Debt[];
 
   // ============================================================
   // COMPUTED VALUES
@@ -164,15 +145,38 @@ export function DashboardPage() {
       className="p-4 space-y-4 pb-24"
     >
       {/* ============================================================ */}
-      {/* HEADER */}
+      {/* HEADER with offline/sync indicator */}
       {/* ============================================================ */}
       <motion.div variants={itemVariants}>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-          ¡Hola! 👋
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Aquí está tu resumen financiero
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+              ¡Hola! 👋
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Aquí está tu resumen financiero
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isOnline && (
+              <span className="flex items-center gap-1 text-xs text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded-full">
+                <WifiOff className="size-3" />
+                Sin conexión
+              </span>
+            )}
+            {isOnline && pendingCount > 0 && (
+              <span className="flex items-center gap-1 text-xs text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-full">
+                <CloudOff className="size-3" />
+                {pendingCount} pendiente{pendingCount > 1 ? "s" : ""}
+              </span>
+            )}
+            {syncing && (
+              <span className="text-xs text-emerald-500 animate-pulse">
+                Sincronizando...
+              </span>
+            )}
+          </div>
+        </div>
       </motion.div>
 
       {/* ============================================================ */}
