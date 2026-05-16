@@ -13,9 +13,21 @@ export async function GET() {
       );
     }
 
+    // Auto-cleanup: delete read notifications older than 5 minutes
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    await db.appNotification.deleteMany({
+      where: {
+        userId: session.user.id,
+        read: true,
+        createdAt: { lt: fiveMinutesAgo },
+      },
+    });
+
+    // Get recent notifications (limit to 50 to keep panel manageable)
     const notifications = await db.appNotification.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
+      take: 50,
     });
 
     const unreadCount = await db.appNotification.count({

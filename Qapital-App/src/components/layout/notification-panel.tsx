@@ -123,6 +123,18 @@ export function NotificationPanel() {
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
   const [open, setOpen] = useState(false);
+  const [readTimestamps, setReadTimestamps] = useState<Record<string, number>>({});
+
+  // Filter out read notifications that were read more than 3 minutes ago (client-side fade-out)
+  const READ_FADE_MS = 3 * 60 * 1000;
+  const visibleNotifications = notifications.filter((n) => {
+    if (!n.read) return true; // Always show unread
+    // If we tracked when it was read locally, use that
+    const readAt = readTimestamps[n.id];
+    if (readAt) return Date.now() - readAt < READ_FADE_MS;
+    // If it was already read when fetched (e.g., from server), hide if older than 3 min
+    return Date.now() - new Date(n.createdAt).getTime() < READ_FADE_MS;
+  });
 
   // ---- Fetch notifications ----
   const fetchNotifications = useCallback(async () => {
@@ -153,6 +165,8 @@ export function NotificationPanel() {
   const markAsRead = useCallback(
     async (id: string) => {
       // Optimistic update
+      const now = Date.now();
+      setReadTimestamps((prev) => ({ ...prev, [id]: now }));
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       );
@@ -172,7 +186,17 @@ export function NotificationPanel() {
   // ---- Mark all as read ----
   const markAllAsRead = useCallback(async () => {
     // Optimistic update
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    const now = Date.now();
+    setNotifications((prev) => {
+      const updated = prev.map((n) => (n.read ? n : { ...n, read: true }));
+      // Track read timestamps for newly-read ones
+      const newTimestamps: Record<string, number> = {};
+      prev.forEach((n) => {
+        if (!n.read) newTimestamps[n.id] = now;
+      });
+      setReadTimestamps((prev) => ({ ...prev, ...newTimestamps }));
+      return updated;
+    });
     setUnreadCount(0);
 
     try {
@@ -291,11 +315,11 @@ export function NotificationPanel() {
         </div>
 
         {/* List */}
-        {loading && notifications.length === 0 ? (
+        {loading && visibleNotifications.length === 0 ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="size-6 animate-spin text-emerald-500" />
           </div>
-        ) : notifications.length === 0 ? (
+        ) : visibleNotifications.length === 0 ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
             <div className="size-12 rounded-full bg-muted flex items-center justify-center mb-3">
@@ -309,9 +333,9 @@ export function NotificationPanel() {
             </p>
           </div>
         ) : (
-          <ScrollArea className="max-h-96">
+          <ScrollArea className="max-h-72">
             <div className="flex flex-col">
-              {notifications.map((notification, idx) => {
+              {visibleNotifications.map((notification, idx) => {
                 const { Icon, color, bg } = getNotificationIcon(
                   notification.type,
                   notification.data
@@ -409,8 +433,8 @@ export function NotificationPanel() {
           </ScrollArea>
         )}
 
-        {/* Footer – only visible when there are notifications */}
-        {notifications.length > 0 && (
+        {/* Footer – only visible when there are visible notifications */}
+        {visibleNotifications.length > 0 && (
           <div className="border-t px-4 py-2">
             <p className="text-[11px] text-center text-muted-foreground/60">
               Se actualiza cada 30 segundos
