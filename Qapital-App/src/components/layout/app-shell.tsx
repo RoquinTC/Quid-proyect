@@ -104,27 +104,58 @@ export function AppShell() {
   const shouldLock = securityEnabled && !manuallyUnlocked;
 
   // Listen for visibility change events to lock on resume
+  // Grace period: when the app goes to background, start a 60-second timer.
+  // If the user returns within 60 seconds → cancel lock, reset counter.
+  // If 60 seconds pass while in background → lock on next foreground.
+  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lockTriggeredRef = useRef(false);
+
   useEffect(() => {
     if (!securityEnabled) return;
 
-    const handleVisibilityChange = async () => {
-      if (document.hidden) return; // App going to background — do nothing
+    const LOCK_DELAY_MS = 60_000; // 60 seconds grace period before locking
 
-      // App coming to foreground — check lockOnResume setting
-      try {
-        const settings = await apiFetch<{ lockOnResume?: boolean; pinEnabled?: boolean; biometricEnabled?: boolean }>("/api/settings");
-        if (settings.lockOnResume && (settings.pinEnabled || settings.biometricEnabled)) {
+    const handleVisibilityChange = async () => {
+      if (document.hidden) {
+        // App going to background — start grace timer
+        lockTriggeredRef.current = false;
+        lockTimerRef.current = setTimeout(() => {
+          // Grace period expired — mark that we should lock on next foreground
+          lockTriggeredRef.current = true;
+        }, LOCK_DELAY_MS);
+      } else {
+        // App coming back to foreground
+        // Cancel any pending lock timer
+        if (lockTimerRef.current) {
+          clearTimeout(lockTimerRef.current);
+          lockTimerRef.current = null;
+        }
+
+        // Only lock if the grace period fully expired while in background
+        if (!lockTriggeredRef.current) return;
+
+        lockTriggeredRef.current = false;
+
+        // Check lockOnResume setting
+        try {
+          const settings = await apiFetch<{ lockOnResume?: boolean; pinEnabled?: boolean; biometricEnabled?: boolean }>("/api/settings");
+          if (settings.lockOnResume && (settings.pinEnabled || settings.biometricEnabled)) {
+            setManuallyUnlocked(false);
+          }
+        } catch {
+          // If we can't check settings, lock anyway for safety
           setManuallyUnlocked(false);
         }
-      } catch {
-        // If we can't check settings, lock anyway for safety
-        setManuallyUnlocked(false);
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current);
+        lockTimerRef.current = null;
+      }
     };
   }, [securityEnabled]);
 
