@@ -6,6 +6,8 @@ import { PinPad } from "./pin-pad";
 import { BiometricPrompt } from "./biometric-prompt";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiFetch } from "@/lib/api";
+import { cacheOfflinePinHash, getCachedPinHash } from "@/lib/offline-session";
+import { compare } from "bcryptjs";
 
 interface LockScreenProps {
   onUnlock: () => void;
@@ -34,24 +36,52 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
   const handlePinComplete = useCallback(async (pin: string) => {
     setVerifying(true);
     setPinError(null);
+    const userId = session?.user?.id;
 
     try {
+      // Try online verification first
       const result = await apiFetch<{ success: boolean; error?: string }>("/api/auth/pin/verify", {
         method: "POST",
         body: JSON.stringify({ pin }),
       });
 
       if (result.success) {
+        // Online verification succeeded — cache the pin hash for offline use
+        if (userId) {
+          try {
+            const settings = await apiFetch<{ pinHash?: string }>("/api/settings");
+            if (settings.pinHash) {
+              cacheOfflinePinHash(userId, settings.pinHash);
+            }
+          } catch {
+            // Settings fetch failed — not critical
+          }
+        }
         onUnlock();
       } else {
         setPinError(result.error || "PIN incorrecto");
       }
     } catch {
-      setPinError("Error de verificación");
+      // Online verification failed — try offline verification with cached hash
+      if (userId) {
+        const cachedHash = getCachedPinHash(userId);
+        if (cachedHash) {
+          try {
+            const isValid = await compare(pin, cachedHash);
+            if (isValid) {
+              onUnlock();
+              return;
+            }
+          } catch {
+            // bcrypt comparison failed
+          }
+        }
+      }
+      setPinError("Sin conexión. PIN no disponible sin conexión.");
     } finally {
       setVerifying(false);
     }
-  }, [onUnlock]);
+  }, [onUnlock, session?.user?.id]);
 
   const handleBiometricSuccess = useCallback((_userId: string, _email: string) => {
     onUnlock();
