@@ -58,6 +58,7 @@ import {
   BellRing,
   Smartphone,
   Send,
+  MessageSquare,
 } from "lucide-react";
 import { AccountManager } from "@/components/finance/account-manager";
 import { CategoriesManager } from "@/components/finance/categories-manager";
@@ -133,6 +134,15 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentBuildId, setCurrentBuildId] = useState<string>('...');
+
+  // Fetch current build ID
+  useEffect(() => {
+    fetch('/api/health')
+      .then(res => res.json())
+      .then(data => setCurrentBuildId(data.buildId))
+      .catch(() => setCurrentBuildId('Error'));
+  }, []);
   const mountedRef = useRef(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -680,14 +690,25 @@ export function SettingsPage() {
                       <p className="text-[10px] text-center text-gray-400">¿No tienes un código? Escríbele /start a tu bot de Telegram</p>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3 bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
-                      <div className="size-8 rounded-full bg-emerald-500 flex items-center justify-center">
-                        <CheckCircle2 className="size-4 text-white" />
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center gap-3 bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl border border-emerald-100 dark:border-emerald-800/30">
+                        <div className="size-8 rounded-full bg-emerald-500 flex items-center justify-center">
+                          <CheckCircle2 className="size-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">¡Ya eres amigo de Aura!</p>
+                          <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70">Puedes escribirle por Telegram en cualquier momento.</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">¡Ya eres amigo de Aura!</p>
-                        <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70">Puedes escribirle por Telegram en cualquier momento.</p>
-                      </div>
+                      
+                      <Button 
+                        variant="outline"
+                        className="w-full bg-[#0088cc] hover:bg-[#0077b5] text-white border-0 rounded-xl py-6 shadow-md gap-2"
+                        onClick={() => window.open('https://t.me/Aura_RQC_Bot', '_blank')}
+                      >
+                        <MessageSquare className="size-4" />
+                        Ir al Chat con Aura
+                      </Button>
                     </div>
                   )}
                 </CardContent>
@@ -1200,7 +1221,13 @@ export function SettingsPage() {
             <span className="text-[10px] font-bold text-white">Q</span>
           </div>
           <p className="text-[11px] font-semibold text-gray-900 dark:text-white">Quid</p>
-          <p className="text-[9px] text-gray-400">v1.1.0</p>
+          <div className="flex flex-col gap-0.5">
+            <p className="text-[9px] text-gray-400">v1.1.0</p>
+            <div className="flex items-center justify-center gap-1.5 opacity-60">
+              <div className="size-1 rounded-full bg-emerald-500 animate-pulse" />
+              <p className="text-[8px] font-mono text-gray-500">Build: {currentBuildId}</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

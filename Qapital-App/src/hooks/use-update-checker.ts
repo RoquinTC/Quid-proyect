@@ -33,12 +33,18 @@ export function useUpdateChecker(intervalMs = 60000) {
         toastShownRef.current = true;
         setUpdateAvailable(true);
 
-        toast("Nueva actualización disponible", {
-          description: "Hay una versión nueva de Quid lista.",
+        toast(`Nueva actualización disponible: ${serverBuildId}`, {
+          description: "Hay una versión nueva de Quid lista para instalar.",
           duration: Infinity,
           action: {
-            label: "Actualizar",
+            label: "Actualizar Ahora",
             onClick: () => {
+              // Limpiar caché antes de recargar para asegurar frescura
+              if ('caches' in window) {
+                caches.keys().then(names => {
+                  for (let name of names) caches.delete(name);
+                });
+              }
               window.location.reload();
             },
           },
