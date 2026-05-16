@@ -263,8 +263,6 @@ export function TransactionForm({
     setReceiptUrl(null);
     setUseCustomCategory(false);
     setCustomCategory("");
-    setShowNewSubCategory(false);
-    setNewSubCategory("");
   };
 
   // Build combined account options (accounts + sub-accounts grouped)
