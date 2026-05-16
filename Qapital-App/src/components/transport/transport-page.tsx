@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore, type TransportSubView, type SidebarAction } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -8,6 +8,7 @@ import {
   Droplets, CircleDot, ShieldAlert, Settings, Package,
   ChevronDown, Gauge, MapPin, AlertTriangle, Bell, Clock,
   Trash2, Pencil, MoreVertical, ArrowLeft, MoreHorizontal,
+  Activity, RefreshCw,
 } from "lucide-react";
 import { VehicleForm } from "./vehicle-form";
 import { FuelLogForm } from "./fuel-log-form";
@@ -126,6 +127,9 @@ export function TransportPage() {
   const [showFuelPriceDialog, setShowFuelPriceDialog] = useState(false);
   const [showKmUpdate, setShowKmUpdate] = useState(false);
 
+  // Fuel status card expanded state
+  const [showFuelDetails, setShowFuelDetails] = useState(false);
+
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<{ type: "fuel" | "maintenance" | "vehicle"; id: string; vehicleId?: string } | null>(null);
 
@@ -235,6 +239,56 @@ export function TransportPage() {
     if (level > 25) return "text-amber-500";
     return "text-red-500";
   };
+  const getFuelGradientBg = (level: number) => {
+    if (level > 50) return "from-emerald-500/10 to-emerald-500/5";
+    if (level > 25) return "from-amber-500/10 to-amber-500/5";
+    return "from-red-500/10 to-red-500/5";
+  };
+
+  // ─── KM Outdated Detection ──────────────────────────────────────
+  const isKmOutdated = useMemo(() => {
+    if (!selectedVehicle) return false;
+    const lastLog = selectedVehicle.fuelLogs?.[0]; // already sorted desc by API
+    if (!lastLog) return false;
+
+    // If latest fuel log km is significantly different from currentKm (>500km gap)
+    const kmDiff = Math.abs(selectedVehicle.currentKm - lastLog.km);
+    if (kmDiff > 500) return true;
+
+    // If no fuel log in the last 7 days and vehicle has been used
+    const lastLogDate = new Date(lastLog.date);
+    const daysSinceLastLog = (Date.now() - lastLogDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceLastLog > 7 && selectedVehicle.currentKm > 0) return true;
+
+    return false;
+  }, [selectedVehicle]);
+
+  // ─── Last KM update info ────────────────────────────────────────
+  const lastKmUpdateLabel = useMemo(() => {
+    if (!selectedVehicle) return null;
+    const lastLog = selectedVehicle.fuelLogs?.[0];
+    if (lastLog) {
+      const d = new Date(lastLog.date);
+      const daysAgo = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysAgo === 0) return "Actualizado hoy";
+      if (daysAgo === 1) return "Actualizado ayer";
+      return `Hace ${daysAgo} días`;
+    }
+    // Fallback to vehicle updatedAt
+    if (selectedVehicle.updatedAt) {
+      const d = new Date(selectedVehicle.updatedAt);
+      const daysAgo = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysAgo === 0) return "Actualizado hoy";
+      if (daysAgo === 1) return "Actualizado ayer";
+      return `Hace ${daysAgo} días`;
+    }
+    return null;
+  }, [selectedVehicle]);
+
+  // ─── Has fuel logs ──────────────────────────────────────────────
+  const hasFuelLogs = useMemo(() => {
+    return (selectedVehicle?.fuelLogs?.length ?? 0) > 0;
+  }, [selectedVehicle]);
 
   // ─── Delete handler ────────────────────────────────────────────
   const handleDelete = async () => {
@@ -373,9 +427,12 @@ export function TransportPage() {
         {/* ─── Compact Indicators Row ─────────────────────────── */}
         {selectedVehicle && (
           <div className="flex items-center gap-2 mt-2">
-            {/* Fuel bar + level */}
+            {/* Fuel bar + level + range — clickable to show fuel details */}
             {tankCapacity > 0 && (
-              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <button
+                className="flex items-center gap-1.5 flex-1 min-w-0 group"
+                onClick={() => setShowFuelDetails(!showFuelDetails)}
+              >
                 <Fuel className={`size-3.5 flex-shrink-0 ${getFuelTextColor(fuelLevel)}`} />
                 <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden min-w-[40px]">
                   <motion.div
@@ -387,13 +444,16 @@ export function TransportPage() {
                 </div>
                 <span className={`text-[11px] font-bold flex-shrink-0 ${getFuelTextColor(fuelLevel)}`}>
                   {Math.round(fuelLevel)}%
+                  {estimatedRange > 0 && (
+                    <span className="text-gray-400 font-normal"> · ~{estimatedRange} km</span>
+                  )}
                 </span>
-              </div>
+              </button>
             )}
 
             {/* KM */}
             <button
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors relative"
               onClick={() => setShowKmUpdate(true)}
             >
               <Gauge className="size-3 text-gray-400" />
@@ -401,6 +461,13 @@ export function TransportPage() {
                 {(selectedVehicle.currentKm ?? 0).toLocaleString("es-CO")} km
               </span>
               <Pencil className="size-2.5 text-gray-300" />
+              {/* KM Outdated Warning pill */}
+              {isKmOutdated && (
+                <span className="absolute -top-1.5 -right-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[8px] font-bold animate-pulse">
+                  <AlertTriangle className="size-2" />
+                  Actualizar
+                </span>
+              )}
             </button>
 
             {/* Avg km/gal */}
@@ -426,6 +493,150 @@ export function TransportPage() {
 
       {/* ─── Timeline Content ──────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
+        {/* ─── Fuel Status Card ─────────────────────────────────── */}
+        {selectedVehicle && tankCapacity > 0 && (
+          <AnimatePresence>
+            {showFuelDetails && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 pt-3 pb-2">
+                  <div className={`rounded-2xl bg-gradient-to-br ${getFuelGradientBg(fuelLevel)} border border-gray-100 dark:border-gray-700 p-4`}>
+                    {/* Header row */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`size-8 rounded-xl flex items-center justify-center ${getFuelColor(fuelLevel)}`}>
+                          <Fuel className="size-4 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Estado del Combustible</h3>
+                          {lastKmUpdateLabel && (
+                            <p className="text-[10px] text-gray-400">{lastKmUpdateLabel}</p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowFuelDetails(false)}
+                        className="size-6 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <ChevronDown className="size-4" />
+                      </button>
+                    </div>
+
+                    {hasFuelLogs ? (
+                      <>
+                        {/* Big percentage + gauge */}
+                        <div className="flex items-center gap-4 mb-3">
+                          <div className="text-center min-w-[72px]">
+                            <span className={`text-3xl font-black ${getFuelTextColor(fuelLevel)}`}>
+                              {Math.round(fuelLevel)}%
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            {/* Fuel bar large */}
+                            <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1.5">
+                              <motion.div
+                                className={`h-full rounded-full ${getFuelColor(fuelLevel)}`}
+                                initial={{ width: 0 }}
+                                animate={{ width: `${Math.min(fuelLevel, 100)}%` }}
+                                transition={{ duration: 0.8, ease: "easeOut" }}
+                              />
+                            </div>
+                            <div className="flex justify-between text-[9px] text-gray-400">
+                              <span>0 gal</span>
+                              <span>{tankCapacity} gal</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Stats grid */}
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          <div className="bg-white dark:bg-gray-800 rounded-xl p-2 text-center">
+                            <Fuel className="size-3 text-cyan-500 mx-auto mb-0.5" />
+                            <p className="text-xs font-bold text-gray-900 dark:text-white">
+                              {currentFuel.toFixed(1)} gal
+                            </p>
+                            <p className="text-[9px] text-gray-400">En tanque</p>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 rounded-xl p-2 text-center">
+                            <MapPin className="size-3 text-cyan-500 mx-auto mb-0.5" />
+                            <p className="text-xs font-bold text-gray-900 dark:text-white">
+                              ~{estimatedRange} km
+                            </p>
+                            <p className="text-[9px] text-gray-400">Autonomía</p>
+                          </div>
+                          <div className="bg-white dark:bg-gray-800 rounded-xl p-2 text-center">
+                            <Activity className="size-3 text-cyan-500 mx-auto mb-0.5" />
+                            <p className="text-xs font-bold text-gray-900 dark:text-white">
+                              {avgKmPerGallon} km/g
+                            </p>
+                            <p className="text-[9px] text-gray-400">Promedio</p>
+                          </div>
+                        </div>
+
+                        {/* Quick Update KM button if outdated */}
+                        {isKmOutdated && (
+                          <button
+                            onClick={() => setShowKmUpdate(true)}
+                            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                          >
+                            <Gauge className="size-3.5 text-amber-600" />
+                            <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                              Actualizar KM para estimación precisa
+                            </span>
+                            <ArrowLeft className="size-3 text-amber-500 rotate-180" />
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      /* No fuel logs yet */
+                      <div className="text-center py-3">
+                        <div className="inline-flex items-center justify-center size-10 rounded-xl bg-cyan-50 dark:bg-cyan-900/20 mb-2">
+                          <Fuel className="size-5 text-cyan-400" />
+                        </div>
+                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                          Sin registros de combustible
+                        </p>
+                        <p className="text-[10px] text-gray-400 max-w-[220px] mx-auto mb-2">
+                          Registra una recarga con &quot;Tanque lleno&quot; para empezar a rastrear el nivel de combustible estimado
+                        </p>
+                        <Button
+                          size="sm"
+                          className="h-7 rounded-lg text-[11px] bg-gradient-to-r from-cyan-600 to-blue-600 px-3"
+                          onClick={() => { setEditFuelLog(null); setShowFuelLogForm(true); }}
+                        >
+                          <Plus className="size-3 mr-0.5" />
+                          Registrar Recarga
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+
+        {/* Show fuel status card collapsed hint when there's tank capacity and no timeline items */}
+        {selectedVehicle && tankCapacity > 0 && !showFuelDetails && hasFuelLogs && (
+          <div className="px-4 pt-2">
+            <button
+              onClick={() => setShowFuelDetails(true)}
+              className="w-full flex items-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/10 dark:to-blue-900/10 border border-cyan-100 dark:border-cyan-900/30 hover:from-cyan-100 hover:to-blue-100 dark:hover:from-cyan-900/20 dark:hover:to-blue-900/20 transition-colors"
+            >
+              <Fuel className={`size-3.5 ${getFuelTextColor(fuelLevel)}`} />
+              <span className="text-[11px] font-semibold text-cyan-700 dark:text-cyan-300 flex-1 text-left">
+                {Math.round(fuelLevel)}% combustible · ~{estimatedRange} km de autonomía
+              </span>
+              <ChevronDown className="size-3.5 text-cyan-400" />
+            </button>
+          </div>
+        )}
+
         {timeline.length === 0 ? (
           <div className="p-8 text-center">
             <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-3">
@@ -548,6 +759,11 @@ export function TransportPage() {
         onOpenChange={setShowFuelLogForm}
         preselectedVehicleId={selectedVehicleId}
         fuelLog={editFuelLog}
+        currentFuelLevel={selectedVehicle?.fuelLevel}
+        currentFuelGallons={selectedVehicle?.currentFuel}
+        tankCapacity={selectedVehicle?.tankCapacity}
+        estimatedRange={selectedVehicle?.estimatedRange}
+        avgKmPerGallon={selectedVehicle?.avgKmPerGallon}
         onSuccess={refetchVehicles}
       />
 
@@ -958,19 +1174,26 @@ function VehicleDetailView({
         )}
       </div>
 
-      {/* Forms */}
+      {/* Forms inside detail view */}
       <FuelLogForm
         open={showFuelLogForm}
         onOpenChange={setShowFuelLogForm}
         preselectedVehicleId={vehicle.id}
+        currentFuelLevel={vehicle.fuelLevel}
+        currentFuelGallons={vehicle.currentFuel}
+        tankCapacity={vehicle.tankCapacity}
+        estimatedRange={vehicle.estimatedRange}
+        avgKmPerGallon={vehicle.avgKmPerGallon}
         onSuccess={onRefresh}
       />
+
       <MaintenanceForm
         open={showMaintenanceForm}
         onOpenChange={setShowMaintenanceForm}
         preselectedVehicleId={vehicle.id}
         onSuccess={onRefresh}
       />
+
       <QuickKmUpdate
         open={showKmUpdate}
         onOpenChange={setShowKmUpdate}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Sheet,
   SheetContent,
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency, getColombiaTodayString } from "@/lib/api";
 import type { Vehicle, FuelLog } from "@/lib/types";
-import { Loader2, Calculator, Fuel } from "lucide-react";
+import { Loader2, Calculator, Fuel, Gauge, TrendingUp, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 interface FuelLogFormProps {
@@ -30,10 +30,26 @@ interface FuelLogFormProps {
   onOpenChange: (open: boolean) => void;
   preselectedVehicleId?: string | null;
   fuelLog?: FuelLog | null;
+  currentFuelLevel?: number;
+  currentFuelGallons?: number;
+  tankCapacity?: number | null;
+  estimatedRange?: number;
+  avgKmPerGallon?: number;
   onSuccess?: () => void;
 }
 
-export function FuelLogForm({ open, onOpenChange, preselectedVehicleId, fuelLog, onSuccess }: FuelLogFormProps) {
+export function FuelLogForm({
+  open,
+  onOpenChange,
+  preselectedVehicleId,
+  fuelLog,
+  currentFuelLevel,
+  currentFuelGallons,
+  tankCapacity,
+  estimatedRange,
+  avgKmPerGallon,
+  onSuccess,
+}: FuelLogFormProps) {
   const [loading, setLoading] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleId, setVehicleId] = useState(preselectedVehicleId || "");
@@ -123,7 +139,47 @@ export function FuelLogForm({ open, onOpenChange, preselectedVehicleId, fuelLog,
 
   // Project next refill
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
-  const tankCapacity = selectedVehicle?.tankCapacity;
+  const vehicleTankCapacity = selectedVehicle?.tankCapacity ?? tankCapacity ?? 0;
+
+  // ─── Fuel level projection ──────────────────────────────────────
+  const fuelProjection = useMemo(() => {
+    if (isEditing) return null;
+    if (!vehicleTankCapacity || vehicleTankCapacity <= 0) return null;
+
+    const currentFuelGal = currentFuelGallons ?? 0;
+    const currentLvl = currentFuelLevel ?? 0;
+
+    // Projected fuel after this refill
+    let projectedFuel = currentFuelGal + gallons;
+    let willOverflow = projectedFuel > vehicleTankCapacity;
+    projectedFuel = Math.min(projectedFuel, vehicleTankCapacity);
+
+    const projectedLevel = (projectedFuel / vehicleTankCapacity) * 100;
+    const projectedRange = avgKmPerGallon && avgKmPerGallon > 0
+      ? Math.round(projectedFuel * avgKmPerGallon)
+      : 0;
+
+    return {
+      currentFuelGal,
+      currentLvl,
+      projectedFuel,
+      projectedLevel,
+      projectedRange,
+      willOverflow,
+      tankCapacity: vehicleTankCapacity,
+    };
+  }, [isEditing, vehicleTankCapacity, currentFuelGallons, currentFuelLevel, gallons, avgKmPerGallon]);
+
+  const getFuelColor = (level: number) => {
+    if (level > 50) return "bg-emerald-500";
+    if (level > 25) return "bg-amber-500";
+    return "bg-red-500";
+  };
+  const getFuelTextColor = (level: number) => {
+    if (level > 50) return "text-emerald-500";
+    if (level > 25) return "text-amber-500";
+    return "text-red-500";
+  };
 
   const handleSubmit = async () => {
     if (!vehicleId || !amount || !pricePerGallon) return;
@@ -196,6 +252,51 @@ export function FuelLogForm({ open, onOpenChange, preselectedVehicleId, fuelLog,
         </SheetHeader>
 
         <div className="space-y-4 mt-4 pb-6">
+          {/* ─── Current Fuel Estimation (NEW log only) ──────────── */}
+          {!isEditing && fuelProjection && fuelProjection.currentLvl > 0 && (
+            <div className="rounded-xl bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 border border-cyan-100 dark:border-cyan-900/30 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Fuel className="size-3.5 text-cyan-600" />
+                <span className="text-[11px] font-semibold text-cyan-700 dark:text-cyan-300">
+                  Combustible actual (estimado)
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Fuel bar */}
+                <div className="flex-1">
+                  <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1">
+                    <div
+                      className={`h-full rounded-full ${getFuelColor(fuelProjection.currentLvl)} transition-all`}
+                      style={{ width: `${Math.min(fuelProjection.currentLvl, 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-gray-400">
+                    <span>0 gal</span>
+                    <span>{fuelProjection.tankCapacity} gal</span>
+                  </div>
+                </div>
+                <div className="text-right min-w-[56px]">
+                  <span className={`text-sm font-bold ${getFuelTextColor(fuelProjection.currentLvl)}`}>
+                    {Math.round(fuelProjection.currentLvl)}%
+                  </span>
+                  <p className="text-[9px] text-gray-400">
+                    {fuelProjection.currentFuelGal.toFixed(1)} gal
+                  </p>
+                </div>
+              </div>
+
+              {estimatedRange && estimatedRange > 0 && (
+                <div className="flex items-center gap-1 mt-1.5">
+                  <Gauge className="size-3 text-cyan-500" />
+                  <span className="text-[10px] text-cyan-600 dark:text-cyan-400">
+                    Autonomía: ~{estimatedRange} km
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Vehicle */}
           <div className="space-y-2">
             <Label>Vehículo</Label>
@@ -205,8 +306,8 @@ export function FuelLogForm({ open, onOpenChange, preselectedVehicleId, fuelLog,
                 <span className="text-sm font-medium text-gray-900 dark:text-white">
                   {selectedVehicle?.name || vehicles[0]?.name || "Vehículo"}
                 </span>
-                {tankCapacity && (
-                  <span className="text-[10px] text-gray-400 ml-auto">Tanque: {tankCapacity} gal</span>
+                {vehicleTankCapacity > 0 && (
+                  <span className="text-[10px] text-gray-400 ml-auto">Tanque: {vehicleTankCapacity} gal</span>
                 )}
               </div>
             ) : (
@@ -286,17 +387,81 @@ export function FuelLogForm({ open, onOpenChange, preselectedVehicleId, fuelLog,
             </div>
           )}
 
-          {/* Tank capacity info */}
-          {tankCapacity && gallons > 0 && (
+          {/* ─── Projected Fuel Level After Refill (NEW log only) ── */}
+          {!isEditing && fuelProjection && gallons > 0 && (
+            <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-cyan-50 dark:from-emerald-900/20 dark:to-cyan-900/20 border border-emerald-100 dark:border-emerald-900/30 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp className="size-3.5 text-emerald-600" />
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                  Nivel proyectado después de la recarga
+                </span>
+              </div>
+
+              {/* Before → After comparison */}
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex-1">
+                  <p className="text-[9px] text-gray-400 mb-0.5">Antes</p>
+                  <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${getFuelColor(fuelProjection.currentLvl)} transition-all`}
+                      style={{ width: `${Math.min(fuelProjection.currentLvl, 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <span className="text-[10px] text-gray-400">→</span>
+                <div className="flex-1">
+                  <p className="text-[9px] text-gray-400 mb-0.5">Después</p>
+                  <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${getFuelColor(fuelProjection.projectedLevel)} transition-all`}
+                      style={{ width: `${Math.min(fuelProjection.projectedLevel, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <span className={`text-sm font-bold ${getFuelTextColor(fuelProjection.projectedLevel)}`}>
+                    {Math.round(fuelProjection.projectedLevel)}%
+                  </span>
+                  <span className="text-[10px] text-gray-400">
+                    ({fuelProjection.projectedFuel.toFixed(1)} gal)
+                  </span>
+                </div>
+                {fuelProjection.projectedRange > 0 && (
+                  <div className="flex items-center gap-1">
+                    <Gauge className="size-3 text-emerald-500" />
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                      ~{fuelProjection.projectedRange} km
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Overflow warning */}
+              {fuelProjection.willOverflow && (
+                <div className="flex items-center gap-1.5 mt-2 p-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                  <AlertTriangle className="size-3 text-amber-500 flex-shrink-0" />
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                    Los galones añadidos superarían la capacidad del tanque ({fuelProjection.tankCapacity} gal)
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tank capacity info (existing - kept as-is for when no projection is available) */}
+          {!isEditing && !fuelProjection && vehicleTankCapacity > 0 && gallons > 0 && (
             <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
               <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                <span>Capacidad: {tankCapacity} gal</span>
-                <span>{Math.round((gallons / tankCapacity) * 100)}% del tanque</span>
+                <span>Capacidad: {vehicleTankCapacity} gal</span>
+                <span>{Math.round((gallons / vehicleTankCapacity) * 100)}% del tanque</span>
               </div>
               <div className="w-full h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all"
-                  style={{ width: `${Math.min((gallons / tankCapacity) * 100, 100)}%` }}
+                  style={{ width: `${Math.min((gallons / vehicleTankCapacity) * 100, 100)}%` }}
                 />
               </div>
             </div>
