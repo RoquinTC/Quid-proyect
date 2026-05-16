@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, ReactNode, useMemo } from "react";
+import { useState, useEffect, useRef, ReactNode, useMemo } from "react";
 import { apiFetch, formatCurrency, calcPercentage, getColombiaNow, parseLocalDate } from "@/lib/api";
+import { useMultiQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
 import { AccountForm } from "./account-form";
 import { TransactionForm } from "./transaction-form";
@@ -662,15 +663,30 @@ function SortableSheetItem({
 
 export function AccountsView() {
   const { data: session } = useSession();
-  const { setFinanceSubView } = useAppStore();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [budgets, setBudgets] = useState<Budget[]>([]);
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
-  const [recurringPending, setRecurringPending] = useState<RecurringPayment[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [monthlySummary, setMonthlySummary] = useState<MonthlySummaryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { setFinanceSubView, isOnline } = useAppStore();
+
+  // ── Local-first data fetching via useMultiQuery ──
+  const { data: multiData, loading, syncing } = useMultiQuery({
+    accounts: "/api/accounts",
+    budgets: "/api/budgets",
+    debts: "/api/debts",
+    savings: "/api/savings",
+    recurring: "/api/recurring",
+    transactions: "/api/transactions",
+    monthlySummary: "/api/dashboard/monthly-summary?months=12",
+  });
+
+  // Extract and cast data from useMultiQuery results
+  const accounts = (multiData.accounts || []) as Account[];
+  const budgets = (multiData.budgets || []) as Budget[];
+  const debts = (multiData.debts || []) as Debt[];
+  const savingsGoals = (multiData.savings || []) as SavingsGoal[];
+  const recurringPayments = (multiData.recurring || []) as RecurringPayment[];
+  const recurringPending = recurringPayments.filter((r) => r.status === "pending");
+  const txRaw = multiData.transactions as unknown as { transactions: Transaction[]; nextCursor: string | null } | undefined;
+  const transactions = txRaw?.transactions ?? (Array.isArray(multiData.transactions) ? multiData.transactions as unknown as Transaction[] : []);
+  const monthlySummary = (multiData.monthlySummary as unknown as MonthlySummaryResponse | undefined) ?? null;
+
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [widgetConfig, setWidgetConfig] = useState<WidgetConfig[]>(DEFAULT_WIDGET_ORDER);
@@ -689,44 +705,6 @@ export function AccountsView() {
     const now = getColombiaNow();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
   });
-
-  const fetchAll = useCallback(async () => {
-    try {
-      const [accs, budgs, dbts, savs, recs, txs, summary] = await Promise.allSettled([
-        apiFetch<Account[]>("/api/accounts"),
-        apiFetch<Budget[]>("/api/budgets"),
-        apiFetch<Debt[]>("/api/debts"),
-        apiFetch<SavingsGoal[]>("/api/savings"),
-        apiFetch<RecurringPayment[]>("/api/recurring"),
-        apiFetch<{ transactions: Transaction[]; nextCursor: string | null }>("/api/transactions"),
-        apiFetch<MonthlySummaryResponse>("/api/dashboard/monthly-summary?months=12"),
-      ]);
-
-      if (accs.status === "fulfilled" && Array.isArray(accs.value)) setAccounts(accs.value);
-      if (budgs.status === "fulfilled" && Array.isArray(budgs.value)) setBudgets(budgs.value);
-      if (dbts.status === "fulfilled" && Array.isArray(dbts.value)) setDebts(dbts.value);
-      if (savs.status === "fulfilled" && Array.isArray(savs.value)) setSavingsGoals(savs.value);
-      if (recs.status === "fulfilled" && Array.isArray(recs.value))
-        setRecurringPending(recs.value.filter((r) => r.status === "pending"));
-      if (txs.status === "fulfilled") {
-        const txData = txs.value;
-        if (txData && typeof txData === "object" && "transactions" in txData && Array.isArray(txData.transactions)) {
-          setTransactions(txData.transactions);
-        } else if (Array.isArray(txData)) {
-          setTransactions(txData);
-        }
-      }
-      if (summary.status === "fulfilled" && summary.value) setMonthlySummary(summary.value);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
 
   useEffect(() => {
     setWidgetConfig(loadWidgetConfig());
@@ -1002,7 +980,6 @@ export function AccountsView() {
     const reordered = arrayMove(sortedAccounts, oldIndex, newIndex);
     const newOrder = reordered.map((a) => a.id);
     setAccountOrder(newOrder);
-    setAccounts(reordered);
     persistAccountOrder(newOrder);
   };
 

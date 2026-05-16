@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { apiFetch, formatCurrency, formatDate, calculateCDTInterest, calculateCDTReteFuente, getCDTBreakdown, getCurrentCDTInterest, getDaysBetween, getColombiaNow } from "@/lib/api";
+import { useState } from "react";
+import { formatCurrency, formatDate, calculateCDTInterest, calculateCDTReteFuente, getCDTBreakdown, getCurrentCDTInterest, getDaysBetween, getColombiaNow } from "@/lib/api";
+import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { CDTForm } from "./cdt-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,27 +52,9 @@ function calculateTimeProgress(startDate: string, endDate: string): number {
 }
 
 export function CDTView() {
-  const [cdts, setCDTs] = useState<CDTWithRelations[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: cdts, loading, refetch: fetchCDTs } = useLocalQuery<CDTWithRelations>("/api/cdts");
   const [showForm, setShowForm] = useState(false);
   const [editCDT, setEditCDT] = useState<CDTWithRelations | null>(null);
-
-  const fetchCDTs = useCallback(async () => {
-    try {
-      const data = await apiFetch<CDTWithRelations[]>("/api/cdts");
-      setCDTs(data);
-    } catch (error) {
-      console.error("Error fetching CDTs:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchCDTs().then(() => { if (cancelled) return; });
-    return () => { cancelled = true; };
-  }, [fetchCDTs]);
 
   // Defensive Number() wrappers: Prisma Decimal values may arrive as strings
   // if the NextResponse.json patch doesn't apply (e.g., Turbopack bundling).

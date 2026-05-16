@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { apiFetch, formatCurrency, formatDate, toColombiaDateString, getColombiaTodayString } from "@/lib/api";
+import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
 import { RecurringForm } from "./recurring-form";
 import { PayrollForm } from "./payroll-form";
@@ -105,8 +106,8 @@ function getMonthLabel(monthKey: string): string {
 }
 
 export function RecurringView() {
-  const [payments, setPayments] = useState<RecurringPayment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: payments, loading, refetch: fetchPayments } = useLocalQuery<RecurringPayment>("/api/recurring");
+  const { data: payrollGroups, refetch: fetchPayrollGroups } = useLocalQuery<PayrollGroup>("/api/payroll");
   const [showForm, setShowForm] = useState(false);
   const [editingPayment, setEditingPayment] = useState<RecurringPayment | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -129,9 +130,6 @@ export function RecurringView() {
   const [scopePayment, setScopePayment] = useState<RecurringPayment | null>(null);
   const [scopeLoading, setScopeLoading] = useState(false);
 
-  // Payroll groups
-  const [payrollGroups, setPayrollGroups] = useState<PayrollGroup[]>([]);
-
   // Multi-select batch confirm state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [multiSelectMode, setMultiSelectMode] = useState(false);
@@ -142,33 +140,6 @@ export function RecurringView() {
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<number | null>(null);
-
-  const fetchPayments = useCallback(async () => {
-    try {
-      const data = await apiFetch<RecurringPayment[]>("/api/recurring");
-      setPayments(data);
-    } catch (error) {
-      console.error("Error fetching recurring payments:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchPayrollGroups = useCallback(async () => {
-    try {
-      const data = await apiFetch<PayrollGroup[]>("/api/payroll");
-      setPayrollGroups(data);
-    } catch (error) {
-      console.error("Error fetching payroll groups:", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchPayments().then(() => { if (cancelled) return; });
-    fetchPayrollGroups().then(() => { if (cancelled) return; });
-    return () => { cancelled = true; };
-  }, [fetchPayments, fetchPayrollGroups]);
 
   // Filter pending payments to only show current month (+ overdue from prev months)
   const currentMonthStr = getColombiaTodayString().substring(0, 7); // "YYYY-MM"

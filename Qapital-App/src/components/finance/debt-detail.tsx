@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency, formatDate } from "@/lib/api";
+import { useLocalSingleQuery, useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
 import { DebtCard } from "./debt-card";
 import { DebtForm } from "./debt-form";
@@ -101,9 +102,6 @@ function getDueInstallments(debt: Debt, today: Date): Installment[] {
 
 export function DebtDetail() {
   const { setFinanceSubView } = useAppStore();
-  const [debt, setDebt] = useState<Debt | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [reversing, setReversing] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -148,30 +146,16 @@ export function DebtDetail() {
     setDebtIdReady(true);
   }, []);
 
-  const fetchData = useCallback(async () => {
-    if (!selectedDebtId) return;
-    try {
-      const [debtsData, accountsData] = await Promise.all([
-        apiFetch<Debt[]>("/api/debts"),
-        apiFetch<Account[]>("/api/accounts"),
-      ]);
-      const found = debtsData.find((d) => d.id === selectedDebtId);
-      setDebt(found || null);
-      setAccounts(accountsData || []);
-    } catch (error) {
-      console.error("Error fetching debt detail:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedDebtId]);
+  const { data: debt, loading: debtLoading, refetch: refetchDebt } = useLocalSingleQuery<Debt>(
+    selectedDebtId ? `/api/debts/${selectedDebtId}` : "",
+    selectedDebtId,
+    "debts"
+  );
+  const { data: accounts, refetch: refetchAccounts } = useLocalQuery<Account>("/api/accounts");
 
-  useEffect(() => {
-    let cancelled = false;
-    if (debtIdReady) {
-      fetchData().then(() => { if (cancelled) return; });
-    }
-    return () => { cancelled = true; };
-  }, [fetchData, debtIdReady]);
+  const fetchData = useCallback(async () => {
+    await Promise.all([refetchDebt(), refetchAccounts()]);
+  }, [refetchDebt, refetchAccounts]);
 
   // ── Auto-select all due installments when debt changes ──
   useEffect(() => {
@@ -543,7 +527,7 @@ export function DebtDetail() {
     }
   };
 
-  if (loading || !debtIdReady) {
+  if (!debtIdReady || (debtLoading && !debt)) {
     return (
       <div className="p-4 space-y-3 pb-24">
         <div className="h-8 w-24 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />

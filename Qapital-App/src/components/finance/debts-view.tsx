@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { apiFetch, formatCurrency, calcPercentage } from "@/lib/api";
+import { useState, useCallback, useMemo } from "react";
+import { formatCurrency, calcPercentage } from "@/lib/api";
+import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
 import { DebtCard } from "./debt-card";
 import { DebtForm } from "./debt-form";
@@ -24,26 +25,8 @@ const itemVariants = {
 
 export function DebtsView() {
   const { setFinanceSubView } = useAppStore();
-  const [debts, setDebts] = useState<Debt[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: debts, loading, refetch: fetchDebts } = useLocalQuery<Debt>("/api/debts");
   const [showDebtForm, setShowDebtForm] = useState(false);
-
-  const fetchDebts = useCallback(async () => {
-    try {
-      const data = await apiFetch<Debt[]>("/api/debts");
-      setDebts(data);
-    } catch (error) {
-      console.error("Error fetching debts:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchDebts().then(() => { if (cancelled) return; });
-    return () => { cancelled = true; };
-  }, [fetchDebts]);
 
   const totalDebt = debts.reduce((sum, d) => sum + d.currentBalance, 0);
   const totalCredit = debts

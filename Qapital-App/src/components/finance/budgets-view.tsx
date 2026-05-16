@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency, calcPercentage } from "@/lib/api";
+import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { BudgetForm } from "./budget-form";
 import { TransactionForm } from "./transaction-form";
 import { SpendingIncomeChart } from "./spending-income-chart";
@@ -145,9 +146,9 @@ type BudgetTab = "expenses" | "income";
 // ── Main Component ──
 
 export function BudgetsView() {
-  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const { data: budgets, loading: budgetsLoading, refetch: fetchBudgets } = useLocalQuery<Budget>("/api/budgets");
   const [unbudgeted, setUnbudgeted] = useState<UnbudgetedCategory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [unbudgetedLoading, setUnbudgetedLoading] = useState(true);
   const [showBudgetForm, setShowBudgetForm] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const [prefilledBudgetCategory, setPrefilledBudgetCategory] = useState<{
@@ -169,31 +170,20 @@ export function BudgetsView() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
 
-  const fetchBudgets = useCallback(async () => {
-    try {
-      const data = await apiFetch<Budget[]>("/api/budgets");
-      setBudgets(data);
-    } catch (error) {
-      console.error("Error fetching budgets:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   const fetchUnbudgeted = useCallback(async () => {
     try {
       const data = await apiFetch<UnbudgetedCategory[]>("/api/budgets/unbudgeted");
       setUnbudgeted(data);
     } catch (error) {
       console.error("Error fetching unbudgeted:", error);
+    } finally {
+      setUnbudgetedLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    Promise.all([fetchBudgets(), fetchUnbudgeted()]).then(() => { if (cancelled) return; });
-    return () => { cancelled = true; };
-  }, [fetchBudgets, fetchUnbudgeted]);
+    fetchUnbudgeted();
+  }, [fetchUnbudgeted]);
 
   const incomeBudgets = budgets.filter((b) => b.type === "income");
   const expenseBudgets = budgets.filter((b) => b.type === "expense");
@@ -245,7 +235,8 @@ export function BudgetsView() {
       const data = await apiFetch<Budget[]>("/api/budgets/recalculate", {
         method: "POST",
       });
-      setBudgets(data);
+      // Refresh budgets from local DB after recalculate
+      fetchBudgets();
       fetchUnbudgeted();
       setCategoryMovements({});
       setExpandedCategories({});
@@ -332,7 +323,7 @@ export function BudgetsView() {
     return groups;
   };
 
-  if (loading) {
+  if (budgetsLoading || unbudgetedLoading) {
     return (
       <div className="p-4 space-y-3 pb-24">
         {[1, 2, 3].map((i) => (
