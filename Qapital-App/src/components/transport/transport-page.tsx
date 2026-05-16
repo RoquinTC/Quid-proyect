@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAppStore, type TransportSubView, type SidebarAction } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Car, Fuel, Wrench, Plus, Bike, Truck, HelpCircle,
+  Car, Fuel, Wrench, Plus, HelpCircle,
   Droplets, CircleDot, ShieldAlert, Settings, Package,
   ChevronDown, Gauge, MapPin, AlertTriangle, Bell, Clock,
   Trash2, Pencil, MoreVertical, ArrowLeft, MoreHorizontal,
@@ -15,6 +15,7 @@ import { FuelLogForm } from "./fuel-log-form";
 import { MaintenanceForm } from "./maintenance-form";
 import { FuelPriceWidget } from "./fuel-price-widget";
 import { QuickKmUpdate } from "./quick-km-update";
+import { VehicleIcon } from "./vehicle-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,9 +38,6 @@ import type { Vehicle, FuelLog, MaintenanceRecord } from "@/lib/types";
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────
-const vehicleIcons: Record<string, typeof Car> = {
-  motorcycle: Bike, car: Car, truck: Truck, other: HelpCircle,
-};
 const vehicleTypeLabels: Record<string, string> = {
   motorcycle: "Moto", car: "Carro", truck: "Camión", other: "Otro",
 };
@@ -336,7 +334,7 @@ export function TransportPage() {
     return (
       <div className="p-4 flex flex-col items-center justify-center h-full">
         <div className="inline-flex items-center justify-center size-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-500 shadow-lg shadow-cyan-500/30 mb-4">
-          <Bike className="size-8 text-white" />
+          <VehicleIcon type="motorcycle" className="size-8 text-white" />
         </div>
         <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1">
           Sin vehículos aún
@@ -373,28 +371,25 @@ export function TransportPage() {
           >
             <SelectTrigger className="rounded-xl border-0 bg-gray-100 dark:bg-gray-800 h-10 font-semibold text-sm flex-1">
               <div className="flex items-center gap-2">
-                {selectedVehicle && (() => {
-                  const Icon = vehicleIcons[selectedVehicle.type] || Car;
-                  return <Icon className="size-4 text-cyan-500" />;
-                })()}
+                {selectedVehicle && (
+                  <VehicleIcon icon={selectedVehicle.icon} type={selectedVehicle.type} className="size-4 text-cyan-500" />
+                )}
                 <SelectValue placeholder="Seleccionar vehículo" />
               </div>
             </SelectTrigger>
             <SelectContent>
-              {vehicles.map((v) => {
-                const Icon = vehicleIcons[v.type] || Car;
-                return (
+              {vehicles.map((v) => (
                   <SelectItem key={v.id} value={v.id}>
                     <div className="flex items-center gap-2">
-                      <Icon className="size-3.5 text-cyan-500" />
+                      <VehicleIcon icon={v.icon} type={v.type} className="size-3.5 text-cyan-500" />
                       <span>{v.name}</span>
                       <span className="text-xs text-gray-400">
                         {vehicleTypeLabels[v.type] || v.type}
                       </span>
                     </div>
                   </SelectItem>
-                );
-              })}
+                ))
+              }
             </SelectContent>
           </Select>
 
@@ -944,7 +939,6 @@ function VehicleDetailView({
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
   const [showKmUpdate, setShowKmUpdate] = useState(false);
 
-  const Icon = vehicleIcons[vehicle.type] || Car;
   const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
   const fuelLevel = vehicle.fuelLevel ?? 0;
   const currentFuel = vehicle.currentFuel ?? 0;

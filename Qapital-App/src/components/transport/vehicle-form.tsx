@@ -20,6 +20,7 @@ import {
 import { apiFetch } from "@/lib/api";
 import { Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { VehicleIcon, availableIconKeys, iconLabels } from "./vehicle-icon";
 
 const vehicleTypes = [
   { value: "motorcycle", label: "Motocicleta" },
@@ -48,6 +49,8 @@ interface VehicleFormProps {
     tankCapacity?: number | null;
     fuelType?: string | null;
     currentKm: number;
+    icon?: string | null;
+    plate?: string | null;
   } | null;
   onSuccess?: () => void;
 }
@@ -61,9 +64,11 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
   const [model, setModel] = useState(vehicle?.model || "");
   const [year, setYear] = useState(vehicle?.year?.toString() || "");
   const [color, setColor] = useState(vehicle?.color || "");
+  const [plate, setPlate] = useState(vehicle?.plate || "");
   const [tankCapacity, setTankCapacity] = useState(vehicle?.tankCapacity?.toString() || "");
   const [fuelType, setFuelType] = useState(vehicle?.fuelType || "gasoline");
   const [currentKm, setCurrentKm] = useState(vehicle?.currentKm?.toString() || "0");
+  const [icon, setIcon] = useState(vehicle?.icon || "");
 
   // Sync form state when vehicle prop changes (e.g., editing a different vehicle)
   useEffect(() => {
@@ -74,9 +79,11 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
       setModel(vehicle?.model || "");
       setYear(vehicle?.year?.toString() || "");
       setColor(vehicle?.color || "");
+      setPlate(vehicle?.plate || "");
       setTankCapacity(vehicle?.tankCapacity?.toString() || "");
       setFuelType(vehicle?.fuelType || "gasoline");
       setCurrentKm(vehicle?.currentKm?.toString() || "0");
+      setIcon(vehicle?.icon || "");
       setError(null);
     }
   }, [vehicle, open]);
@@ -95,9 +102,11 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
         model: model || null,
         year: year ? Number(year) : null,
         color: color || null,
+        plate: plate || null,
         tankCapacity: tankCapacity ? Number(tankCapacity) : null,
         fuelType,
         currentKm: currentKm ? Number(currentKm) : 0,
+        icon: icon || null,
       };
 
       if (isEditing) {
@@ -140,9 +149,11 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
       setModel("");
       setYear("");
       setColor("");
+      setPlate("");
       setTankCapacity("");
       setFuelType("gasoline");
       setCurrentKm("0");
+      setIcon("");
     }
   };
 
@@ -183,6 +194,31 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Icon Selector */}
+          <div className="space-y-2">
+            <Label>Ícono</Label>
+            <div className="grid grid-cols-6 gap-1.5">
+              {availableIconKeys.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setIcon(icon === key ? "" : key)}
+                  className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${
+                    icon === key
+                      ? "border-cyan-500 bg-cyan-50 dark:bg-cyan-900/30 shadow-sm"
+                      : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                  }`}
+                  title={iconLabels[key]}
+                >
+                  <VehicleIcon icon={key} type={type} className={`size-5 ${icon === key ? "text-cyan-600 dark:text-cyan-400" : "text-gray-500 dark:text-gray-400"}`} />
+                  <span className="text-[8px] mt-1 text-gray-500 dark:text-gray-400 leading-tight truncate w-full text-center">
+                    {iconLabels[key]}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Brand & Model */}
@@ -232,6 +268,19 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
                 className="rounded-xl"
               />
             </div>
+          </div>
+
+          {/* Plate */}
+          <div className="space-y-2">
+            <Label htmlFor="vehicle-plate">Placa</Label>
+            <Input
+              id="vehicle-plate"
+              placeholder="Ej: ABC-123"
+              value={plate}
+              onChange={(e) => setPlate(e.target.value.toUpperCase())}
+              className="rounded-xl uppercase tracking-wider"
+              maxLength={10}
+            />
           </div>
 
           {/* Tank Capacity & Fuel Type */}

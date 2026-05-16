@@ -13,6 +13,7 @@ export interface Vehicle {
   fuelType?: string | null;
   currentKm: number;
   icon?: string | null;
+  plate?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

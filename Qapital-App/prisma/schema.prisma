@@ -531,6 +531,7 @@ model Vehicle {
   tankCapacity    Float?    // in gallons (NOT money — stays Float)
   fuelType        String?   // gasoline, diesel, electric
   currentKm       Float     @default(0) // distance (NOT money — stays Float)
+  plate           String?
   icon            String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

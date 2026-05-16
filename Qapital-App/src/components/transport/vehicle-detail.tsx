@@ -9,10 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Bike,
-  Car,
-  Truck,
-  HelpCircle,
   Fuel,
   Wrench,
   ArrowLeft,
@@ -29,6 +25,7 @@ import {
   Pencil,
   Trash2,
   AlertTriangle,
+  Wallet,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -50,19 +47,13 @@ import { motion } from "framer-motion";
 import { FuelGauge } from "./Fuel-gauge";
 import type { Vehicle, FuelLog, MaintenanceRecord, FuelLevelData } from "@/lib/types";
 import { QuickKmUpdate } from "./quick-km-update";
+import { VehicleIcon } from "./vehicle-icon";
 import { toast } from "sonner";
 
 interface VehicleDetailProps {
   vehicleId: string;
   onBack: () => void;
 }
-
-const vehicleIcons: Record<string, typeof Car> = {
-  motorcycle: Bike,
-  car: Car,
-  truck: Truck,
-  other: HelpCircle,
-};
 
 const vehicleGradients: Record<string, string> = {
   motorcycle: "from-cyan-500 to-blue-600",
@@ -90,7 +81,7 @@ const maintTypeIcons: Record<string, typeof Wrench> = {
   brake_service: ShieldAlert,
   general: Settings,
   parts_replacement: Package,
-  other: HelpCircle,
+  other: Wrench,
 };
 
 const maintTypeLabels: Record<string, string> = {
@@ -124,6 +115,7 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
   const [showKmUpdate, setShowKmUpdate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: "fuel" | "maintenance"; id: string } | null>(null);
   const [fuelLevelData, setFuelLevelData] = useState<FuelLevelData | null>(null);
+  const [currentFuelPrice, setCurrentFuelPrice] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -155,6 +147,17 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
     }
   }, [vehicleId, vehicle?.tankCapacity]);
 
+  const fetchFuelPrice = useCallback(async () => {
+    if (!vehicle?.fuelType || vehicle.fuelType === "electric") return;
+    try {
+      const prices = await apiFetch<Array<{ fuelType: string; pricePerGallon: number }>>("/api/fuel-prices");
+      const match = prices.find((p) => p.fuelType === vehicle.fuelType);
+      if (match) setCurrentFuelPrice(match.pricePerGallon);
+    } catch {
+      // silently ignore
+    }
+  }, [vehicle?.fuelType]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -162,8 +165,9 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
   useEffect(() => {
     if (vehicle && vehicle.tankCapacity) {
       fetchFuelLevel();
+      fetchFuelPrice();
     }
-  }, [vehicle, vehicle?.tankCapacity, fetchFuelLevel]);
+  }, [vehicle, vehicle?.tankCapacity, fetchFuelLevel, fetchFuelPrice]);
 
   const handleDeleteVehicle = async () => {
     if (!vehicle) return;
@@ -207,7 +211,6 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
     );
   }
 
-  const Icon = vehicleIcons[vehicle.type] || Car;
   const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
 
   // Stats
@@ -224,6 +227,18 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
       avgKmPerGallon = Math.round(totalKm / totalGallons);
     }
   }
+
+  // Cost to fill calculation
+  const costToFillData = (() => {
+    if (!fuelLevelData || fuelLevelData.fuelLevel >= 100 || !vehicle.tankCapacity || !vehicle.fuelType || vehicle.fuelType === "electric") return null;
+    const gallonsNeeded = vehicle.tankCapacity - fuelLevelData.currentFuel;
+    if (gallonsNeeded <= 0) return null;
+    if (currentFuelPrice != null && currentFuelPrice > 0) {
+      const costToFill = gallonsNeeded * currentFuelPrice;
+      return { gallonsNeeded, costToFill, pricePerGallon: currentFuelPrice, hasPrice: true };
+    }
+    return { gallonsNeeded, costToFill: 0, pricePerGallon: 0, hasPrice: false };
+  })();
 
   return (
     <div className="p-4 space-y-4 pb-24">
@@ -265,10 +280,17 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
           <div className="flex items-center gap-4 relative z-10">
             <div className="size-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <Icon className="size-7 text-white" />
+              <VehicleIcon icon={vehicle.icon} type={vehicle.type} className="size-7 text-white" />
             </div>
             <div className="flex-1">
-              <h3 className="text-lg font-bold text-white">{vehicle.name}</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-white">{vehicle.name}</h3>
+                {vehicle.plate && (
+                  <span className="text-[10px] font-bold bg-white text-gray-800 border border-gray-300 rounded px-1.5 py-0 leading-4 tracking-wider uppercase">
+                    {vehicle.plate}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-white/70">
                 {vehicle.brand && vehicle.model
                   ? `${vehicle.brand} ${vehicle.model}`
@@ -337,6 +359,35 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
                   </p>
                 </div>
               </div>
+
+              {/* Cost to Fill Tank */}
+              {costToFillData && (
+                <motion.div
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-3 p-3 bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800 rounded-xl"
+                >
+                  <div className="flex items-start gap-2">
+                    <Wallet className="size-4 text-cyan-600 dark:text-cyan-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      {costToFillData.hasPrice ? (
+                        <>
+                          <p className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">
+                            Para llenar el tanque: {formatCurrency(costToFillData.costToFill)}
+                          </p>
+                          <p className="text-[10px] text-cyan-600 dark:text-cyan-400 mt-0.5">
+                            {costToFillData.gallonsNeeded.toFixed(1)} gal a {formatCurrency(costToFillData.pricePerGallon)}/gal
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-cyan-600 dark:text-cyan-400">
+                          Actualiza el precio de la gasolina para ver cuánto necesitas para llenar el tanque
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               {/* Anomaly Warning */}
               {fuelLevelData.anomalyDetected && (

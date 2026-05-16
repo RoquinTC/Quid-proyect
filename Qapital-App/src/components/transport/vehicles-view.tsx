@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
-import { formatCurrency } from "@/lib/api";
+import { formatCurrency, apiFetch } from "@/lib/api";
 import { VehicleCard } from "./vehicle-card";
 import { VehicleForm } from "./vehicle-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, Bike, Fuel, MapPin, Gauge, AlertTriangle } from "lucide-react";
+import { Plus, Fuel, MapPin, Gauge, AlertTriangle, Wallet } from "lucide-react";
 import { motion } from "framer-motion";
+import { VehicleIcon } from "./vehicle-icon";
 import type { Vehicle } from "@/lib/types";
 
 type VehicleWithDetails = Vehicle & {
@@ -20,6 +21,12 @@ type VehicleWithDetails = Vehicle & {
   avgKmPerGallon?: number;
   anomalyDetected?: boolean;
 };
+
+interface FuelPriceInfo {
+  id: string;
+  fuelType: string;
+  pricePerGallon: number;
+}
 
 interface VehiclesViewProps {
   onSelectVehicle: (id: string) => void;
@@ -43,6 +50,27 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
   const vehicles = vehiclesData as VehicleWithDetails[];
   const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [editVehicle, setEditVehicle] = useState<VehicleWithDetails | null>(null);
+  const [fuelPrices, setFuelPrices] = useState<FuelPriceInfo[]>([]);
+
+  // Fetch fuel prices
+  useEffect(() => {
+    async function loadFuelPrices() {
+      try {
+        const prices = await apiFetch<FuelPriceInfo[]>("/api/fuel-prices");
+        setFuelPrices(prices);
+      } catch {
+        // silently ignore
+      }
+    }
+    loadFuelPrices();
+  }, []);
+
+  // Helper: get fuel price for a vehicle
+  const getFuelPrice = (vehicle: VehicleWithDetails): number | null => {
+    if (!vehicle.fuelType || vehicle.fuelType === "electric") return null;
+    const match = fuelPrices.find((p) => p.fuelType === vehicle.fuelType);
+    return match ? match.pricePerGallon : null;
+  };
 
   // Compute summary stats
   const vehiclesWithTank = vehicles.filter((v) => v.tankCapacity && v.tankCapacity > 0);
@@ -52,6 +80,18 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
     (min, v) => (v.fuelLevel ?? 0) < min ? (v.fuelLevel ?? 0) : min,
     100
   );
+
+  // Cost to fill for the primary vehicle (for the summary card)
+  const primaryCostToFill = (() => {
+    if (!primaryVehicle || !primaryVehicle.tankCapacity || (primaryVehicle.fuelLevel ?? 0) >= 100) return null;
+    const gallonsNeeded = primaryVehicle.tankCapacity - (primaryVehicle.currentFuel ?? 0);
+    if (gallonsNeeded <= 0) return null;
+    const price = getFuelPrice(primaryVehicle);
+    if (price != null && price > 0) {
+      return { gallonsNeeded, costToFill: gallonsNeeded * price, pricePerGallon: price };
+    }
+    return null;
+  })();
 
   if (loading) {
     return (
@@ -174,11 +214,17 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
 
             {/* Quick stats footer */}
             <CardContent className="p-3">
-              <div className="flex items-center gap-4 text-xs">
+              <div className="flex items-center gap-4 text-xs flex-wrap">
                 {primaryVehicle.avgKmPerGallon && primaryVehicle.avgKmPerGallon > 0 && (
                   <div className="flex items-center gap-1.5 text-gray-500">
                     <Gauge className="size-3.5 text-cyan-500" />
                     <span>{primaryVehicle.avgKmPerGallon} km/gal</span>
+                  </div>
+                )}
+                {primaryCostToFill && (
+                  <div className="flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400">
+                    <Wallet className="size-3.5" />
+                    <span>Llenar: {formatCurrency(primaryCostToFill.costToFill)}</span>
                   </div>
                 )}
                 {hasAnomaly && (
@@ -200,7 +246,7 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
           <Card className="border-0 shadow-md rounded-2xl bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20">
             <CardContent className="p-8 text-center">
               <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-500 shadow-lg shadow-cyan-500/30 mb-4">
-                <Bike className="size-7 text-white" />
+                <VehicleIcon type="motorcycle" className="size-7 text-white" />
               </div>
               <h3 className="font-bold text-gray-900 dark:text-white mb-1">
                 Sin vehículos aún
@@ -226,6 +272,7 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
                 vehicle={vehicle}
                 onClick={() => onSelectVehicle(vehicle.id)}
                 onKmUpdated={fetchVehicles}
+                currentFuelPrice={getFuelPrice(vehicle)}
               />
             </motion.div>
           ))}

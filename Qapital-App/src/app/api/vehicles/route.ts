@@ -71,7 +71,7 @@ export async function GET() {
         currentKm: vehicle.currentKm,
         tankCapacity: vehicle.tankCapacity,
         year: vehicle.year,
-        fuelLogs: serializedLogs.slice(0, 1), // Only latest for the card
+        fuelLogs: serializedLogs.slice(0, 10), // Up to 10 recent fuel logs for the card view
         maintenanceRecords: serializedMaintenance,
         fuelLevel: fuelLevelData.fuelLevel,
         currentFuel: fuelLevelData.currentFuel,
@@ -96,7 +96,7 @@ export async function POST(req: Request) {
     }
 
     const body = await validateBody(req, vehicleCreateSchema);
-    const { name, type, brand, model, year, color, tankCapacity, fuelType, currentKm } = body;
+    const { name, type, brand, model, year, color, tankCapacity, fuelType, currentKm, icon, plate } = body;
 
     const vehicle = await db.vehicle.create({
       data: {
@@ -110,6 +110,8 @@ export async function POST(req: Request) {
         tankCapacity,
         fuelType: fuelType || "gasoline",
         currentKm: currentKm ?? 0,
+        icon: icon || null,
+        plate: plate || null,
       },
       include: {
         fuelLogs: true,

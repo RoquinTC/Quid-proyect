@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { formatCurrency, formatDate, apiFetch } from "@/lib/api";
-import { Bike, Car, Truck, HelpCircle, Fuel, Wrench, AlertTriangle, Gauge, MapPin, Pencil } from "lucide-react";
-import { motion } from "framer-motion";
+import { Fuel, Wrench, AlertTriangle, Gauge, MapPin, Pencil, ChevronDown, ChevronUp, Wallet } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { FuelGauge } from "./Fuel-gauge";
 import { QuickKmUpdate } from "./quick-km-update";
+import { VehicleIcon } from "./vehicle-icon";
 
 interface VehicleCardProps {
   vehicle: {
@@ -19,6 +20,8 @@ interface VehicleCardProps {
     tankCapacity?: number | null;
     fuelType?: string | null;
     currentKm: number;
+    icon?: string | null;
+    plate?: string | null;
     fuelLogs: Array<{
       id: string;
       date: string;
@@ -43,14 +46,8 @@ interface VehicleCardProps {
   };
   onClick?: () => void;
   onKmUpdated?: () => void;
+  currentFuelPrice?: number | null;
 }
-
-const vehicleIcons: Record<string, typeof Car> = {
-  motorcycle: Bike,
-  car: Car,
-  truck: Truck,
-  other: HelpCircle,
-};
 
 const vehicleGradients: Record<string, string> = {
   motorcycle: "from-cyan-500 to-blue-600",
@@ -72,11 +69,12 @@ const fuelTypeLabels: Record<string, string> = {
   electric: "Eléctrico",
 };
 
-export function VehicleCard({ vehicle, onClick, onKmUpdated }: VehicleCardProps) {
+export function VehicleCard({ vehicle, onClick, onKmUpdated, currentFuelPrice }: VehicleCardProps) {
   const [showKmUpdate, setShowKmUpdate] = useState(false);
-  const Icon = vehicleIcons[vehicle.type] || Car;
+  const [showFuelHistory, setShowFuelHistory] = useState(false);
   const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
   const lastFuelLog = vehicle.fuelLogs?.[0];
+  const recentFuelLogs = vehicle.fuelLogs?.slice(0, 5) || [];
   const nextMaintenance = vehicle.maintenanceRecords?.[0];
 
   const fuelLevel = vehicle.fuelLevel ?? 0;
@@ -105,6 +103,18 @@ export function VehicleCard({ vehicle, onClick, onKmUpdated }: VehicleCardProps)
     return "text-red-500";
   };
 
+  // Cost to fill calculation
+  const costToFillData = (() => {
+    if (fuelLevel >= 100 || !vehicle.tankCapacity || !vehicle.fuelType || vehicle.fuelType === "electric") return null;
+    const gallonsNeeded = vehicle.tankCapacity - currentFuel;
+    if (gallonsNeeded <= 0) return null;
+    if (currentFuelPrice != null && currentFuelPrice > 0) {
+      const costToFill = gallonsNeeded * currentFuelPrice;
+      return { gallonsNeeded, costToFill, pricePerGallon: currentFuelPrice, hasPrice: true };
+    }
+    return { gallonsNeeded, costToFill: 0, pricePerGallon: 0, hasPrice: false };
+  })();
+
   return (
     <>
       <motion.div
@@ -122,10 +132,17 @@ export function VehicleCard({ vehicle, onClick, onKmUpdated }: VehicleCardProps)
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-3">
                 <div className="size-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                  <Icon className="size-5 text-white" />
+                  <VehicleIcon icon={vehicle.icon} type={vehicle.type} className="size-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">{vehicle.name}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">{vehicle.name}</h3>
+                    {vehicle.plate && (
+                      <span className="text-[9px] font-bold bg-white text-gray-800 border border-gray-300 rounded px-1.5 py-0 leading-4 tracking-wider uppercase">
+                        {vehicle.plate}
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] text-white/70">
                     {vehicle.brand && vehicle.model
                       ? `${vehicle.brand} ${vehicle.model}`
@@ -206,6 +223,29 @@ export function VehicleCard({ vehicle, onClick, onKmUpdated }: VehicleCardProps)
               </div>
             )}
 
+            {/* Cost to Fill Tank */}
+            {costToFillData && (
+              <div className="p-2.5 bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <Wallet className="size-4 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
+                  {costToFillData.hasPrice ? (
+                    <div className="text-[11px]">
+                      <span className="font-semibold text-cyan-700 dark:text-cyan-300">
+                        Para llenar el tanque: {formatCurrency(costToFillData.costToFill)}
+                      </span>
+                      <span className="text-cyan-600 dark:text-cyan-400">
+                        {" "}({costToFillData.gallonsNeeded.toFixed(1)} gal a {formatCurrency(costToFillData.pricePerGallon)}/gal)
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-[11px] text-cyan-600 dark:text-cyan-400">
+                      Actualiza el precio de la gasolina para ver cuánto necesitas para llenar el tanque
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Anomaly Warning */}
             {vehicle.anomalyDetected && (
               <div className="flex items-center gap-2 p-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
@@ -239,6 +279,47 @@ export function VehicleCard({ vehicle, onClick, onKmUpdated }: VehicleCardProps)
                 <span className="text-[11px]">
                   Última recarga: {formatDate(lastFuelLog.date)} • {formatCurrency(lastFuelLog.amount)}
                 </span>
+              </div>
+            )}
+
+            {/* Recent Fuel History (collapsible) */}
+            {recentFuelLogs.length > 1 && (
+              <div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowFuelHistory(!showFuelHistory); }}
+                  className="flex items-center gap-1 text-[11px] text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 font-medium transition-colors"
+                >
+                  {showFuelHistory ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                  {showFuelHistory ? "Ocultar historial" : `Ver más (${recentFuelLogs.length - 1} recargas recientes)`}
+                </button>
+                <AnimatePresence>
+                  {showFuelHistory && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-2 space-y-1.5">
+                        {recentFuelLogs.slice(1).map((log) => (
+                          <div key={log.id} className="flex items-center gap-2 text-gray-500 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg px-1 py-1" onClick={onClick}>
+                            <Fuel className="size-3 text-gray-400" />
+                            <span className="text-[10px]">
+                              {formatDate(log.date)} • {formatCurrency(log.amount)} • {log.gallons.toFixed(2)} gal
+                            </span>
+                          </div>
+                        ))}
+                        <button
+                          onClick={onClick}
+                          className="text-[10px] text-cyan-600 dark:text-cyan-400 hover:underline pl-5"
+                        >
+                          Ver todo el historial →
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
 

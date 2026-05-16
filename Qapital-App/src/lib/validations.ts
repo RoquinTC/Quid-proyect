@@ -474,6 +474,8 @@ export const vehicleCreateSchema = z.object({
   tankCapacity: z.number().nullable().optional(),
   fuelType: z.string().optional().default("gasoline"),
   currentKm: z.number().optional().default(0),
+  icon: z.string().nullable().optional(),
+  plate: z.string().nullable().optional(),
 });
 
 export const vehicleUpdateSchema = z.object({
@@ -486,6 +488,8 @@ export const vehicleUpdateSchema = z.object({
   tankCapacity: z.number().nullable().optional(),
   fuelType: z.string().optional(),
   currentKm: z.number().optional(),
+  icon: z.string().nullable().optional(),
+  plate: z.string().nullable().optional(),
 });
 
 export const fuelLogCreateSchema = z.object({

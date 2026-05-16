@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { id } = await params;
     const body = await validateBody(req, vehicleUpdateSchema);
-    const { name, type, brand, model, year, color, tankCapacity, fuelType, currentKm } = body;
+    const { name, type, brand, model, year, color, tankCapacity, fuelType, currentKm, icon, plate } = body;
 
     const existing = await db.vehicle.findFirst({
       where: { id, userId: session.user.id },
@@ -61,6 +61,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ...(tankCapacity !== undefined && { tankCapacity }),
         ...(fuelType !== undefined && { fuelType }),
         ...(currentKm !== undefined && { currentKm }),
+        ...(icon !== undefined && { icon }),
+        ...(plate !== undefined && { plate }),
       },
       include: {
         fuelLogs: { orderBy: { date: "desc" } },
