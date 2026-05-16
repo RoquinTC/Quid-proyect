@@ -644,12 +644,22 @@ export function SettingsPage() {
                         onClick={async () => {
                           setLinkingAura(true);
                           try {
-                            // Aquí iría la llamada real a la API
-                            await new Promise(r => setTimeout(r, 1500));
-                            setAuraLinked(true);
-                            setResetResult("¡Aura vinculada con éxito! 🌸");
-                          } catch (err) {
-                            setError("Código inválido o expirado");
+                            const res = await fetch("/api/aura/link", {
+                              method: "POST",
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ code: auraPairingCode })
+                            });
+                            
+                            const data = await res.json();
+                            
+                            if (res.ok && data.success) {
+                              setAuraLinked(true);
+                              setResetResult("¡Aura vinculada con éxito! 🌸");
+                            } else {
+                              throw new Error(data.error || "Error al vincular");
+                            }
+                          } catch (err: any) {
+                            setError(err.message || "Código inválido o expirado");
                           } finally {
                             setLinkingAura(false);
                           }
