@@ -129,29 +129,37 @@ export function calculateFuelLevel(
       .filter(log => log.date > lastFullTankLog.date && log.id !== lastFullTankLog.id)
       .sort((a, b) => a.km - b.km);
 
+    // Use vehicle.currentKm as the reference point for consumption estimation.
+    // This ensures the fuel level accounts for distance driven AFTER the last fuel log,
+    // not just the distance recorded in fuel logs.
+    const latestLogKm = logsAfterFullTank.length > 0
+      ? logsAfterFullTank[logsAfterFullTank.length - 1].km
+      : lastFullTankLog.km;
+    const effectiveCurrentKm = Math.max(vehicle.currentKm, latestLogKm);
+    const kmTraveled = effectiveCurrentKm - lastFullTankLog.km;
+
+    if (kmTraveled > 0 && avgKmPerGallon > 0) {
+      totalConsumed = kmTraveled / avgKmPerGallon;
+      currentFuel = Math.max(0, tankCapacity - totalConsumed);
+    }
+
+    // Add partial refuels back (they add fuel to the tank)
     if (logsAfterFullTank.length > 0) {
-      // Calculate consumption based on distance traveled since full tank
-      const latestKm = logsAfterFullTank[logsAfterFullTank.length - 1].km;
-      const kmTraveled = latestKm - lastFullTankLog.km;
-
-      if (kmTraveled > 0 && avgKmPerGallon > 0) {
-        totalConsumed = kmTraveled / avgKmPerGallon;
-        currentFuel = Math.max(0, tankCapacity - totalConsumed);
-      }
-
-      // Add partial refuels back (they add fuel to the tank)
       const partialRefuels = logsAfterFullTank.filter(log => !log.isFullTank);
       partialRefuels.forEach(log => {
         currentFuel += log.gallons;
       });
     }
   } else {
-    // No full tank recorded - estimate from most recent logs
+    // No full tank recorded - estimate from most recent logs using vehicle.currentKm
     const sortedLogs = [...fuelLogs].sort((a, b) => a.km - b.km);
 
-    if (sortedLogs.length >= 2) {
+    if (sortedLogs.length >= 1) {
       const totalAdded = sortedLogs.reduce((sum, log) => sum + log.gallons, 0);
-      const kmTraveled = sortedLogs[sortedLogs.length - 1].km - sortedLogs[0].km;
+      // Use vehicle.currentKm to estimate total distance from first log
+      const firstLogKm = sortedLogs[0].km;
+      const effectiveCurrentKm = Math.max(vehicle.currentKm, sortedLogs[sortedLogs.length - 1].km);
+      const kmTraveled = effectiveCurrentKm - firstLogKm;
 
       if (kmTraveled > 0 && avgKmPerGallon > 0) {
         const estimatedConsumption = kmTraveled / avgKmPerGallon;

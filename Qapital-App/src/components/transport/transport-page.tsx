@@ -19,7 +19,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { apiFetch } from "@/lib/api";
-import { useState } from "react";
+import { useLocalQuery } from "@/lib/local/hooks/queries";
+import { useState, useEffect, useCallback } from "react";
 
 const tabs: { id: TransportSubView; label: string; icon: typeof Car }[] = [
   { id: "vehicles", label: "Vehículos", icon: Car },
@@ -27,11 +28,29 @@ const tabs: { id: TransportSubView; label: string; icon: typeof Car }[] = [
   { id: "maintenance", label: "Mantenimiento", icon: Wrench },
 ];
 
+interface VehicleWithFuel {
+  id: string;
+  name: string;
+  type: string;
+  tankCapacity?: number | null;
+  fuelLevel?: number;
+  currentFuel?: number;
+  estimatedRange?: number;
+}
+
 export function TransportPage() {
   const { transportSubView, setTransportSubView } = useAppStore();
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetting, setResetting] = useState(false);
+
+  // Fetch vehicles for fuel level indicator in tabs
+  const { data: vehiclesData } = useLocalQuery<VehicleWithFuel>("/api/vehicles");
+  const vehicles = (vehiclesData || []) as VehicleWithFuel[];
+  const vehiclesWithTank = vehicles.filter((v) => v.tankCapacity && v.tankCapacity > 0);
+  const primaryVehicle = vehiclesWithTank[0];
+  const fuelLevel = primaryVehicle?.fuelLevel ?? 0;
+  const hasLowFuel = vehiclesWithTank.some((v) => (v.fuelLevel ?? 0) <= 25);
 
   const showDetail = selectedVehicleId !== null;
 
@@ -48,6 +67,18 @@ export function TransportPage() {
     } finally {
       setResetting(false);
     }
+  };
+
+  const getFuelColor = (level: number) => {
+    if (level > 50) return "bg-emerald-500";
+    if (level > 25) return "bg-amber-500";
+    return "bg-red-500";
+  };
+
+  const getFuelTextColor = (level: number) => {
+    if (level > 50) return "text-emerald-500";
+    if (level > 25) return "text-amber-500";
+    return "text-red-500";
   };
 
   const renderContent = () => {
@@ -110,10 +141,39 @@ export function TransportPage() {
                   >
                     {tab.label}
                   </span>
+                  {/* Fuel level indicator on fuel tab */}
+                  {tab.id === "fuel" && primaryVehicle && (
+                    <span className={`relative z-10 text-[10px] font-bold ${getFuelTextColor(fuelLevel)}`}>
+                      {Math.round(fuelLevel)}%
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
+
+          {/* Fuel level quick bar (visible when vehicle with tank exists) */}
+          {primaryVehicle && !showDetail && (
+            <div className="mt-2 flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                <motion.div
+                  className={`h-full rounded-full ${getFuelColor(fuelLevel)}`}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(fuelLevel, 100)}%` }}
+                  transition={{ duration: 0.8, ease: "easeOut" }}
+                />
+              </div>
+              <span className={`text-[10px] font-semibold ${getFuelTextColor(fuelLevel)}`}>
+                {primaryVehicle.currentFuel?.toFixed(1) ?? "0"} / {primaryVehicle.tankCapacity} gal
+              </span>
+              {hasLowFuel && (
+                <span className="text-[9px] text-red-500 animate-pulse font-semibold">
+                  BAJO
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Reset button */}
           <div className="flex justify-end mt-1">
             <Button

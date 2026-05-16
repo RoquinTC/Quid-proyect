@@ -239,6 +239,7 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
               <VehicleCard
                 vehicle={vehicle}
                 onClick={() => onSelectVehicle(vehicle.id)}
+                onKmUpdated={fetchVehicles}
               />
             </motion.div>
           ))}

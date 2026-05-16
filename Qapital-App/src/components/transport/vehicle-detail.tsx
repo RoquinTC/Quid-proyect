@@ -48,6 +48,7 @@ import {
 import { motion } from "framer-motion";
 import { FuelGauge } from "./Fuel-gauge";
 import type { Vehicle, FuelLog, MaintenanceRecord, FuelLevelData } from "@/lib/types";
+import { QuickKmUpdate } from "./quick-km-update";
 
 interface VehicleDetailProps {
   vehicleId: string;
@@ -116,6 +117,7 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
   const [showFuelLogForm, setShowFuelLogForm] = useState(false);
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showKmUpdate, setShowKmUpdate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: "fuel" | "maintenance"; id: string } | null>(null);
   const [fuelLevelData, setFuelLevelData] = useState<FuelLevelData | null>(null);
 
@@ -280,12 +282,16 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
           </div>
         </div>
         <CardContent className="p-4 space-y-4">
-          <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2 group cursor-pointer rounded-lg px-2 py-2 -mx-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+            onClick={() => setShowKmUpdate(true)}
+          >
             <Gauge className="size-4 text-gray-400" />
             <span className="text-xs text-gray-500">Kilometraje actual</span>
             <span className="text-sm font-bold text-gray-900 dark:text-white ml-auto">
               {vehicle.currentKm.toLocaleString("es-CO")} km
             </span>
+            <Pencil className="size-3 text-gray-300 group-hover:text-cyan-500 transition-colors" />
           </div>
 
           {/* Fuel Gauge Visual */}
@@ -578,6 +584,18 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
         onOpenChange={setShowEditForm}
         vehicle={vehicle}
         onSuccess={fetchData}
+      />
+
+      <QuickKmUpdate
+        open={showKmUpdate}
+        onOpenChange={setShowKmUpdate}
+        vehicleId={vehicle.id}
+        vehicleName={vehicle.name}
+        currentKm={vehicle.currentKm}
+        onSuccess={() => {
+          fetchData();
+          fetchFuelLevel();
+        }}
       />
     </div>
   );

@@ -1,9 +1,11 @@
 "use client";
 
-import { formatCurrency, formatDate } from "@/lib/api";
-import { Bike, Car, Truck, HelpCircle, Fuel, Wrench, AlertTriangle, Gauge, MapPin } from "lucide-react";
+import { useState } from "react";
+import { formatCurrency, formatDate, apiFetch } from "@/lib/api";
+import { Bike, Car, Truck, HelpCircle, Fuel, Wrench, AlertTriangle, Gauge, MapPin, Pencil } from "lucide-react";
 import { motion } from "framer-motion";
 import { FuelGauge } from "./Fuel-gauge";
+import { QuickKmUpdate } from "./quick-km-update";
 
 interface VehicleCardProps {
   vehicle: {
@@ -40,6 +42,7 @@ interface VehicleCardProps {
     anomalyDetected?: boolean;
   };
   onClick?: () => void;
+  onKmUpdated?: () => void;
 }
 
 const vehicleIcons: Record<string, typeof Car> = {
@@ -69,7 +72,8 @@ const fuelTypeLabels: Record<string, string> = {
   electric: "Eléctrico",
 };
 
-export function VehicleCard({ vehicle, onClick }: VehicleCardProps) {
+export function VehicleCard({ vehicle, onClick, onKmUpdated }: VehicleCardProps) {
+  const [showKmUpdate, setShowKmUpdate] = useState(false);
   const Icon = vehicleIcons[vehicle.type] || Car;
   const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
   const lastFuelLog = vehicle.fuelLogs?.[0];
@@ -102,155 +106,176 @@ export function VehicleCard({ vehicle, onClick }: VehicleCardProps) {
   };
 
   return (
-    <motion.button
-      onClick={onClick}
-      className="w-full text-left"
-      whileTap={{ scale: 0.98 }}
-      whileHover={{ scale: 1.01 }}
-    >
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 overflow-hidden">
-        {/* Header with gradient */}
-        <div className={`bg-gradient-to-r ${gradient} p-4 relative overflow-hidden`}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
-          <div className="flex items-center justify-between relative z-10">
-            <div className="flex items-center gap-3">
-              <div className="size-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <Icon className="size-5 text-white" />
+    <>
+      <motion.div
+        className="w-full text-left"
+        whileTap={{ scale: 0.98 }}
+        whileHover={{ scale: 1.01 }}
+      >
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 overflow-hidden">
+          {/* Header with gradient */}
+          <div
+            className={`bg-gradient-to-r ${gradient} p-4 relative overflow-hidden cursor-pointer`}
+            onClick={onClick}
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <Icon className="size-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">{vehicle.name}</h3>
+                  <span className="text-[10px] text-white/70">
+                    {vehicle.brand && vehicle.model
+                      ? `${vehicle.brand} ${vehicle.model}`
+                      : vehicleTypeLabels[vehicle.type] || vehicle.type}
+                    {vehicle.year ? ` ${vehicle.year}` : ""}
+                  </span>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-white">{vehicle.name}</h3>
-                <span className="text-[10px] text-white/70">
-                  {vehicle.brand && vehicle.model
-                    ? `${vehicle.brand} ${vehicle.model}`
-                    : vehicleTypeLabels[vehicle.type] || vehicle.type}
-                  {vehicle.year ? ` ${vehicle.year}` : ""}
-                </span>
+              <div className="flex items-center gap-2">
+                {vehicle.fuelType && (
+                  <span className="text-[9px] bg-white/20 backdrop-blur-sm text-white rounded-full px-2 py-0.5">
+                    {fuelTypeLabels[vehicle.fuelType] || vehicle.fuelType}
+                  </span>
+                )}
+                <div className={`size-2.5 rounded-full ${statusColors[maintenanceStatus]}`} title={
+                  maintenanceStatus === "overdue" ? "Mantenimiento vencido" :
+                    maintenanceStatus === "warning" ? "Mantenimiento próximo" : "Al día"
+                } />
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {vehicle.fuelType && (
-                <span className="text-[9px] bg-white/20 backdrop-blur-sm text-white rounded-full px-2 py-0.5">
-                  {fuelTypeLabels[vehicle.fuelType] || vehicle.fuelType}
-                </span>
-              )}
-              <div className={`size-2.5 rounded-full ${statusColors[maintenanceStatus]}`} title={
-                maintenanceStatus === "overdue" ? "Mantenimiento vencido" :
-                  maintenanceStatus === "warning" ? "Mantenimiento próximo" : "Al día"
-              } />
             </div>
           </div>
-        </div>
 
-        {/* Body */}
-        <div className="p-4 space-y-3">
-          {/* Fuel Gauge + Stats Row */}
-          {vehicle.tankCapacity && (
-            <div className="flex items-center gap-4">
-              {/* Compact Fuel Gauge */}
-              <div className="flex-shrink-0" style={{ width: '100px' }}>
-                <FuelGauge
-                  fuelLevel={fuelLevel}
-                  vehicleType={vehicle.type}
-                  tankCapacity={vehicle.tankCapacity}
-                  currentFuel={currentFuel}
-                  showDetails={false}
-                />
-              </div>
-
-              {/* Fuel Stats */}
-              <div className="flex-1 space-y-2 min-w-0">
-                {/* Current Fuel */}
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <Fuel className={`size-3.5 ${getFuelColorClass(fuelLevel)}`} />
-                    <span className="text-xs text-gray-500">Combustible</span>
-                  </div>
-                  <p className={`text-lg font-bold ${getFuelColorClass(fuelLevel)}`}>
-                    {currentFuel.toFixed(1)} <span className="text-xs font-normal text-gray-400">/ {vehicle.tankCapacity} gal</span>
-                  </p>
+          {/* Body */}
+          <div className="p-4 space-y-3">
+            {/* Fuel Gauge + Stats Row */}
+            {vehicle.tankCapacity && (
+              <div className="flex items-center gap-4 cursor-pointer" onClick={onClick}>
+                {/* Compact Fuel Gauge */}
+                <div className="flex-shrink-0" style={{ width: '100px' }}>
+                  <FuelGauge
+                    fuelLevel={fuelLevel}
+                    vehicleType={vehicle.type}
+                    tankCapacity={vehicle.tankCapacity}
+                    currentFuel={currentFuel}
+                    showDetails={false}
+                  />
                 </div>
 
-                {/* Estimated Range */}
-                {estimatedRange > 0 && (
+                {/* Fuel Stats */}
+                <div className="flex-1 space-y-2 min-w-0">
+                  {/* Current Fuel */}
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <MapPin className="size-3.5 text-blue-500" />
-                      <span className="text-xs text-gray-500">Autonomía</span>
+                      <Fuel className={`size-3.5 ${getFuelColorClass(fuelLevel)}`} />
+                      <span className="text-xs text-gray-500">Combustible</span>
                     </div>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">
-                      ~{estimatedRange.toLocaleString("es-CO")} km
+                    <p className={`text-lg font-bold ${getFuelColorClass(fuelLevel)}`}>
+                      {currentFuel.toFixed(1)} <span className="text-xs font-normal text-gray-400">/ {vehicle.tankCapacity} gal</span>
                     </p>
                   </div>
-                )}
 
-                {/* Avg Performance */}
-                {avgKmPerGallon > 0 && (
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <Gauge className="size-3.5 text-cyan-500" />
-                      <span className="text-xs text-gray-500">Rendimiento</span>
+                  {/* Estimated Range */}
+                  {estimatedRange > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="size-3.5 text-blue-500" />
+                        <span className="text-xs text-gray-500">Autonomía</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">
+                        ~{estimatedRange.toLocaleString("es-CO")} km
+                      </p>
                     </div>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">
-                      {avgKmPerGallon} km/gal
-                    </p>
-                  </div>
+                  )}
+
+                  {/* Avg Performance */}
+                  {avgKmPerGallon > 0 && (
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <Gauge className="size-3.5 text-cyan-500" />
+                        <span className="text-xs text-gray-500">Rendimiento</span>
+                      </div>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">
+                        {avgKmPerGallon} km/gal
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Anomaly Warning */}
+            {vehicle.anomalyDetected && (
+              <div className="flex items-center gap-2 p-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                <AlertTriangle className="size-4 text-red-500 flex-shrink-0" />
+                <p className="text-[10px] text-red-600 dark:text-red-400">
+                  Consumo anormal detectado — posible fuga o problema mecánico
+                </p>
+              </div>
+            )}
+
+            {/* KM Display with update button */}
+            <div
+              className="flex items-center gap-2 group cursor-pointer rounded-lg px-1 py-1.5 -mx-1 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowKmUpdate(true);
+              }}
+            >
+              <Gauge className="size-4 text-gray-400" />
+              <span className="text-xs text-gray-500">Kilometraje</span>
+              <span className="text-sm font-bold text-gray-900 dark:text-white ml-auto">
+                {vehicle.currentKm.toLocaleString("es-CO")} km
+              </span>
+              <Pencil className="size-3 text-gray-300 group-hover:text-cyan-500 transition-colors" />
+            </div>
+
+            {/* Last Fuel Log */}
+            {lastFuelLog && (
+              <div className="flex items-center gap-2 text-gray-500" onClick={onClick}>
+                <Fuel className="size-3.5 text-cyan-500" />
+                <span className="text-[11px]">
+                  Última recarga: {formatDate(lastFuelLog.date)} • {formatCurrency(lastFuelLog.amount)}
+                </span>
+              </div>
+            )}
+
+            {/* Next Maintenance */}
+            {nextMaintenance?.nextDueKm && (
+              <div className="flex items-center gap-2 text-gray-500" onClick={onClick}>
+                <Wrench className={`size-3.5 ${maintenanceStatus === "overdue" ? "text-red-500" : maintenanceStatus === "warning" ? "text-amber-500" : "text-emerald-500"}`} />
+                <span className="text-[11px]">
+                  Próx. mantenimiento: {nextMaintenance.nextDueKm.toLocaleString("es-CO")} km
+                </span>
+                {maintenanceStatus !== "ok" && (
+                  <AlertTriangle className={`size-3.5 ml-auto ${maintenanceStatus === "overdue" ? "text-red-500" : "text-amber-500"}`} />
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Anomaly Warning */}
-          {vehicle.anomalyDetected && (
-            <div className="flex items-center gap-2 p-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
-              <AlertTriangle className="size-4 text-red-500 flex-shrink-0" />
-              <p className="text-[10px] text-red-600 dark:text-red-400">
-                Consumo anormal detectado — posible fuga o problema mecánico
-              </p>
-            </div>
-          )}
-
-          {/* KM Display */}
-          <div className="flex items-center gap-2">
-            <Gauge className="size-4 text-gray-400" />
-            <span className="text-xs text-gray-500">Kilometraje</span>
-            <span className="text-sm font-bold text-gray-900 dark:text-white ml-auto">
-              {vehicle.currentKm.toLocaleString("es-CO")} km
-            </span>
+            {/* Tank capacity badge */}
+            {vehicle.tankCapacity && (
+              <div className="flex items-center gap-1 pt-1" onClick={onClick}>
+                <span className="text-[9px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5">
+                  Tanque: {vehicle.tankCapacity} gal
+                </span>
+              </div>
+            )}
           </div>
-
-          {/* Last Fuel Log */}
-          {lastFuelLog && (
-            <div className="flex items-center gap-2 text-gray-500">
-              <Fuel className="size-3.5 text-cyan-500" />
-              <span className="text-[11px]">
-                Última recarga: {formatDate(lastFuelLog.date)} • {formatCurrency(lastFuelLog.amount)}
-              </span>
-            </div>
-          )}
-
-          {/* Next Maintenance */}
-          {nextMaintenance?.nextDueKm && (
-            <div className="flex items-center gap-2 text-gray-500">
-              <Wrench className={`size-3.5 ${maintenanceStatus === "overdue" ? "text-red-500" : maintenanceStatus === "warning" ? "text-amber-500" : "text-emerald-500"}`} />
-              <span className="text-[11px]">
-                Próx. mantenimiento: {nextMaintenance.nextDueKm.toLocaleString("es-CO")} km
-              </span>
-              {maintenanceStatus !== "ok" && (
-                <AlertTriangle className={`size-3.5 ml-auto ${maintenanceStatus === "overdue" ? "text-red-500" : "text-amber-500"}`} />
-              )}
-            </div>
-          )}
-
-          {/* Tank capacity badge */}
-          {vehicle.tankCapacity && (
-            <div className="flex items-center gap-1 pt-1">
-              <span className="text-[9px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full px-2 py-0.5">
-                Tanque: {vehicle.tankCapacity} gal
-              </span>
-            </div>
-          )}
         </div>
-      </div>
-    </motion.button>
+      </motion.div>
+
+      {/* Quick KM Update Sheet */}
+      <QuickKmUpdate
+        open={showKmUpdate}
+        onOpenChange={setShowKmUpdate}
+        vehicleId={vehicle.id}
+        vehicleName={vehicle.name}
+        currentKm={vehicle.currentKm}
+        onSuccess={onKmUpdated}
+      />
+    </>
   );
 }
