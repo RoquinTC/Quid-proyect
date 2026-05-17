@@ -1,6 +1,9 @@
 // ============================================
 // OFFLINE-AWARE API FETCH
 // ============================================
+
+// Data event bus for instant UI updates
+import { emitMutationEvent } from "@/lib/data-events";
 // This wrapper makes ALL existing apiFetch calls work offline:
 //   - GET requests: Try server first, fall back to IndexedDB cache on network error
 //   - POST/PUT/DELETE: Try server first, queue in mutation queue on network error
@@ -317,9 +320,13 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
     try {
       const data = await response.json();
       await updateLocalAfterMutation(url, options!, data);
+      // Emit data event for instant UI updates
+      try { emitMutationEvent(url, options?.method || "POST"); } catch {}
       return data as T;
     } catch {
       // Response might not be JSON (e.g., 204 No Content for DELETE)
+      // Still emit event for DELETE operations
+      try { emitMutationEvent(url, options?.method || "DELETE"); } catch {}
       return undefined as T;
     }
   } catch (networkError) {
@@ -327,6 +334,8 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
     console.log(`[Offline] Server unreachable, queuing ${options?.method} ${url}`);
     await queueOfflineMutation(url, options!);
     await applyOptimisticWrite(url, options!);
+    // Emit data event for instant UI updates even when offline
+    try { emitMutationEvent(url, options?.method || "POST"); } catch {}
 
     // Return a mock success response so the UI can continue
     return { success: true, offline: true } as T;

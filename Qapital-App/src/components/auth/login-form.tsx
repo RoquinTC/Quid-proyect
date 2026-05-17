@@ -21,7 +21,7 @@ import {
 } from "@/lib/offline-session";
 
 export function LoginForm() {
-  const { setAuthView } = useAppStore();
+  const { setAuthView, setOfflineSession } = useAppStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,6 +34,18 @@ export function LoginForm() {
 
   // Check if we have cached credentials for offline login
   const hasOfflineCredentials = typeof window !== "undefined" && !!getCachedCredentials();
+
+  /**
+   * Handle offline login success — set the offline session and navigate to app
+   * WITHOUT needing a page reload. This is the key to making offline login work.
+   */
+  const handleOfflineLoginSuccess = useCallback((cachedSession: CachedSession) => {
+    cacheOfflineSession(cachedSession);
+    setOfflineSession(cachedSession);
+    setOfflineMode(true);
+    toast.success("¡Sesión iniciada (sin conexión)!");
+    try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
+  }, [setOfflineSession]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,22 +69,23 @@ export function LoginForm() {
           // Try offline login
           const userId = await verifyOfflinePassword(email, password);
           if (userId) {
-            toast.success("¡Sesión iniciada (sin conexión)!");
-            setOfflineMode(true);
-            // Create a cached session from what we have
-            const cachedCreds = getCachedCredentials();
-            if (cachedCreds) {
-              const cachedSession = getCachedSession();
-              if (cachedSession) {
-                // We have a previous session — reuse it
-                cacheOfflineSession(cachedSession);
-              }
+            // Get the cached session for this user
+            const cachedSession = getCachedSession();
+            if (cachedSession) {
+              handleOfflineLoginSuccess(cachedSession);
+              return;
             }
-            try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
-            try { sessionStorage.setItem("quid-offline-auth", "true"); } catch {}
-            setTimeout(() => {
-              window.location.href = window.location.origin + "/";
-            }, 600);
+            // No cached session but valid credentials — create a minimal one
+            const minimalSession: CachedSession = {
+              user: {
+                id: userId,
+                email,
+                pinEnabled: false,
+                biometricEnabled: false,
+              },
+              expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            };
+            handleOfflineLoginSuccess(minimalSession);
             return;
           }
           toast.error("Sin conexión. Verifica que hayas iniciado sesión antes en este dispositivo.");
@@ -103,7 +116,20 @@ export function LoginForm() {
           // Not critical — offline credentials will be cached next time
         }
 
-        // Use a hard redirect instead of client-side navigation.
+        // Cache session for offline use
+        try {
+          const sessionRes = await fetch("/api/auth/session");
+          if (sessionRes.ok) {
+            const sessionData = await sessionRes.json();
+            if (sessionData?.user) {
+              cacheOfflineSession(sessionData as CachedSession);
+            }
+          }
+        } catch {
+          // Non-critical
+        }
+
+        // Hard redirect to pick up the new session from next-auth cookies
         setTimeout(() => {
           window.location.href = window.location.origin + "/";
         }, 600);
@@ -112,13 +138,21 @@ export function LoginForm() {
       // Network error — try offline login
       const userId = await verifyOfflinePassword(email, password);
       if (userId) {
-        toast.success("¡Sesión iniciada (sin conexión)!");
-        setOfflineMode(true);
-        try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
-        try { sessionStorage.setItem("quid-offline-auth", "true"); } catch {}
-        setTimeout(() => {
-          window.location.href = window.location.origin + "/";
-        }, 600);
+        const cachedSession = getCachedSession();
+        if (cachedSession) {
+          handleOfflineLoginSuccess(cachedSession);
+          return;
+        }
+        const minimalSession: CachedSession = {
+          user: {
+            id: userId,
+            email,
+            pinEnabled: false,
+            biometricEnabled: false,
+          },
+          expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+        handleOfflineLoginSuccess(minimalSession);
         return;
       }
       toast.error("Sin conexión al servidor. Inicia sesión al menos una vez con conexión para habilitar el acceso offline.");
@@ -173,9 +207,6 @@ export function LoginForm() {
           toast.success("¡Sesión iniciada con huella!");
           // Mark fresh login so AppShell skips the lock screen on reload
           try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
-          setTimeout(() => {
-            window.location.href = window.location.origin + "/";
-          }, 600);
         } else {
           toast.error("Error al iniciar sesión con huella");
         }

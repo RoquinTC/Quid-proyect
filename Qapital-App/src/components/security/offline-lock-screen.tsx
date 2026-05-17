@@ -3,8 +3,8 @@
 import { useState, useCallback } from "react";
 import { compare } from "bcryptjs";
 import { PinPad } from "./pin-pad";
-import { cacheOfflinePinHash, getCachedPinHash, getCachedCredentials, verifyOfflinePassword, type CachedSession } from "@/lib/offline-session";
-import { WifiOff, Lock, Mail } from "lucide-react";
+import { cacheOfflinePinHash, getCachedPinHash, getCachedCredentials, verifyOfflinePassword, cacheOfflineSession, type CachedSession } from "@/lib/offline-session";
+import { WifiOff, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,9 +20,12 @@ type AuthMethod = "pin" | "password";
 /**
  * Offline Lock Screen — shown when the server is unreachable
  * but the user has a previously cached session.
- * 
+ *
  * Allows the user to unlock with their PIN or password (verified locally)
  * to access their data.
+ *
+ * On successful unlock, calls onUnlock which sets the offline session
+ * in the Zustand store — no page reload needed.
  */
 export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreenProps) {
   const [method, setMethod] = useState<AuthMethod>(cachedSession.user.pinEnabled ? "pin" : "password");
@@ -30,11 +33,18 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [verifying, setVerifying] = useState(false);
-  
+
   const userId = cachedSession.user.id;
   const userName = cachedSession.user.name;
   const pinEnabled = cachedSession.user.pinEnabled;
   const hasOfflineCredentials = !!getCachedCredentials();
+
+  const handleUnlockSuccess = useCallback(() => {
+    // Cache the session for the Service Worker
+    cacheOfflineSession(cachedSession);
+    toast.success("¡Desbloqueado (sin conexión)!");
+    onUnlock();
+  }, [cachedSession, onUnlock]);
 
   const handlePinComplete = useCallback(async (pin: string) => {
     setVerifying(true);
@@ -43,12 +53,12 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
     try {
       // Try to verify PIN against cached hash
       const cachedHash = getCachedPinHash(userId);
-      
+
       if (cachedHash) {
         // We have a cached hash — verify locally (works offline!)
         const isValid = await compare(pin, cachedHash);
         if (isValid) {
-          onUnlock();
+          handleUnlockSuccess();
           return;
         }
         setPinError("PIN incorrecto");
@@ -62,7 +72,7 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
     } finally {
       setVerifying(false);
     }
-  }, [userId, onUnlock]);
+  }, [userId, handleUnlockSuccess]);
 
   const handlePasswordSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +84,7 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
     try {
       const verifiedUserId = await verifyOfflinePassword(cachedSession.user.email || "", password);
       if (verifiedUserId) {
-        onUnlock();
+        handleUnlockSuccess();
         return;
       }
       setPasswordError("Contraseña incorrecta");
@@ -83,7 +93,7 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
     } finally {
       setVerifying(false);
     }
-  }, [password, cachedSession.user.email, onUnlock]);
+  }, [password, cachedSession.user.email, handleUnlockSuccess]);
 
   return (
     <div className="fixed inset-0 z-50 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 flex flex-col items-center justify-center p-6">

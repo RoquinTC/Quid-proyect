@@ -16,7 +16,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useSession } from "next-auth/react";
 import {
   localDB,
   API_TABLE_MAP,
@@ -26,6 +25,7 @@ import {
 } from "../db";
 import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
+import { useAppUserId } from "@/lib/use-app-session";
 
 // ============================================
 // useLocalQuery — Read a collection from local-first
@@ -60,8 +60,7 @@ export function useLocalQuery<T extends { id: string }>(
   apiPath: string,
   options?: { staleTime?: number }
 ): UseLocalQueryResult<T> {
-  const { data: session } = useSession();
-  const userId = session?.user?.id ?? "";
+  const userId = useAppUserId();
   const tableName = API_TABLE_MAP[apiPath];
   const staleTime = options?.staleTime ?? 60_000;
 
@@ -243,8 +242,7 @@ export function useLocalSingleQuery<T extends { id: string }>(
   id: string | null,
   tableName: string
 ): UseLocalSingleQueryResult<T> {
-  const { data: session } = useSession();
-  const userId = session?.user?.id ?? "";
+  const userId = useAppUserId();
 
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -363,8 +361,7 @@ export function useMultiQuery(
   queries: Record<string, string>,
   options?: { staleTime?: number }
 ): UseMultiQueryResult {
-  const { data: session } = useSession();
-  const userId = session?.user?.id ?? "";
+  const userId = useAppUserId();
 
   const [data, setData] = useState<Record<string, any[]>>(() =>
     Object.fromEntries(Object.keys(queries).map((key) => [key, []]))

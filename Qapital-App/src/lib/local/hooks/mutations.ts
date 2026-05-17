@@ -17,11 +17,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useSession } from "next-auth/react";
 import { localDB, API_TABLE_MAP } from "../db";
 import type { MutationQueueEntry, SyncStatus } from "../db";
 import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
+import { useAppUserId } from "@/lib/use-app-session";
 import { generateTempId } from "../sync/utils";
 
 // ============================================
@@ -59,8 +59,7 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
   apiPath: string,
   tableName: string
 ): UseLocalMutationResult<T> {
-  const { data: session } = useSession();
-  const userId = session?.user?.id ?? "";
+  const userId = useAppUserId();
   const { setPendingCount, isOnline } = useAppStore();
 
   const [loading, setLoading] = useState(false);

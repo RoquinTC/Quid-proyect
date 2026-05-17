@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { signOut } from "next-auth/react";
 import { useTheme } from "next-themes";
 import { useAppStore } from "@/lib/store";
+import { useAppSession } from "@/lib/use-app-session";
 import { apiFetch } from "@/lib/api";
-import { cacheOfflineSession, getCachedSession, clearOfflineSession, clearOfflineCredentials } from "@/lib/offline-session";
+import { getCachedSession, clearOfflineSession, clearOfflineCredentials, cacheOfflineSession } from "@/lib/offline-session";
 import { LoginForm } from "@/components/auth/login-form";
 import { RegisterForm } from "@/components/auth/register-form";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
@@ -58,12 +59,11 @@ function ModuleContent() {
 }
 
 export function AppShell() {
-  const { data: session, status } = useSession();
-  const { authView } = useAppStore();
+  const { session, status, isOffline } = useAppSession();
+  const { authView, setOfflineSession } = useAppStore();
   const { setTheme: applyTheme } = useTheme();
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
   const [manuallyUnlocked, setManuallyUnlocked] = useState(false);
-  const [serverReachable, setServerReachable] = useState<boolean | null>(null);
 
   // Check for app updates every 60 seconds
   useUpdateChecker(60000);
@@ -71,36 +71,31 @@ export function AppShell() {
   // Track whether the user just logged in (vs page reload with existing session)
   // On page reload with existing session → show lock screen
   // After fresh login → skip lock screen
-  const prevStatusRef = useRef<string>(status);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
 
   useEffect(() => {
-    if (prevStatusRef.current === "unauthenticated" && status === "authenticated") {
-      // User just logged in — skip lock screen
-      setJustLoggedIn(true);
-      setManuallyUnlocked(true);
-    } else if (prevStatusRef.current === "loading" && status === "authenticated") {
-      // Page loaded with existing session — check if this was a fresh login
-      // (login-form sets sessionStorage flag before hard redirect)
-      let wasFreshLogin = false;
-      try {
-        wasFreshLogin = sessionStorage.getItem("quid-just-logged-in") === "true";
-        if (wasFreshLogin) sessionStorage.removeItem("quid-just-logged-in");
-      } catch {}
-
+    // Check if this was a fresh login (set by login-form before redirect)
+    try {
+      const wasFreshLogin = sessionStorage.getItem("quid-just-logged-in") === "true";
       if (wasFreshLogin) {
+        sessionStorage.removeItem("quid-just-logged-in");
         setJustLoggedIn(true);
         setManuallyUnlocked(true);
-      } else {
-        setJustLoggedIn(false);
       }
+    } catch {}
+  }, []);
+
+  // Auto-unlock for offline sessions (they already verified PIN/password)
+  useEffect(() => {
+    if (isOffline && session && !manuallyUnlocked) {
+      setManuallyUnlocked(true);
+      setJustLoggedIn(true);
     }
-    prevStatusRef.current = status;
-  }, [status]);
+  }, [isOffline, session, manuallyUnlocked]);
 
   // Check if security is enabled and lock the app accordingly
-  const pinEnabled = (session?.user as Record<string, unknown>)?.pinEnabled as boolean | undefined;
-  const biometricEnabled = (session?.user as Record<string, unknown>)?.biometricEnabled as boolean | undefined;
+  const pinEnabled = session?.user?.pinEnabled;
+  const biometricEnabled = session?.user?.biometricEnabled;
   const securityEnabled = pinEnabled || biometricEnabled;
 
   // Compute locked state: if security is enabled and user hasn't unlocked yet, lock
@@ -139,15 +134,17 @@ export function AppShell() {
 
         lockTriggeredRef.current = false;
 
-        // Check lockOnResume setting
-        try {
-          const settings = await apiFetch<{ lockOnResume?: boolean; pinEnabled?: boolean; biometricEnabled?: boolean }>("/api/settings");
-          if (settings.lockOnResume && (settings.pinEnabled || settings.biometricEnabled)) {
+        // Check lockOnResume setting (only when online)
+        if (!isOffline) {
+          try {
+            const settings = await apiFetch<{ lockOnResume?: boolean; pinEnabled?: boolean; biometricEnabled?: boolean }>("/api/settings");
+            if (settings.lockOnResume && (settings.pinEnabled || settings.biometricEnabled)) {
+              setManuallyUnlocked(false);
+            }
+          } catch {
+            // If we can't check settings, lock anyway for safety
             setManuallyUnlocked(false);
           }
-        } catch {
-          // If we can't check settings, lock anyway for safety
-          setManuallyUnlocked(false);
         }
       }
     };
@@ -160,13 +157,12 @@ export function AppShell() {
         lockTimerRef.current = null;
       }
     };
-  }, [securityEnabled]);
+  }, [securityEnabled, isOffline]);
 
-  // Load user's saved theme from DB on login
-  // StrictMode-safe: uses mountedRef to avoid state updates after unmount
+  // Load user's saved theme from DB on login (only when online)
   useEffect(() => {
     let cancelled = false;
-    if (status === "authenticated" && session?.user?.id) {
+    if (session?.user?.id && !isOffline) {
       apiFetch<{ theme: string }>("/api/settings")
         .then((data) => {
           if (!cancelled && data.theme) {
@@ -180,12 +176,12 @@ export function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [status, session?.user?.id, applyTheme]);
+  }, [session?.user?.id, isOffline, applyTheme]);
 
   // Auto-restore detection: check if DB is empty and user has a previous backup
   useEffect(() => {
     let cancelled = false;
-    if (status === "authenticated" && session?.user?.id) {
+    if (session?.user?.id && !isOffline) {
       // Check if user dismissed the prompt this session
       try {
         if (sessionStorage.getItem("quid-restore-dismissed") === "true") return;
@@ -214,59 +210,44 @@ export function AppShell() {
     return () => {
       cancelled = true;
     };
-  }, [status, session?.user?.id]);
+  }, [session?.user?.id, isOffline]);
 
   const handleUnlock = useCallback(() => {
     setManuallyUnlocked(true);
   }, []);
 
+  // Handle offline unlock — set the offline session in Zustand
+  const handleOfflineUnlock = useCallback((cachedSession: any) => {
+    setOfflineSession(cachedSession);
+    setManuallyUnlocked(true);
+    setJustLoggedIn(true);
+    try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
+  }, [setOfflineSession]);
+
   // Cache session for offline access whenever it's available
   useEffect(() => {
-    if (status === "authenticated" && session?.user) {
+    if (session?.user?.id && !isOffline) {
       cacheOfflineSession(session as any);
     }
-  }, [status, session]);
+  }, [session, isOffline]);
 
   // Reset lock state when session is lost (logout)
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (status === "unauthenticated" && !session) {
       setManuallyUnlocked(false);
       setJustLoggedIn(false);
       clearOfflineSession();
       clearOfflineCredentials();
+      setOfflineSession(null);
       // Notify Service Worker to clear cached session
       if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_SESSION' });
       }
     }
-  }, [status]);
+  }, [status, session, setOfflineSession]);
 
-  // Check if server is reachable when we're unauthenticated but have a cached session
-  // This handles the case where navigator.onLine is true but the server/tunnel is down
-  useEffect(() => {
-    if (status !== "unauthenticated" || !getCachedSession()) {
-      setServerReachable(null); // Reset when not needed
-      return;
-    }
-    
-    let cancelled = false;
-    const checkServer = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        await fetch("/api/health", { method: "HEAD", signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!cancelled) setServerReachable(true);
-      } catch {
-        if (!cancelled) setServerReachable(false);
-      }
-    };
-    checkServer();
-    return () => { cancelled = true; };
-  }, [status]);
-
-  // Loading state
-  if (status === "loading") {
+  // Loading state — only show when we're actually loading AND have no offline fallback
+  if (status === "loading" && !session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
         <div className="text-center">
@@ -284,34 +265,31 @@ export function AppShell() {
     );
   }
 
-  // Not authenticated - show auth forms
-  // But if we're offline and have a cached session, try to use it
+  // Not authenticated — check for cached session for offline access
   if (!session) {
     const cachedSession = getCachedSession();
-    if (cachedSession && !navigator.onLine) {
-      // We're offline but have a cached session — show offline lock screen
-      // The user can unlock with PIN or password to access their data
-      return <OfflineLockScreen cachedSession={cachedSession} onUnlock={() => {
-        window.location.reload();
-      }} />;
+
+    // If we have a cached session (offline or server unreachable), show offline lock screen
+    if (cachedSession?.user?.id) {
+      return (
+        <OfflineLockScreen
+          cachedSession={cachedSession}
+          onUnlock={() => handleOfflineUnlock(cachedSession)}
+        />
+      );
     }
-    // If online but session check failed (server down), also try offline mode
-    // This handles the case where navigator.onLine is true but the server is unreachable
-    if (cachedSession && status === "unauthenticated" && serverReachable === false) {
-      // Server is unreachable — use offline mode
-      return <OfflineLockScreen cachedSession={cachedSession} onUnlock={() => {
-        window.location.reload();
-      }} />;
-    }
+
+    // No session at all — show login form
     if (authView === "register") return <RegisterForm />;
     if (authView === "forgot-password") return <ForgotPasswordForm />;
     return <LoginForm />;
   }
 
   // Check onboarding - if not completed, show onboarding flow
-  const onboardingCompleted = (session.user as Record<string, unknown>)?.onboardingCompleted;
+  const onboardingCompleted = session.user.onboardingCompleted;
   // Use loose comparison to handle both boolean and number (SQLite stores as 0/1)
-  if (onboardingCompleted === false || onboardingCompleted === 0) {
+  // Skip onboarding check when offline (we can't create onboarding data without server)
+  if (!isOffline && (onboardingCompleted === false || onboardingCompleted === 0)) {
     return <OnboardingFlow />;
   }
 

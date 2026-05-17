@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import type { CachedSession } from "@/lib/offline-session";
 
 export type ModuleType = "dashboard" | "finance" | "transport" | "health" | "pantry" | "settings";
 
@@ -96,6 +97,12 @@ interface AppState {
   setPendingCount: (count: number) => void;
   lastSyncAt: number | null;
   setLastSyncAt: (date: number) => void;
+
+  // Offline session — set when user authenticates offline
+  // (PIN/password verified locally without server)
+  // Cleared automatically when next-auth session is restored
+  offlineSession: CachedSession | null;
+  setOfflineSession: (session: CachedSession | null) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -170,6 +177,10 @@ export const useAppStore = create<AppState>()(
       setPendingCount: (count) => set({ pendingCount: count }),
       lastSyncAt: null,
       setLastSyncAt: (date) => set({ lastSyncAt: date }),
+
+      // Offline session
+      offlineSession: null,
+      setOfflineSession: (session) => set({ offlineSession: session }),
     }),
     {
       name: "quid-store",
@@ -179,6 +190,7 @@ export const useAppStore = create<AppState>()(
         notifications: state.notifications,
         theme: state.theme,
         currency: state.currency,
+        offlineSession: state.offlineSession,
       }),
     }
   )

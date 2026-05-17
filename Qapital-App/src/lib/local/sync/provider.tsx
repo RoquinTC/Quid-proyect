@@ -24,7 +24,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { useSession } from "next-auth/react";
+import { useAppUserId } from "@/lib/use-app-session";
 import {
   localDB,
   API_TABLE_MAP,
@@ -81,8 +81,7 @@ interface SyncProviderProps {
 }
 
 export function SyncProvider({ children }: SyncProviderProps) {
-  const { data: session, status } = useSession();
-  const userId = session?.user?.id ?? "";
+  const userId = useAppUserId();
   const {
     setSyncStatus,
     setOnline,
@@ -425,8 +424,8 @@ export function SyncProvider({ children }: SyncProviderProps) {
   // ============================================
 
   useEffect(() => {
-    // Only start sync when user is authenticated
-    if (status !== "authenticated" || !userId) {
+    // Only start sync when user is authenticated (has a userId)
+    if (!userId) {
       // Clear intervals if user logs out
       if (backgroundSyncRef.current) {
         clearInterval(backgroundSyncRef.current);
@@ -471,17 +470,17 @@ export function SyncProvider({ children }: SyncProviderProps) {
         queueDrainRef.current = null;
       }
     };
-  }, [userId, status, performInitialSync, performBackgroundSync, drainMutationQueue, setPendingCount]);
+  }, [userId, performInitialSync, performBackgroundSync, drainMutationQueue, setPendingCount]);
 
-  // Clear local data on logout
-  const lastLogoutStatus = useRef(status);
+  // Clear local data when user logs out (no userId means logged out)
+  const lastHadUserId = useRef(!!userId);
   useEffect(() => {
-    if (status === "unauthenticated" && lastLogoutStatus.current !== "unauthenticated") {
+    if (!userId && lastHadUserId.current) {
       clearLocalDB();
       setInitialSyncComplete(false);
     }
-    lastLogoutStatus.current = status;
-  }, [status]);
+    lastHadUserId.current = !!userId;
+  }, [userId]);
 
   // ============================================
   // RENDER
