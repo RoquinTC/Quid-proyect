@@ -149,8 +149,10 @@ export function PaymentMethodSelector({
   useEffect(() => {
     onChange({
       paymentType,
-      accountId: paymentType === "account" ? accountId : null,
-      subAccountId: paymentType === "account" ? subAccountId : null,
+      // For account payment: accountId/subAccountId are the payment source
+      // For CC payment: accountId/subAccountId are where the CC will be paid from
+      accountId,
+      subAccountId,
       debtId: paymentType === "credit_card" ? debtId : null,
       installmentCount: paymentType === "credit_card" ? installmentCount : null,
     });
@@ -360,6 +362,76 @@ export function PaymentMethodSelector({
             </div>
           )}
 
+          {/* Account/Sub-account for TC payment source */}
+          {debtId && (
+            <div className="space-y-2 pt-2 border-t border-violet-200 dark:border-violet-800/30">
+              <Label className="text-[11px] text-gray-600 dark:text-gray-400 flex items-center gap-1.5">
+                <Landmark className="size-3" />
+                Cuenta de pago de la TC
+              </Label>
+              <p className="text-[9px] text-gray-400">
+                Se debitará de esta cuenta al pagar la tarjeta de crédito
+              </p>
+              <Select
+                value={accountId || ""}
+                onValueChange={handleAccountChange}
+                disabled={disabled || loading}
+              >
+                <SelectTrigger className="rounded-xl h-9 text-sm">
+                  <SelectValue placeholder={loading ? "Cargando..." : "Seleccionar cuenta"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map(account => (
+                    <SelectItem key={account.id} value={account.id}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="size-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: account.color || "#10B981" }}
+                        />
+                        <span>{account.name}</span>
+                        <span className="text-[10px] text-gray-400 ml-auto">
+                          ${account.balance?.toLocaleString("es-CO")}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Sub-account (bolsillo) for TC payment */}
+              {hasSubAccounts && (
+                <Select
+                  value={subAccountId || "main"}
+                  onValueChange={(v) => setSubAccountId(v === "main" ? null : v)}
+                  disabled={disabled}
+                >
+                  <SelectTrigger className="rounded-xl h-9 text-sm">
+                    <SelectValue placeholder="Toda la cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="main">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="size-3 text-gray-400" />
+                        <span>Toda la cuenta</span>
+                      </div>
+                    </SelectItem>
+                    {selectedAccount!.subAccounts!.map(sub => (
+                      <SelectItem key={sub.id} value={sub.id}>
+                        <div className="flex items-center gap-2">
+                          <PiggyBank className="size-3 text-pink-400" />
+                          <span>{sub.name}</span>
+                          <span className="text-[10px] text-gray-400 ml-auto">
+                            ${sub.balance?.toLocaleString("es-CO")}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
           {/* Info box */}
           {debtId && (
             <div className="flex items-start gap-1.5 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
@@ -369,7 +441,11 @@ export function PaymentMethodSelector({
                 {installmentCount && installmentCount > 1
                   ? ` a ${installmentCount} cuotas`
                   : " de contado"
-                }. Al pagar la TC, se debitará de la cuenta configurada.
+                }.
+                {accountId
+                  ? ` Al pagar la TC, se debitará de ${selectedAccount?.name}${subAccountId ? ` → ${selectedAccount?.subAccounts?.find(s => s.id === subAccountId)?.name || "bolsillo"}` : ""}.`
+                  : " Configura la cuenta desde donde se pagará la TC."
+                }
               </span>
             </div>
           )}

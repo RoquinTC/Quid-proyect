@@ -167,7 +167,7 @@ export async function POST(
   } catch (error) {
     if (error instanceof Response) return error;
     // Handle unique constraint P2002 for duplicate links
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    if (typeof error === "object" && error !== null && "code" in error && (error as { code: string }).code === "P2002") {
       return NextResponse.json(
         { error: "Esta cuenta ya está vinculada a esta meta" },
         { status: 409 }

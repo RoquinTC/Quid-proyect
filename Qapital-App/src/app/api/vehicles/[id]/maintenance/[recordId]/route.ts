@@ -93,9 +93,39 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
     }
 
-    // Reverse finance entry (balance + budget) BEFORE deleting the record
+    // ── Capture finance data before deletion ──
+    const maintFinance = await db.maintenanceRecord.findFirst({
+      where: { id: recordId },
+      select: { debtId: true, cost: true, accountId: true },
+    });
+
+    // ── Step 1: Reverse account-based finance entry ──
+    // This restores account balance, budget spent, and deletes the transaction
     await reverseFinanceEntry(recordId, session.user.id);
 
+    // ── Step 2: Reverse CC installment if applicable ──
+    if (maintFinance?.debtId) {
+      const installments = await db.installment.findMany({
+        where: {
+          debtId: maintFinance.debtId,
+          isPaid: false,
+        },
+      });
+
+      const recordCost = Number(maintFinance.cost);
+      for (const inst of installments) {
+        if (Number(inst.totalAmount) === recordCost) {
+          await db.debt.update({
+            where: { id: inst.debtId },
+            data: { currentBalance: { decrement: inst.totalAmount } },
+          });
+          await db.installment.delete({ where: { id: inst.id } });
+          break;
+        }
+      }
+    }
+
+    // ── Step 3: Delete the maintenance record itself (cascades items) ──
     await db.maintenanceRecord.delete({ where: { id: recordId } });
 
     return NextResponse.json({ success: true });

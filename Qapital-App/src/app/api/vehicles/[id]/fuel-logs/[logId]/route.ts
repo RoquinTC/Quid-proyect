@@ -113,9 +113,43 @@ export async function DELETE(
       return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
     }
 
-    // Reverse finance entry (balance + budget) BEFORE deleting the record
+    // ── Capture finance data before deletion ──
+    const fuelLogFinance = await db.fuelLog.findFirst({
+      where: { id: logId },
+      select: { debtId: true, amount: true, accountId: true },
+    });
+
+    // ── Step 1: Reverse account-based finance entry ──
+    // This restores account balance, budget spent, and deletes the transaction
     await reverseFinanceEntry(logId, session.user.id);
 
+    // ── Step 2: Reverse CC installment if applicable ──
+    if (fuelLogFinance?.debtId) {
+      // Find unpaid installments linked to this fuel log via sourceModule+sourceId in description
+      const installments = await db.installment.findMany({
+        where: {
+          debtId: fuelLogFinance.debtId,
+          isPaid: false,
+        },
+      });
+
+      // Find the installment that was created for this specific fuel log
+      // Match by totalAmount and recent purchaseDate
+      const logAmount = Number(fuelLogFinance.amount);
+      for (const inst of installments) {
+        if (Number(inst.totalAmount) === logAmount) {
+          // Decrease CC currentBalance by the installment totalAmount
+          await db.debt.update({
+            where: { id: inst.debtId },
+            data: { currentBalance: { decrement: inst.totalAmount } },
+          });
+          await db.installment.delete({ where: { id: inst.id } });
+          break; // Only reverse the first matching installment
+        }
+      }
+    }
+
+    // ── Step 3: Delete the fuel log record itself ──
     await db.fuelLog.delete({ where: { id: logId } });
 
     return NextResponse.json({ success: true });

@@ -76,6 +76,13 @@ type VehicleWithDetails = Vehicle & {
   estimatedRange?: number;
   avgKmPerGallon?: number;
   anomalyDetected?: boolean;
+  // Smart refuel prediction fields
+  avgKmPerDay?: number;
+  daysUntilRefuel?: number | null;
+  refuelByDate?: string | null;
+  gallonsToRefuel?: number;
+  isLowFuel?: boolean;
+  isLearning?: boolean;
 };
 
 type TimelineEntry = {
@@ -226,6 +233,33 @@ export function TransportPage() {
   const estimatedRange = selectedVehicle?.estimatedRange ?? 0;
   const avgKmPerGallon = selectedVehicle?.avgKmPerGallon ?? 0;
   const tankCapacity = selectedVehicle?.tankCapacity ?? 0;
+  // Smart refuel prediction
+  const daysUntilRefuel = selectedVehicle?.daysUntilRefuel ?? null;
+  const refuelByDate = selectedVehicle?.refuelByDate ?? null;
+  const gallonsToRefuel = selectedVehicle?.gallonsToRefuel ?? 0;
+  const isLowFuel = selectedVehicle?.isLowFuel ?? false;
+  const avgKmPerDay = selectedVehicle?.avgKmPerDay ?? 0;
+  const isLearning = selectedVehicle?.isLearning ?? true;
+
+  // Format the refuel date nicely
+  const formatRefuelDate = (isoDate: string | null) => {
+    if (!isoDate) return null;
+    try {
+      const date = new Date(isoDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const refuel = new Date(date);
+      refuel.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((refuel.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays === 0) return "Hoy";
+      if (diffDays === 1) return "Mañana";
+      if (diffDays <= 7) return `En ${diffDays} días`;
+      return date.toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short" });
+    } catch {
+      return null;
+    }
+  };
+  const refuelDateText = formatRefuelDate(refuelByDate);
 
   const getFuelColor = (level: number) => {
     if (level > 50) return "bg-emerald-500";
@@ -573,6 +607,53 @@ export function TransportPage() {
                           </div>
                         </div>
 
+                        {/* Smart Refuel Prediction */}
+                        {(daysUntilRefuel != null || gallonsToRefuel > 0) && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`p-3 rounded-xl border mb-3 ${
+                              isLowFuel
+                                ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                                : "bg-cyan-50 dark:bg-cyan-900/20 border-cyan-200 dark:border-cyan-800"
+                            }`}
+                          >
+                            {/* Gallons to refuel */}
+                            {gallonsToRefuel > 0 && (
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <Droplets className={`size-3.5 flex-shrink-0 ${isLowFuel ? "text-red-500" : "text-cyan-600 dark:text-cyan-400"}`} />
+                                <span className={`text-[11px] font-semibold ${isLowFuel ? "text-red-700 dark:text-red-300" : "text-cyan-700 dark:text-cyan-300"}`}>
+                                  {gallonsToRefuel.toFixed(1)} gal para llenar
+                                </span>
+                              </div>
+                            )}
+                            {/* Days until refuel */}
+                            {daysUntilRefuel != null && refuelDateText && (
+                              <div className={`flex items-center gap-2 ${gallonsToRefuel > 0 ? "pt-1.5 border-t" : ""} ${
+                                isLowFuel ? "border-red-200 dark:border-red-800" : "border-cyan-200 dark:border-cyan-800"
+                              }`}>
+                                <Clock className={`size-3.5 flex-shrink-0 ${isLowFuel ? "text-red-500" : "text-cyan-600 dark:text-cyan-400"}`} />
+                                <span className={`text-[11px] font-semibold ${isLowFuel ? "text-red-700 dark:text-red-300" : "text-cyan-700 dark:text-cyan-300"}`}>
+                                  {daysUntilRefuel <= 0 ? "¡Tanquea hoy!" : daysUntilRefuel === 1 ? "¡Tanquea mañana!" : `Tanquea en ~${daysUntilRefuel} días`}
+                                </span>
+                                <span className={`text-[9px] ${isLowFuel ? "text-red-500 dark:text-red-400" : "text-cyan-500 dark:text-cyan-400"}`}>
+                                  {refuelDateText}
+                                </span>
+                                {avgKmPerDay > 0 && (
+                                  <span className={`text-[8px] ml-auto ${isLowFuel ? "text-red-400" : "text-cyan-400"}`}>
+                                    ~{avgKmPerDay.toFixed(0)} km/día
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {isLearning && (
+                              <p className="text-[8px] text-amber-600 dark:text-amber-400 mt-1">
+                                Rendimiento estimado — se ajustará con más registros
+                              </p>
+                            )}
+                          </motion.div>
+                        )}
+
                         {/* Quick Update KM button if outdated */}
                         {isKmOutdated && (
                           <button
@@ -621,13 +702,25 @@ export function TransportPage() {
           <div className="px-4 pt-2">
             <button
               onClick={() => setShowFuelDetails(true)}
-              className="w-full flex items-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/10 dark:to-blue-900/10 border border-cyan-100 dark:border-cyan-900/30 hover:from-cyan-100 hover:to-blue-100 dark:hover:from-cyan-900/20 dark:hover:to-blue-900/20 transition-colors"
+              className={`w-full flex items-center gap-2 py-2 px-3 rounded-xl border transition-colors ${
+                isLowFuel
+                  ? "bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-900/10 dark:to-amber-900/10 border-red-200 dark:border-red-900/30"
+                  : "bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/10 dark:to-blue-900/10 border-cyan-100 dark:border-cyan-900/30"
+              }`}
             >
               <Fuel className={`size-3.5 ${getFuelTextColor(fuelLevel)}`} />
-              <span className="text-[11px] font-semibold text-cyan-700 dark:text-cyan-300 flex-1 text-left">
-                {Math.round(fuelLevel)}% combustible · ~{estimatedRange} km de autonomía
+              <span className={`text-[11px] font-semibold flex-1 text-left ${
+                isLowFuel ? "text-red-700 dark:text-red-300" : "text-cyan-700 dark:text-cyan-300"
+              }`}>
+                {Math.round(fuelLevel)}% combustible · ~{estimatedRange} km
+                {daysUntilRefuel != null && daysUntilRefuel > 0 && (
+                  <span className="font-normal text-gray-500 dark:text-gray-400"> · Tanquea en ~{daysUntilRefuel} días</span>
+                )}
+                {daysUntilRefuel != null && daysUntilRefuel <= 0 && (
+                  <span className="font-bold text-red-500"> · ¡Tanquea hoy!</span>
+                )}
               </span>
-              <ChevronDown className="size-3.5 text-cyan-400" />
+              <ChevronDown className="size-3.5 text-gray-400" />
             </button>
           </div>
         )}
