@@ -16,6 +16,7 @@ import { DebtDetail } from "./debt-detail";
 import { SavingsGoalDetail } from "./savings-goal-detail";
 import { YieldSimulator } from "./yield-simulator";
 import { CreditSimulator } from "./credit-simulator";
+import { DebtSimulator } from "./debt-simulator";
 import { AccountForm } from "./account-form";
 import { BudgetForm } from "./budget-form";
 import { SavingsGoalForm } from "./savings-goal-form";
@@ -188,6 +189,8 @@ export function FinancePage() {
         return <YieldSimulator />;
       case "credit-simulator":
         return <CreditSimulator />;
+      case "debt-simulator":
+        return <DebtSimulator />;
       case "recurring":
         return <RecurringView />;
       default:

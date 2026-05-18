@@ -24,6 +24,7 @@ import {
   Landmark as DebtIcon,
   Clock,
   Tag,
+  HandCoins,
   // Transport actions
   PlusCircle,
   Fuel,
@@ -131,6 +132,7 @@ const simulatorItems = [
   { id: "simulator-yield" as const, label: "Cuentas de alto rendimiento", icon: TrendingUp, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-100 dark:bg-emerald-900/30", comingSoon: false, subView: "simulator" as const },
   { id: "simulator-cdt" as const, label: "CDT", icon: Landmark, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-100 dark:bg-purple-900/30", comingSoon: true, subView: null },
   { id: "simulator-credit" as const, label: "Créditos", icon: CreditCard, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-900/30", comingSoon: false, subView: "credit-simulator" as const },
+  { id: "simulator-debt" as const, label: "Abonos a Deuda", icon: HandCoins, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-100 dark:bg-rose-900/30", comingSoon: false, subView: "debt-simulator" as const },
 ];
 
 export function AppSidebar() {

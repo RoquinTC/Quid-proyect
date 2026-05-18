@@ -7,7 +7,7 @@ import { CDTForm } from "./cdt-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Landmark, Clock, TrendingUp, Calendar } from "lucide-react";
+import { Plus, Landmark, Clock, TrendingUp, Calendar, Lightbulb, AlertTriangle, ShieldCheck, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import type { CDT, CDTGoal, CDTAccount } from "@/lib/types";
 
@@ -284,6 +284,54 @@ export function CDTView() {
           })}
         </div>
       )}
+
+      {/* ── CDT Tips / Consejos ── */}
+      <motion.div variants={itemVariants}>
+        <Card className="border-0 shadow-md rounded-2xl bg-gradient-to-br from-teal-50 to-cyan-50 dark:from-teal-900/10 dark:to-cyan-900/10">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Lightbulb className="size-4 text-amber-500" />
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                Consejos para tus CDTs
+              </span>
+            </div>
+            <ul className="space-y-2">
+              <li className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <ShieldCheck className="size-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                <span>Los CDTs están protegidos por el Fondo de Garantías de Instituciones Financieras (Fogafin) hasta $50 millones por entidad.</span>
+              </li>
+              <li className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <ArrowRight className="size-3.5 text-teal-500 shrink-0 mt-0.5" />
+                <span>Retirar un CDT antes de su vencimiento puede generar penalidades que reducen significativamente tus rendimientos. Evita hacerlo si es posible.</span>
+              </li>
+              <li className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <TrendingUp className="size-3.5 text-teal-500 shrink-0 mt-0.5" />
+                <span>Compara tasas EA entre entidades antes de abrir un CDT. Diferencias de 0.5% pueden representar miles de pesos adicionales en plazos largos.</span>
+              </li>
+              <li className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <AlertTriangle className="size-3.5 text-amber-500 shrink-0 mt-0.5" />
+                <span>La retención en la fuente sobre rendimientos financieros es del 4% para personas naturales. Tenlo en cuenta al calcular tu ganancia neta.</span>
+              </li>
+              <li className="flex items-start gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <Calendar className="size-3.5 text-teal-500 shrink-0 mt-0.5" />
+                <span>Aprovecha los CDTs a 180+ días para obtener mejores tasas. Los CDTs cortos suelen tener tasas más bajas que no compensan el bloqueo del dinero.</span>
+              </li>
+              {cdts.some(c => c.status === "matured") && (
+                <li className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                  <AlertTriangle className="size-3.5 text-amber-500 shrink-0 mt-0.5" />
+                  <span>Tienes CDTs vencidos. Renueva o retira pronto para no perder rendimientos — algunos bancos no pagan intereses después del vencimiento.</span>
+                </li>
+              )}
+              {cdts.length >= 3 && (
+                <li className="flex items-start gap-2 text-xs text-teal-600 dark:text-teal-400 font-medium">
+                  <Lightbulb className="size-3.5 text-teal-500 shrink-0 mt-0.5" />
+                  <span>Tienes {cdts.length} CDTs. Considera escalonar los vencimientos (ladder strategy) para tener liquidez periódica sin sacrificar tasas.</span>
+                </li>
+              )}
+            </ul>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* FAB */}
       {cdts.length > 0 && (
