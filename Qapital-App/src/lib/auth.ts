@@ -57,9 +57,7 @@ if (!process.env.NEXTAUTH_SECRET) {
 
 export const authOptions: NextAuthOptions = {
   debug: process.env.NODE_ENV === "development",
-  // trustHost: always enabled so NextAuth accepts requests from any host
-  // (localhost:5678, 192.168.x.x, quid.roquintc.app, etc.)
-  trustHost: true,
+  // trustHost is handled via NEXTAUTH_TRUSTHOST=true env variable in next-auth v4
   providers: [
     CredentialsProvider({
       name: "credentials",
