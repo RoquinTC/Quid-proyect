@@ -607,6 +607,27 @@ export function DebtSimulator() {
   }
 
   // ─── Step 2: Simulator View ─────────────────────────
+  // Guard: selectedDebt must exist before we use its properties
+  if (!selectedDebt) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-gray-500 dark:text-gray-400">Deuda no encontrada</p>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setSelectedDebtId(null);
+            setExtraPayments([]);
+            setShowTable(false);
+          }}
+          className="mt-2"
+        >
+          <ArrowLeft className="size-4 mr-1" />
+          Volver
+        </Button>
+      </div>
+    );
+  }
+
   const isCreditCard = selectedDebt.type === "credit_card";
   const isLoan = selectedDebt.type === "loan";
   const isLoanFixed = isLoan && selectedDebt.paymentType === "fixed";
