@@ -18,11 +18,9 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
-  Info,
   HandCoins,
   Zap,
   Calendar,
-  Percent,
   Wallet,
   Sparkles,
   Eye,
@@ -69,7 +67,7 @@ interface ExtraPayment {
  * Uses the debt's paymentDate (day of month) if available, otherwise 1st of next month.
  */
 function getNextPaymentDate(debt: Debt, fromDate: Date): Date {
-  const paymentDay = debt.paymentDate || 1;
+  const paymentDay = debt.paymentDate ?? 1;
   const year = fromDate.getFullYear();
   const month = fromDate.getMonth();
 
@@ -300,7 +298,7 @@ function projectCreditCard(
     const payDate = addMonths(startDate, month - 1);
     const dateStr = payDate.toISOString().split("T")[0];
 
-    let totalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
+    const totalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
     if (totalBalance <= 0) break;
 
     // Calculate extra payments for this month
@@ -362,8 +360,8 @@ function projectCreditCard(
     totalInterest += monthInterest;
     totalExtraPayments += extraThisMonth - remainingExtra; // Only count what was actually applied
 
-    totalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
-    const isPaidOff = totalBalance <= 0;
+    const newTotalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
+    const isPaidOff = newTotalBalance <= 0;
 
     rows.push({
       month,
@@ -373,7 +371,7 @@ function projectCreditCard(
       interest: monthInterest,
       extraPayment: extraThisMonth - remainingExtra,
       extraCapital: extraThisMonth - remainingExtra,
-      balance: totalBalance,
+      balance: newTotalBalance,
       isPaidOff,
     });
 
@@ -609,8 +607,6 @@ export function DebtSimulator() {
   }
 
   // ─── Step 2: Simulator View ─────────────────────────
-  if (!selectedDebt) return null;
-
   const isCreditCard = selectedDebt.type === "credit_card";
   const isLoan = selectedDebt.type === "loan";
   const isLoanFixed = isLoan && selectedDebt.paymentType === "fixed";
@@ -965,52 +961,54 @@ export function DebtSimulator() {
               </div>
 
               {/* Visual bar: interest vs capital */}
-              <div className="space-y-2 pt-1">
-                <div>
-                  <div className="flex items-center justify-between text-[10px] mb-1">
-                    <span className="text-emerald-600 dark:text-emerald-400">Capital</span>
-                    <span className="text-gray-500">
-                      {formatCurrency(selectedDebt.currentBalance)} ({((selectedDebt.currentBalance / projection.totalOverall) * 100).toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all"
-                      style={{ width: `${(selectedDebt.currentBalance / projection.totalOverall) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-[10px] mb-1">
-                    <span className="text-rose-500 dark:text-rose-400">Intereses</span>
-                    <span className="text-gray-500">
-                      {formatCurrency(projection.totalInterest)} ({((projection.totalInterest / projection.totalOverall) * 100).toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-rose-400 rounded-full transition-all"
-                      style={{ width: `${(projection.totalInterest / projection.totalOverall) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                {projection.totalExtraPayments > 0 && (
+              {projection.totalOverall > 0 && (
+                <div className="space-y-2 pt-1">
                   <div>
                     <div className="flex items-center justify-between text-[10px] mb-1">
-                      <span className="text-blue-500 dark:text-blue-400">Abonos extra</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">Capital</span>
                       <span className="text-gray-500">
-                        {formatCurrency(projection.totalExtraPayments)} ({((projection.totalExtraPayments / projection.totalOverall) * 100).toFixed(1)}%)
+                        {formatCurrency(selectedDebt.currentBalance)} ({((selectedDebt.currentBalance / projection.totalOverall) * 100).toFixed(1)}%)
                       </span>
                     </div>
                     <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-400 rounded-full transition-all"
-                        style={{ width: `${(projection.totalExtraPayments / projection.totalOverall) * 100}%` }}
+                        className="h-full bg-emerald-500 rounded-full transition-all"
+                        style={{ width: `${(selectedDebt.currentBalance / projection.totalOverall) * 100}%` }}
                       />
                     </div>
                   </div>
-                )}
-              </div>
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] mb-1">
+                      <span className="text-rose-500 dark:text-rose-400">Intereses</span>
+                      <span className="text-gray-500">
+                        {formatCurrency(projection.totalInterest)} ({((projection.totalInterest / projection.totalOverall) * 100).toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-rose-400 rounded-full transition-all"
+                        style={{ width: `${(projection.totalInterest / projection.totalOverall) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  {projection.totalExtraPayments > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-blue-500 dark:text-blue-400">Abonos extra</span>
+                        <span className="text-gray-500">
+                          {formatCurrency(projection.totalExtraPayments)} ({((projection.totalExtraPayments / projection.totalOverall) * 100).toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-400 rounded-full transition-all"
+                          style={{ width: `${(projection.totalExtraPayments / projection.totalOverall) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
