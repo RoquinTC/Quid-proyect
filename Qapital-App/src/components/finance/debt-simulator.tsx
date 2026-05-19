@@ -238,7 +238,7 @@ function projectCreditCard(
   // For credit cards, we track each installment's remaining balance
   // Each month: pay the installment amount (capital portion) + any extra
   const unpaidInstallments = debt.installments.filter(
-    (inst) => !inst.isPaid && inst.remainingBalance > 0
+    (inst) => !inst.isPaid && (inst.remainingBalance ?? 0) > 0
   );
 
   if (unpaidInstallments.length === 0) return emptyResult();
@@ -609,6 +609,8 @@ export function DebtSimulator() {
   }
 
   // ─── Step 2: Simulator View ─────────────────────────
+  if (!selectedDebt) return null;
+
   const isCreditCard = selectedDebt.type === "credit_card";
   const isLoan = selectedDebt.type === "loan";
   const isLoanFixed = isLoan && selectedDebt.paymentType === "fixed";
@@ -817,22 +819,20 @@ export function DebtSimulator() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setNewExtraType("recurring")}
-                    className={`flex-1 p-2.5 rounded-xl text-xs font-medium transition-all ${
-                      newExtraType === "recurring"
-                        ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
-                        : "bg-gray-50 dark:bg-gray-800 text-gray-500 border border-transparent"
-                    }`}
+                    className={`flex-1 p-2.5 rounded-xl text-xs font-medium transition-all ${newExtraType === "recurring"
+                      ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
+                      : "bg-gray-50 dark:bg-gray-800 text-gray-500 border border-transparent"
+                      }`}
                   >
                     <Calendar className="size-3.5 mx-auto mb-1" />
                     Cada mes
                   </button>
                   <button
                     onClick={() => setNewExtraType("one-time")}
-                    className={`flex-1 p-2.5 rounded-xl text-xs font-medium transition-all ${
-                      newExtraType === "one-time"
-                        ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
-                        : "bg-gray-50 dark:bg-gray-800 text-gray-500 border border-transparent"
-                    }`}
+                    className={`flex-1 p-2.5 rounded-xl text-xs font-medium transition-all ${newExtraType === "one-time"
+                      ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
+                      : "bg-gray-50 dark:bg-gray-800 text-gray-500 border border-transparent"
+                      }`}
                   >
                     <Zap className="size-3.5 mx-auto mb-1" />
                     Una vez
@@ -1025,8 +1025,8 @@ export function DebtSimulator() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                  Con estos abonos extra, tu deuda se pagaría <strong className="text-emerald-600 dark:text-emerald-400">{projection.monthsSaved} meses antes</strong> y 
-                  ahorrarías <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(projection.interestSaved)}</strong> en intereses. 
+                  Con estos abonos extra, tu deuda se pagaría <strong className="text-emerald-600 dark:text-emerald-400">{projection.monthsSaved} meses antes</strong> y
+                  ahorrarías <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(projection.interestSaved)}</strong> en intereses.
                   Cada peso extra que abonas al capital reduce los intereses de los meses siguientes.
                 </p>
                 {projection.interestSaved > selectedDebt.currentBalance * 0.1 && (
@@ -1091,11 +1091,10 @@ export function DebtSimulator() {
                   {projection.rows.slice(-2).map((row) => (
                     <div
                       key={row.month}
-                      className={`flex items-center justify-between text-[11px] py-1.5 px-2 rounded-lg ${
-                        row.isPaidOff
-                          ? "bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800"
-                          : "bg-white dark:bg-gray-800"
-                      }`}
+                      className={`flex items-center justify-between text-[11px] py-1.5 px-2 rounded-lg ${row.isPaidOff
+                        ? "bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800"
+                        : "bg-white dark:bg-gray-800"
+                        }`}
                     >
                       <span className={row.isPaidOff ? "text-emerald-600 font-medium w-16" : "text-gray-500 w-16"}>
                         {formatMonth(row.date)} {row.isPaidOff ? "✓" : ""}
@@ -1143,11 +1142,10 @@ export function DebtSimulator() {
                         {projection.rows.map((row) => (
                           <tr
                             key={row.month}
-                            className={`border-t ${
-                              row.isPaidOff
-                                ? "border-t-emerald-200 dark:border-t-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
-                                : "border-gray-100 dark:border-gray-800"
-                            }`}
+                            className={`border-t ${row.isPaidOff
+                              ? "border-t-emerald-200 dark:border-t-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
+                              : "border-gray-100 dark:border-gray-800"
+                              }`}
                           >
                             <td className={`py-1.5 px-2 ${row.isPaidOff ? "text-emerald-600 font-semibold" : "text-gray-500"}`}>
                               {formatMonth(row.date)} {row.isPaidOff ? "✓" : ""}
