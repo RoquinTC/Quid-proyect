@@ -1,21 +1,18 @@
 # ============================================================
 # Quid App — Docker Compose (Production)
 # ============================================================
-# Este archivo SOLO levanta Quid App, que arranca automáticamente
-# con Windows (restart: unless-stopped).
-#
-# Para Aura IA + Ollama, usar docker-compose.aura.yml
-# que se levanta bajo demanda con: iniciar-aura.bat
+# Levanta únicamente la App de Quid.
+# Aura-Standalone tiene su propio docker-compose en f:\Proyectos\Aura-Standalone\
 # ============================================================
 
 services:
-  qapital:
+  quid-app:
     build:
-      context: ./Qapital-App
+      context: ./Quid-App
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
-    container_name: qapital-app
+    container_name: quid-app
     ports:
       - "5678:3000"
     environment:

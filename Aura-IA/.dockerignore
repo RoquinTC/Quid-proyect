@@ -1,9 +1,0 @@
-node_modules
-dist
-.git
-.env
-firebase-key.json
-credentials.json
-test.mp3
-test-*.ts
-*.log
