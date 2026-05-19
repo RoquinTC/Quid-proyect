@@ -18,11 +18,9 @@ import {
   Trash2,
   ChevronDown,
   ChevronUp,
-  Info,
   HandCoins,
   Zap,
   Calendar,
-  Percent,
   Wallet,
   Sparkles,
   Eye,
@@ -69,7 +67,7 @@ interface ExtraPayment {
  * Uses the debt's paymentDate (day of month) if available, otherwise 1st of next month.
  */
 function getNextPaymentDate(debt: Debt, fromDate: Date): Date {
-  const paymentDay = debt.paymentDate || 1;
+  const paymentDay = debt.paymentDate ?? 1;
   const year = fromDate.getFullYear();
   const month = fromDate.getMonth();
 
@@ -238,7 +236,7 @@ function projectCreditCard(
   // For credit cards, we track each installment's remaining balance
   // Each month: pay the installment amount (capital portion) + any extra
   const unpaidInstallments = debt.installments.filter(
-    (inst) => !inst.isPaid && inst.remainingBalance > 0
+    (inst) => !inst.isPaid && (inst.remainingBalance ?? 0) > 0
   );
 
   if (unpaidInstallments.length === 0) return emptyResult();
@@ -300,7 +298,7 @@ function projectCreditCard(
     const payDate = addMonths(startDate, month - 1);
     const dateStr = payDate.toISOString().split("T")[0];
 
-    let totalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
+    const totalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
     if (totalBalance <= 0) break;
 
     // Calculate extra payments for this month
@@ -362,8 +360,8 @@ function projectCreditCard(
     totalInterest += monthInterest;
     totalExtraPayments += extraThisMonth - remainingExtra; // Only count what was actually applied
 
-    totalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
-    const isPaidOff = totalBalance <= 0;
+    const newTotalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
+    const isPaidOff = newTotalBalance <= 0;
 
     rows.push({
       month,
@@ -373,7 +371,7 @@ function projectCreditCard(
       interest: monthInterest,
       extraPayment: extraThisMonth - remainingExtra,
       extraCapital: extraThisMonth - remainingExtra,
-      balance: totalBalance,
+      balance: newTotalBalance,
       isPaidOff,
     });
 
@@ -609,6 +607,27 @@ export function DebtSimulator() {
   }
 
   // ─── Step 2: Simulator View ─────────────────────────
+  // Guard: selectedDebt must exist before we use its properties
+  if (!selectedDebt) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-gray-500 dark:text-gray-400">Deuda no encontrada</p>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setSelectedDebtId(null);
+            setExtraPayments([]);
+            setShowTable(false);
+          }}
+          className="mt-2"
+        >
+          <ArrowLeft className="size-4 mr-1" />
+          Volver
+        </Button>
+      </div>
+    );
+  }
+
   const isCreditCard = selectedDebt.type === "credit_card";
   const isLoan = selectedDebt.type === "loan";
   const isLoanFixed = isLoan && selectedDebt.paymentType === "fixed";
@@ -817,22 +836,20 @@ export function DebtSimulator() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setNewExtraType("recurring")}
-                    className={`flex-1 p-2.5 rounded-xl text-xs font-medium transition-all ${
-                      newExtraType === "recurring"
-                        ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
-                        : "bg-gray-50 dark:bg-gray-800 text-gray-500 border border-transparent"
-                    }`}
+                    className={`flex-1 p-2.5 rounded-xl text-xs font-medium transition-all ${newExtraType === "recurring"
+                      ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
+                      : "bg-gray-50 dark:bg-gray-800 text-gray-500 border border-transparent"
+                      }`}
                   >
                     <Calendar className="size-3.5 mx-auto mb-1" />
                     Cada mes
                   </button>
                   <button
                     onClick={() => setNewExtraType("one-time")}
-                    className={`flex-1 p-2.5 rounded-xl text-xs font-medium transition-all ${
-                      newExtraType === "one-time"
-                        ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
-                        : "bg-gray-50 dark:bg-gray-800 text-gray-500 border border-transparent"
-                    }`}
+                    className={`flex-1 p-2.5 rounded-xl text-xs font-medium transition-all ${newExtraType === "one-time"
+                      ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
+                      : "bg-gray-50 dark:bg-gray-800 text-gray-500 border border-transparent"
+                      }`}
                   >
                     <Zap className="size-3.5 mx-auto mb-1" />
                     Una vez
@@ -965,52 +982,54 @@ export function DebtSimulator() {
               </div>
 
               {/* Visual bar: interest vs capital */}
-              <div className="space-y-2 pt-1">
-                <div>
-                  <div className="flex items-center justify-between text-[10px] mb-1">
-                    <span className="text-emerald-600 dark:text-emerald-400">Capital</span>
-                    <span className="text-gray-500">
-                      {formatCurrency(selectedDebt.currentBalance)} ({((selectedDebt.currentBalance / projection.totalOverall) * 100).toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all"
-                      style={{ width: `${(selectedDebt.currentBalance / projection.totalOverall) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between text-[10px] mb-1">
-                    <span className="text-rose-500 dark:text-rose-400">Intereses</span>
-                    <span className="text-gray-500">
-                      {formatCurrency(projection.totalInterest)} ({((projection.totalInterest / projection.totalOverall) * 100).toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-rose-400 rounded-full transition-all"
-                      style={{ width: `${(projection.totalInterest / projection.totalOverall) * 100}%` }}
-                    />
-                  </div>
-                </div>
-                {projection.totalExtraPayments > 0 && (
+              {projection.totalOverall > 0 && (
+                <div className="space-y-2 pt-1">
                   <div>
                     <div className="flex items-center justify-between text-[10px] mb-1">
-                      <span className="text-blue-500 dark:text-blue-400">Abonos extra</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">Capital</span>
                       <span className="text-gray-500">
-                        {formatCurrency(projection.totalExtraPayments)} ({((projection.totalExtraPayments / projection.totalOverall) * 100).toFixed(1)}%)
+                        {formatCurrency(selectedDebt.currentBalance)} ({((selectedDebt.currentBalance / projection.totalOverall) * 100).toFixed(1)}%)
                       </span>
                     </div>
                     <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-400 rounded-full transition-all"
-                        style={{ width: `${(projection.totalExtraPayments / projection.totalOverall) * 100}%` }}
+                        className="h-full bg-emerald-500 rounded-full transition-all"
+                        style={{ width: `${(selectedDebt.currentBalance / projection.totalOverall) * 100}%` }}
                       />
                     </div>
                   </div>
-                )}
-              </div>
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] mb-1">
+                      <span className="text-rose-500 dark:text-rose-400">Intereses</span>
+                      <span className="text-gray-500">
+                        {formatCurrency(projection.totalInterest)} ({((projection.totalInterest / projection.totalOverall) * 100).toFixed(1)}%)
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-rose-400 rounded-full transition-all"
+                        style={{ width: `${(projection.totalInterest / projection.totalOverall) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  {projection.totalExtraPayments > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-blue-500 dark:text-blue-400">Abonos extra</span>
+                        <span className="text-gray-500">
+                          {formatCurrency(projection.totalExtraPayments)} ({((projection.totalExtraPayments / projection.totalOverall) * 100).toFixed(1)}%)
+                        </span>
+                      </div>
+                      <div className="h-2.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-blue-400 rounded-full transition-all"
+                          style={{ width: `${(projection.totalExtraPayments / projection.totalOverall) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1025,8 +1044,8 @@ export function DebtSimulator() {
                   </span>
                 </div>
                 <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                  Con estos abonos extra, tu deuda se pagaría <strong className="text-emerald-600 dark:text-emerald-400">{projection.monthsSaved} meses antes</strong> y 
-                  ahorrarías <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(projection.interestSaved)}</strong> en intereses. 
+                  Con estos abonos extra, tu deuda se pagaría <strong className="text-emerald-600 dark:text-emerald-400">{projection.monthsSaved} meses antes</strong> y
+                  ahorrarías <strong className="text-emerald-600 dark:text-emerald-400">{formatCurrency(projection.interestSaved)}</strong> en intereses.
                   Cada peso extra que abonas al capital reduce los intereses de los meses siguientes.
                 </p>
                 {projection.interestSaved > selectedDebt.currentBalance * 0.1 && (
@@ -1091,11 +1110,10 @@ export function DebtSimulator() {
                   {projection.rows.slice(-2).map((row) => (
                     <div
                       key={row.month}
-                      className={`flex items-center justify-between text-[11px] py-1.5 px-2 rounded-lg ${
-                        row.isPaidOff
-                          ? "bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800"
-                          : "bg-white dark:bg-gray-800"
-                      }`}
+                      className={`flex items-center justify-between text-[11px] py-1.5 px-2 rounded-lg ${row.isPaidOff
+                        ? "bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 dark:border-emerald-800"
+                        : "bg-white dark:bg-gray-800"
+                        }`}
                     >
                       <span className={row.isPaidOff ? "text-emerald-600 font-medium w-16" : "text-gray-500 w-16"}>
                         {formatMonth(row.date)} {row.isPaidOff ? "✓" : ""}
@@ -1143,11 +1161,10 @@ export function DebtSimulator() {
                         {projection.rows.map((row) => (
                           <tr
                             key={row.month}
-                            className={`border-t ${
-                              row.isPaidOff
-                                ? "border-t-emerald-200 dark:border-t-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
-                                : "border-gray-100 dark:border-gray-800"
-                            }`}
+                            className={`border-t ${row.isPaidOff
+                              ? "border-t-emerald-200 dark:border-t-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10"
+                              : "border-gray-100 dark:border-gray-800"
+                              }`}
                           >
                             <td className={`py-1.5 px-2 ${row.isPaidOff ? "text-emerald-600 font-semibold" : "text-gray-500"}`}>
                               {formatMonth(row.date)} {row.isPaidOff ? "✓" : ""}
