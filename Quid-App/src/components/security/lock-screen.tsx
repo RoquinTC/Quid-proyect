@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { PinPad } from "./pin-pad";
 import { BiometricPrompt } from "./biometric-prompt";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiFetch } from "@/lib/api";
 import { cacheOfflinePinHash, getCachedPinHash } from "@/lib/offline-session";
+import { performLogout } from "@/lib/logout";
 import { compare } from "bcryptjs";
 
 interface LockScreenProps {
@@ -170,10 +171,7 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
 
         {/* Use password link */}
         <button
-          onClick={async () => {
-            await signOut({ redirect: false });
-            window.location.href = window.location.origin + "/";
-          }}
+          onClick={performLogout}
           className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
         >
           Usar contraseña

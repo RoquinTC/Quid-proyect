@@ -64,6 +64,19 @@ export function useAppSession(): {
   }, [status, nextAuthSession]);
 
   const result = useMemo(() => {
+    // 0. Check if user just logged out — prevent offline session auto-restore
+    // This is a defense-in-depth: even if some cache survived the logout cleanup,
+    // this flag prevents the session from being restored on the next page load.
+    try {
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("quid-just-logged-out") === "true") {
+        return {
+          session: null,
+          status: "unauthenticated" as const,
+          isOffline: false,
+        };
+      }
+    } catch {}
+
     // 1. Next-auth session available — use it
     if (status === "authenticated" && nextAuthSession?.user) {
       return {

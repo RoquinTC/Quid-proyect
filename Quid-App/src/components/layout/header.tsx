@@ -1,7 +1,8 @@
 "use client";
 
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useAppStore } from "@/lib/store";
+import { performLogout } from "@/lib/logout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { NotificationPanel } from "@/components/layout/notification-panel";
 
 export function Header() {
   const { data: session } = useSession();
-  const { toggleSidebar, setAuthView } = useAppStore();
+  const { toggleSidebar } = useAppStore();
 
   const userInitials = session?.user?.name
     ? session.user.name
@@ -26,12 +27,8 @@ export function Header() {
         .slice(0, 2)
     : "UH";
 
-  const handleSignOut = async () => {
-    setAuthView("login");
-    await signOut({ redirect: false });
-    // Hard redirect to ensure session is fully cleared in iframe context
-    window.location.href = window.location.origin + "/";
-  };
+  // performLogout clears all session state (localStorage, IndexedDB, SW cache, cookies) before redirecting
+  // This prevents the race condition where the redirect kills cleanup effects
 
   return (
     <header className="z-50 bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-b-2xl shadow-lg shadow-emerald-500/20 shrink-0">
@@ -81,7 +78,7 @@ export function Header() {
                 </p>
               </div>
               <DropdownMenuItem
-                onClick={handleSignOut}
+                onClick={performLogout}
                 className="text-red-600 focus:text-red-600 cursor-pointer rounded-lg"
               >
                 <LogOut className="mr-2 size-4" />

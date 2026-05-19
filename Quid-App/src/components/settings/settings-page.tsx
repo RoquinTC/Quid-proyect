@@ -74,7 +74,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { signOut } from "next-auth/react";
+import { performLogout } from "@/lib/logout";
 import type { UserSettings } from "@/lib/types";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 
@@ -289,8 +289,7 @@ export function SettingsPage() {
     try {
       await apiFetch("/api/settings/delete-account", { method: "POST" });
       setShowDeleteAccountDialog(false);
-      await signOut({ redirect: false });
-      window.location.href = window.location.origin + "/";
+      await performLogout();
     } catch (error) {
       console.error("Error deleting account:", error);
       setResetResult("Error al eliminar la cuenta");

@@ -79,6 +79,7 @@ export function AppShell() {
       const wasFreshLogin = sessionStorage.getItem("quid-just-logged-in") === "true";
       if (wasFreshLogin) {
         sessionStorage.removeItem("quid-just-logged-in");
+        sessionStorage.removeItem("quid-just-logged-out"); // Clear logout flag on fresh login
         setJustLoggedIn(true);
         setManuallyUnlocked(true);
       }

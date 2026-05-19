@@ -349,10 +349,16 @@ self.addEventListener('message', (event) => {
     });
   }
 
-  // Clear cached session (for logout)
+  // Clear cached session (for logout) — also clear API cache which may contain user-specific data
   if (event.data?.type === 'CLEAR_SESSION') {
-    caches.open(AUTH_CACHE).then((cache) => {
-      cache.delete(OFFLINE_SESSION_KEY);
+    caches.delete(AUTH_CACHE);
+    // Also clear any API cache that might contain user-specific responses
+    caches.keys().then((names) => {
+      names.forEach((name) => {
+        if (name.includes('api') || name.includes('auth') || name.includes('quid')) {
+          caches.delete(name);
+        }
+      });
     });
   }
 });

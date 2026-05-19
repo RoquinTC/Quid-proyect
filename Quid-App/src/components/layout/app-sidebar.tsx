@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { useAppStore, type ModuleType, type SidebarAction } from "@/lib/store";
+import { performLogout } from "@/lib/logout";
 import {
   Home,
   Wallet,
@@ -371,9 +372,7 @@ export function AppSidebar() {
             className="w-full justify-start text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-xl gap-3 text-sm"
             onClick={async () => {
               setSidebarOpen(false);
-              setAuthView("login");
-              await signOut({ redirect: false });
-              window.location.href = window.location.origin + "/";
+              await performLogout();
             }}
           >
             <LogOut className="size-4" />
