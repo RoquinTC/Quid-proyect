@@ -168,7 +168,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
 
   if (loading) {
     return (
-      <div className="p-4 space-y-3 pb-24">
+      <div className="p-4 space-y-3 pb-safe">
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         ))}
@@ -203,7 +203,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   };
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="p-4 space-y-4 pb-safe">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="size-9 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">

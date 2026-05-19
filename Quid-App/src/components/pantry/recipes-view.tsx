@@ -123,7 +123,7 @@ export function RecipesView() {
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="p-4 space-y-4 pb-24"
+      className="p-4 space-y-4 pb-safe"
     >
       {/* Header */}
       <motion.div variants={itemVariants}>

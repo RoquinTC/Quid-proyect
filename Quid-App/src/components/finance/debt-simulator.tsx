@@ -479,7 +479,7 @@ export function DebtSimulator() {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="p-4 space-y-4 pb-24"
+        className="p-4 space-y-4 pb-safe"
       >
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -636,7 +636,7 @@ export function DebtSimulator() {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="p-4 space-y-4 pb-24"
+      className="p-4 space-y-4 pb-safe"
     >
       {/* Header */}
       <div className="flex items-center gap-3">

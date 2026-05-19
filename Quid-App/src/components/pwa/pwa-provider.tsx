@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useServiceWorker } from './use-service-worker';
 import { InstallPrompt } from './install-prompt';
+import { IosInstallPrompt } from './ios-install-prompt';
 import { UpdateNotification } from './update-notification';
 import { OfflineIndicator } from './offline-indicator';
 import { RecurringReminder } from './recurring-reminder';
@@ -51,6 +52,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
       {children}
       <OfflineIndicator isOffline={isOffline} />
       <InstallPrompt />
+      <IosInstallPrompt />
       <UpdateNotification
         updateAvailable={updateAvailable && !dismissedUpdate}
         onApplyUpdate={applyUpdate}

@@ -743,7 +743,7 @@ export function FinanceOverview() {
 
   if (loading) {
     return (
-      <div className="p-4 space-y-4 pb-24">
+      <div className="p-4 space-y-4 pb-safe">
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-48 bg-gray-200 dark:bg-gray-700 rounded-lg" />
           <div className="h-40 bg-gradient-to-br from-emerald-600/20 to-teal-500/20 rounded-2xl" />
@@ -772,7 +772,7 @@ export function FinanceOverview() {
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="p-4 space-y-4 pb-24"
+        className="p-4 space-y-4 pb-safe"
       >
         {/* ============================================================ */}
         {/* HEADER WITH MONTH SELECTOR & SETTINGS */}

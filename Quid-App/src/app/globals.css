@@ -163,6 +163,11 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Safe area bottom padding for scrollable content (prevents content hidden behind nav on iPhone) */
+.pb-safe {
+  padding-bottom: max(7rem, calc(5rem + env(safe-area-inset-bottom, 0px)));
+}
+
 /* PWA-specific styles */
 html {
   -webkit-tap-highlight-color: transparent;
@@ -182,9 +187,9 @@ body.no-pull-refresh {
 
 /* PWA standalone mode adjustments */
 @media (display-mode: standalone) {
-  body {
-    padding-top: env(safe-area-inset-top);
-  }
+  /* No body padding — each component handles its own safe-area insets
+     via .safe-area-top / .safe-area-bottom classes. Adding body padding
+     caused double-padding with the Header's safe-area-top. */
 }
 
 /* Selection color */

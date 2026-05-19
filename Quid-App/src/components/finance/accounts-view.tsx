@@ -1537,7 +1537,7 @@ export function AccountsView() {
 
   if (loading) {
     return (
-      <div className="p-4 space-y-3 pb-24">
+      <div className="p-4 space-y-3 pb-safe">
         {[1, 2, 3].map((i) => (
           <div
             key={i}
@@ -1558,7 +1558,7 @@ export function AccountsView() {
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="p-4 space-y-4 pb-24"
+        className="p-4 space-y-4 pb-safe"
       >
         {/* Header with month selector and settings */}
         <motion.div variants={itemVariants} className="flex items-center justify-between">

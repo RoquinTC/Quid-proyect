@@ -118,7 +118,7 @@ export function AppointmentsView() {
 
   if (loading) {
     return (
-      <div className="p-4 space-y-3 pb-24">
+      <div className="p-4 space-y-3 pb-safe">
         {[1, 2, 3].map((i) => (
           <div
             key={i}
@@ -150,7 +150,7 @@ export function AppointmentsView() {
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="p-4 space-y-4 pb-24"
+      className="p-4 space-y-4 pb-safe"
     >
       {/* Summary card */}
       <motion.div variants={itemVariants}>
@@ -333,7 +333,7 @@ function AppointmentDetail({
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="p-4 space-y-4 pb-24"
+      className="p-4 space-y-4 pb-safe"
     >
       {/* Header */}
       <div className="flex items-center gap-3">

@@ -735,7 +735,7 @@ export function TransportPage() {
             </p>
           </div>
         ) : (
-          <div className="p-4 space-y-4 pb-24">
+          <div className="p-4 space-y-4 pb-safe">
             {groupedTimeline().map((group) => (
               <div key={group.month}>
                 {/* Month header */}

@@ -109,7 +109,7 @@ export function BudgetDetail({ budgetId, onBack }: BudgetDetailProps) {
 
   if (!budget) {
     return (
-      <div className="p-4 space-y-4 pb-24">
+      <div className="p-4 space-y-4 pb-safe">
         <Card className="border-0 shadow-sm rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -137,7 +137,7 @@ export function BudgetDetail({ budgetId, onBack }: BudgetDetailProps) {
   const remaining = budget.amount - budget.spent;
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="p-4 space-y-4 pb-safe">
       {/* Back button */}
       {onBack && (
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-1">

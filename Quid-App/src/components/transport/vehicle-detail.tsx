@@ -205,7 +205,7 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
 
   if (loading || !vehicle) {
     return (
-      <div className="p-4 space-y-3 pb-24">
+      <div className="p-4 space-y-3 pb-safe">
         <div className="h-40 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         <div className="h-20 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         <div className="h-20 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
@@ -272,7 +272,7 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
   const refuelDateText = formatRefuelDate(refuelByDate);
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="p-4 space-y-4 pb-safe">
       {/* Header with back button */}
       <div className="flex items-center gap-2">
         <Button

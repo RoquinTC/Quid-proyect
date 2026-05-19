@@ -58,7 +58,7 @@ export function MedicationDetail({ medication, onBack, onEdit, onDelete }: Medic
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="p-4 space-y-4 pb-24"
+      className="p-4 space-y-4 pb-safe"
     >
       {/* Header */}
       <div className="flex items-center gap-3">

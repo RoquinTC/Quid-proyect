@@ -17,6 +17,7 @@ import {
   Landmark,
   CreditCard,
   TrendingUp,
+  Share2,
   // Finance actions
   ArrowLeftRight,
   Banknote,
@@ -46,6 +47,7 @@ import {
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ShareInvite } from "@/components/pwa/share-invite";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ─── Module definitions with quick actions ─────────────────────────
@@ -141,6 +143,7 @@ export function AppSidebar() {
   const { sidebarOpen, setSidebarOpen, setActiveModule, setFinanceSubView, setAuthView, setSidebarAction } = useAppStore();
   const [expandedModule, setExpandedModule] = useState<string | null>(null);
   const [simulatorsOpen, setSimulatorsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const userInitials = session?.user?.name
     ? session.user.name
@@ -196,7 +199,7 @@ export function AppSidebar() {
         </div>
 
         {/* Scrollable content */}
-        <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 160px)" }}>
+        <div className="overflow-y-auto" style={{ maxHeight: "calc(100dvh - 160px)" }}>
           {/* Module Navigation with expandable actions */}
           <div className="p-3 space-y-1">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">
@@ -348,6 +351,22 @@ export function AppSidebar() {
           {/* Divider */}
           <div className="mx-5 my-2 border-t dark:border-gray-800" />
 
+          {/* Share / Invite */}
+          <div className="px-3">
+            <button
+              onClick={() => { setShareOpen(true); setSidebarOpen(false); }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/10 transition-colors text-left group"
+            >
+              <div className="size-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                <Share2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300 flex-1">
+                Invitar a Quid
+              </span>
+              <ChevronRight className="size-4 text-emerald-300 dark:text-emerald-600" />
+            </button>
+          </div>
+
           {/* Settings */}
           <div className="px-3">
             <button
@@ -366,7 +385,9 @@ export function AppSidebar() {
         </div>
 
         {/* Sign Out - Fixed at bottom */}
-        <div className="absolute bottom-6 left-0 right-0 px-6">
+        <ShareInvite open={shareOpen} onOpenChange={setShareOpen} />
+
+        <div className="absolute bottom-6 left-0 right-0 px-6 safe-area-bottom">
           <Button
             variant="ghost"
             className="w-full justify-start text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-xl gap-3 text-sm"

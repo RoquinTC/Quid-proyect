@@ -500,7 +500,7 @@ export function AccountDetail() {
 
   if (!account) {
     return (
-      <div className="p-4 pb-24">
+      <div className="p-4 pb-safe">
         <Button
           variant="ghost"
           onClick={() => setFinanceSubView("accounts")}
@@ -522,7 +522,7 @@ export function AccountDetail() {
     : 0;
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="p-4 space-y-4 pb-safe">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Button

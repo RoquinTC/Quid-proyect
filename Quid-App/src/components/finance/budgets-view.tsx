@@ -325,7 +325,7 @@ export function BudgetsView() {
 
   if (budgetsLoading || unbudgetedLoading) {
     return (
-      <div className="p-4 space-y-3 pb-24">
+      <div className="p-4 space-y-3 pb-safe">
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         ))}
@@ -939,7 +939,7 @@ export function BudgetsView() {
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="p-4 space-y-3 pb-24"
+      className="p-4 space-y-3 pb-safe"
     >
       {/* Monthly Summary — compact */}
       <motion.div variants={itemVariants}>
