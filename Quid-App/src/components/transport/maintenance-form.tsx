@@ -592,7 +592,7 @@ export function MaintenanceForm({
           </div>
 
           {/* ─── 2. Date, Time, KM ─── */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <Calendar className="size-3 text-gray-400" />
@@ -758,7 +758,7 @@ export function MaintenanceForm({
             <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Próximo mantenimiento
             </Label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="maint-nextkm" className="text-[10px] text-gray-500">
                   KM próx. cambio
@@ -812,17 +812,19 @@ export function MaintenanceForm({
             onChange={setPaymentData}
           />
 
-          {/* ─── 9. Submit Button ─── */}
-          <Button
-            onClick={handleSubmit}
-            disabled={loading || !vehicleId || !cost || (selectedServices.length > 0 && selectedServices.some(s => !s.price || parseFloat(s.price) <= 0))}
-            className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
-          >
-            {loading ? (
-              <Loader2 className="size-4 animate-spin mr-2" />
-            ) : null}
-            {isEditing ? "Guardar Cambios" : "Registrar Mantenimiento"}
-          </Button>
+          {/* ─── 9. Submit Button (sticky) ─── */}
+          <div className="sticky bottom-0 bg-white dark:bg-gray-900 pt-2 pb-1 -mx-6 px-6 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              onClick={handleSubmit}
+              disabled={loading || !vehicleId || !cost || (selectedServices.length > 0 && selectedServices.some(s => !s.price || parseFloat(s.price) <= 0))}
+              className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+            >
+              {loading ? (
+                <Loader2 className="size-4 animate-spin mr-2" />
+              ) : null}
+              {isEditing ? "Guardar Cambios" : "Registrar Mantenimiento"}
+            </Button>
+          </div>
         </div>
       </SheetContent>
     </Sheet>

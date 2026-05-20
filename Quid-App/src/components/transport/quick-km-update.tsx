@@ -57,7 +57,7 @@ export function QuickKmUpdate({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-3xl">
+      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Actualizar Kilometraje</SheetTitle>
         </SheetHeader>

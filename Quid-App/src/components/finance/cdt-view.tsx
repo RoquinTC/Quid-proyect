@@ -108,7 +108,7 @@ export function CDTView() {
               <Landmark className="size-4 text-teal-200" />
               <span className="text-sm text-teal-100">Total Invertido en CDTs</span>
             </div>
-            <p className="text-3xl font-bold tracking-tight">
+            <p className="text-2xl sm:text-3xl font-bold tracking-tight truncate">
               {formatCurrency(totalAmount)}
             </p>
             {totalInterestEarned > 0 && (

@@ -576,7 +576,7 @@ export function TransactionForm({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="rounded-t-2xl sm:rounded-2xl overflow-y-auto">
+      <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Nueva Transacción</SheetTitle>
         </SheetHeader>

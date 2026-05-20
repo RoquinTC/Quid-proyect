@@ -388,7 +388,7 @@ export function FuelLogForm({
           </div>
 
           {/* Amount & Price per gallon */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="fuel-amount">Valor pagado</Label>
               <CurrencyInput
@@ -553,16 +553,18 @@ export function FuelLogForm({
           </div>
 
           {/* Submit */}
-          <Button
-            onClick={handleSubmit}
-            disabled={loading || !vehicleId || !amount || !pricePerGallon}
-            className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
-          >
-            {loading ? (
-              <Loader2 className="size-4 animate-spin mr-2" />
-            ) : null}
-            {isEditing ? "Guardar Cambios" : "Registrar Recarga"}
-          </Button>
+          <div className="sticky bottom-0 bg-white dark:bg-gray-900 pt-2 pb-1 -mx-6 px-6 border-t border-gray-200 dark:border-gray-700">
+            <Button
+              onClick={handleSubmit}
+              disabled={loading || !vehicleId || !amount || !pricePerGallon}
+              className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+            >
+              {loading ? (
+                <Loader2 className="size-4 animate-spin mr-2" />
+              ) : null}
+              {isEditing ? "Guardar Cambios" : "Registrar Recarga"}
+            </Button>
+          </div>
         </div>
       </SheetContent>
     </Sheet>

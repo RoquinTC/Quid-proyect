@@ -174,7 +174,7 @@ export function OnboardingFlow() {
   const StepIcon = currentStep.icon;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
+    <div className="min-h-dvh flex items-center justify-center p-4 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50">
       <div className="w-full max-w-sm">
         {/* Progress bar */}
         <div className="relative mb-8">

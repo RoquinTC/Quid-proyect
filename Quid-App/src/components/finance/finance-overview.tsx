@@ -772,12 +772,12 @@ export function FinanceOverview() {
         variants={containerVariants}
         initial="hidden"
         animate="show"
-        className="p-4 space-y-4 pb-safe"
+        className="p-4 pb-safe"
       >
         {/* ============================================================ */}
         {/* HEADER WITH MONTH SELECTOR & SETTINGS */}
         {/* ============================================================ */}
-        <motion.div variants={itemVariants} className="flex items-center justify-between">
+        <motion.div variants={itemVariants} className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
               Resumen Financiero
@@ -826,6 +826,7 @@ export function FinanceOverview() {
         {/* ============================================================ */}
         {/* DYNAMIC WIDGETS */}
         {/* ============================================================ */}
+        <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
         {visibleWidgets.map((w) => {
           switch (w.id) {
             // ============================================================
@@ -833,7 +834,7 @@ export function FinanceOverview() {
             // ============================================================
             case "balance":
               return (
-                <motion.div key="balance" variants={itemVariants}>
+                <motion.div key="balance" variants={itemVariants} className="md:col-span-2">
                   <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-500 text-white overflow-hidden relative">
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)] pointer-events-none" />
                     <CardContent className="p-5 relative z-10">
@@ -841,7 +842,7 @@ export function FinanceOverview() {
                         <Wallet className="size-4 text-emerald-200" />
                         <span className="text-sm text-emerald-100">Balance Total</span>
                       </div>
-                      <p className="text-3xl font-bold tracking-tight">
+                      <p className="text-2xl sm:text-3xl font-bold tracking-tight truncate">
                         {formatCurrency(totalBalance)}
                       </p>
                       <div className="flex items-center gap-4 mt-3">
@@ -923,7 +924,7 @@ export function FinanceOverview() {
             // ============================================================
             case "evolution":
               return (
-                <motion.div key="evolution" variants={itemVariants}>
+                <motion.div key="evolution" variants={itemVariants} className="md:col-span-2">
                   <Card className="border-0 shadow-md rounded-2xl">
                     <CardHeader className="pb-2 pt-4 px-5">
                       <div className="flex items-center justify-between">
@@ -1054,7 +1055,7 @@ export function FinanceOverview() {
             // ============================================================
             case "cashflow":
               return (
-                <motion.div key="cashflow" variants={itemVariants}>
+                <motion.div key="cashflow" variants={itemVariants} className="md:col-span-2">
                   <Card className="border-0 shadow-md rounded-2xl">
                     <CardHeader className="pb-2 pt-4 px-5">
                       <div>
@@ -1282,7 +1283,7 @@ export function FinanceOverview() {
             // ============================================================
             case "transactions":
               return (
-                <motion.div key="transactions" variants={itemVariants}>
+                <motion.div key="transactions" variants={itemVariants} className="md:col-span-2">
                   <Card className="border-0 shadow-md rounded-2xl">
                     <CardHeader className="pb-2 pt-4 px-5">
                       <div className="flex items-center justify-between">
@@ -1400,7 +1401,7 @@ export function FinanceOverview() {
             // ============================================================
             case "bills":
               return (upcomingRecurring.length > 0 || activeDebts.length > 0) ? (
-                <motion.div key="bills" variants={itemVariants}>
+                <motion.div key="bills" variants={itemVariants} className="md:col-span-2">
                   <Card className="border-0 shadow-md rounded-2xl">
                     <CardHeader className="pb-2 pt-4 px-5">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -1528,6 +1529,7 @@ export function FinanceOverview() {
               return null;
           }
         })}
+        </div>
       </motion.div>
     </>
   );

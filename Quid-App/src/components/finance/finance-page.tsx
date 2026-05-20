@@ -205,7 +205,7 @@ export function FinancePage() {
       {/* Sticky Sub-tab navigation */}
       {!isDetailView && (
         <div className="sticky top-0 z-30 px-4 pt-3 pb-1 bg-white dark:bg-gray-900">
-          <div className="flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-x-auto">
+          <div className="flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-x-auto no-scrollbar">
             {tabs.map((tab) => {
               const isActive = financeSubView === tab.id;
               const Icon = tab.icon;
@@ -213,7 +213,7 @@ export function FinancePage() {
                 <button
                   key={tab.id}
                   onClick={() => setFinanceSubView(tab.id)}
-                  className="relative flex items-center justify-center gap-1 flex-1 min-w-[56px] py-2 px-1.5 rounded-xl text-sm font-medium transition-colors duration-200"
+                  className="relative flex items-center justify-center gap-1 shrink-0 min-w-0 py-2 px-2 rounded-xl text-sm font-medium transition-colors duration-200 whitespace-nowrap"
                 >
                   {isActive && (
                     <motion.div
@@ -232,7 +232,7 @@ export function FinancePage() {
                     }`}
                   />
                   <span
-                    className={`relative z-10 text-[10px] ${
+                    className={`relative z-10 text-xs ${
                       isActive ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400"
                     }`}
                   >

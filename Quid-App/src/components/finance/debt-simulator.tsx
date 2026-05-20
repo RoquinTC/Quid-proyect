@@ -698,7 +698,7 @@ export function DebtSimulator() {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-xl font-bold text-gray-900 dark:text-white">
+              <p className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">
                 {formatCurrency(selectedDebt.currentBalance)}
               </p>
               {selectedDebt.interestRate && (
@@ -923,7 +923,7 @@ export function DebtSimulator() {
                 </div>
                 <div className="text-center p-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
                   <p className="text-[10px] text-gray-400 mb-1">Total a pagar</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">
+                  <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
                     {formatCurrency(projection.totalOverall)}
                   </p>
                 </div>
@@ -1143,8 +1143,8 @@ export function DebtSimulator() {
                   transition={{ duration: 0.2 }}
                   className="overflow-hidden"
                 >
-                  <div className="max-h-80 overflow-y-auto">
-                    <table className="w-full text-[11px]">
+                  <div className="max-h-80 overflow-y-auto overflow-x-auto">
+                    <table className="w-full text-xs min-w-[500px]">
                       <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900">
                         <tr className="text-gray-400">
                           <th className="py-2 px-2 text-left font-medium">Mes</th>

@@ -177,7 +177,7 @@ export function AccountCard({ account, balanceHistory, onClick }: AccountCardPro
               Balance
             </span>
             <div className="flex items-center gap-1">
-              <p className="text-2xl font-bold text-white tracking-tight break-all">
+              <p className="text-lg sm:text-2xl font-bold text-white tracking-tight truncate">
                 {formatCurrency(account.balance)}
               </p>
               {hasHistory && (
