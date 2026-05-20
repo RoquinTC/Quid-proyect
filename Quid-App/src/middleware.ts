@@ -124,6 +124,7 @@ export async function middleware(request: NextRequest) {
   try {
     const token = await getToken({
       req: request,
+      secureCookie: false,
       secret: (() => {
         if (process.env.NEXTAUTH_SECRET) return process.env.NEXTAUTH_SECRET;
         if (process.env.NODE_ENV === "production") {
