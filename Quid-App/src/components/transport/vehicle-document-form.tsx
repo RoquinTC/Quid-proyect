@@ -120,6 +120,7 @@ export function VehicleDocumentForm({
   const [issueDate, setIssueDate] = useState(getColombiaTodayString());
   const [expiryDate, setExpiryDate] = useState("");
   const [cost, setCost] = useState("");
+  const [registerExpense, setRegisterExpense] = useState(true);
   const [reminderDays, setReminderDays] = useState("30");
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [notes, setNotes] = useState("");
@@ -234,16 +235,19 @@ export function VehicleDocumentForm({
         documentNumber: documentNumber || null,
         issueDate,
         expiryDate,
-        cost: cost ? parseFloat(cost) : 0,
+        cost: registerExpense ? (cost ? parseFloat(cost) : 0) : 0,
+        skipFinanceEntry: !registerExpense,
         reminderDays: reminderEnabled ? parseInt(reminderDays) || 30 : null,
         reminderEnabled,
         notes: notes || undefined,
-        // ── Finance integration ──
-        paymentType: paymentData.paymentType,
-        accountId: paymentData.accountId,
-        subAccountId: paymentData.subAccountId,
-        debtId: paymentData.debtId,
-        installmentCount: paymentData.installmentCount,
+        // ── Finance integration (only when registering expense) ──
+        ...(registerExpense ? {
+          paymentType: paymentData.paymentType,
+          accountId: paymentData.accountId,
+          subAccountId: paymentData.subAccountId,
+          debtId: paymentData.debtId,
+          installmentCount: paymentData.installmentCount,
+        } : {}),
       };
 
       if (isEditing && existingDocument) {
@@ -292,6 +296,7 @@ export function VehicleDocumentForm({
       setIssueDate(getColombiaTodayString());
       setExpiryDate("");
       setCost("");
+      setRegisterExpense(true);
       setReminderDays("30");
       setReminderEnabled(true);
       setNotes("");
@@ -478,18 +483,49 @@ export function VehicleDocumentForm({
             </div>
           )}
 
-          {/* ─── Cost ─── */}
+          {/* ─── Register Expense Toggle ─── */}
           <div className="space-y-2">
-            <Label htmlFor="doc-cost">Costo</Label>
-            <CurrencyInput
-              id="doc-cost"
-              showPrefix
-              placeholder="350000"
-              value={cost}
-              onChange={(v) => setCost(v)}
-              className="rounded-xl"
-            />
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Receipt className="size-4 text-emerald-500" />
+                <div>
+                  <Label className="text-sm">Registrar gasto</Label>
+                  <p className="text-[10px] text-gray-400">
+                    Desmarca para guardar solo el recordatorio
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={registerExpense}
+                onCheckedChange={setRegisterExpense}
+              />
+            </div>
           </div>
+
+          {/* ─── Cost (only when registering expense) ─── */}
+          {registerExpense && (
+            <div className="space-y-2">
+              <Label htmlFor="doc-cost">Costo</Label>
+              <CurrencyInput
+                id="doc-cost"
+                showPrefix
+                placeholder="350000"
+                value={cost}
+                onChange={(v) => setCost(v)}
+                className="rounded-xl"
+              />
+            </div>
+          )}
+
+          {/* ─── Info when reminder-only ─── */}
+          {!registerExpense && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-900/30">
+              <CalendarClock className="size-3.5 text-blue-500 flex-shrink-0" />
+              <span className="text-[11px] text-blue-600 dark:text-blue-400">
+                El documento se guardará solo para recordatorio, sin afectar tus finanzas
+              </span>
+            </div>
+          )}
 
           {/* ─── Reminder ─── */}
           <div className="space-y-2">
@@ -530,7 +566,8 @@ export function VehicleDocumentForm({
             )}
           </div>
 
-          {/* ─── Payment Method ─── */}
+          {/* ─── Payment Method (only when registering expense) ─── */}
+          {registerExpense && (
           <PaymentMethodSelector
             vehicleId={vehicleId}
             defaultPaymentType={
@@ -542,6 +579,7 @@ export function VehicleDocumentForm({
             defaultInstallmentCount={existingDocument?.installmentCount}
             onChange={setPaymentData}
           />
+          )}
 
           {/* ─── Notes ─── */}
           <div className="space-y-2">

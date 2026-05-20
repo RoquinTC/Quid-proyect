@@ -173,10 +173,10 @@ export function AppSidebar() {
 
   return (
     <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-      <SheetContent side="left" className="w-[300px] p-0 rounded-r-3xl">
+      <SheetContent side="left" className="w-[300px] p-0 gap-0 rounded-r-3xl">
         {/* User Profile Header */}
         <div className="bg-gradient-to-br from-emerald-600 to-teal-500 p-5 pb-6 rounded-tr-3xl">
-          <SheetHeader className="mb-3">
+          <SheetHeader className="mb-3 p-0">
             <SheetTitle className="text-white text-left text-lg">Menú</SheetTitle>
           </SheetHeader>
           <div className="flex items-center gap-3">

@@ -60,10 +60,12 @@ import {
   Send,
   MessageSquare,
   Share2,
+  Trophy,
 } from "lucide-react";
 import { AccountManager } from "@/components/finance/account-manager";
 import { CategoriesManager } from "@/components/finance/categories-manager";
 import { BackupManager } from "@/components/settings/backup-manager";
+import { AchievementsView } from "@/components/settings/achievements-view";
 import { SecuritySettings } from "@/components/security/security-settings";
 import {
   AlertDialog,
@@ -1097,6 +1099,18 @@ export function SettingsPage() {
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4 space-y-3">
               <BackupManager />
+            </AccordionContent>
+          </AccordionItem>
+        </Card>
+
+        {/* ── LOGROS Y DESCUBRIMIENTO ── */}
+        <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
+          <AccordionItem value="logros" className="border-0">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <SectionHeader icon={Trophy} iconColor="text-emerald-600" iconBg="bg-emerald-100 dark:bg-emerald-900/30" title="Logros y Descubrimiento" badge="Nuevo" />
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4">
+              <AchievementsView />
             </AccordionContent>
           </AccordionItem>
         </Card>

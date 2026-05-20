@@ -8,6 +8,7 @@ import {
   createFinanceEntry,
   getTransportDescription,
   getTransportSubCategory,
+  type FinanceIntegrationResult,
 } from "@/lib/transport-finance";
 import { DOCUMENT_TYPES } from "@/lib/types/transport";
 
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = await validateBody(req, vehicleDocumentCreateSchema);
     const {
       type, documentNumber, issueDate, expiryDate, cost,
+      skipFinanceEntry,
       reminderDays, reminderEnabled,
       paymentType, accountId, subAccountId, debtId, installmentCount, notes,
     } = body;
@@ -92,40 +94,43 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         documentNumber: documentNumber || null,
         issueDate: createColombiaDate(issueDate.split("T")[0]),
         expiryDate: createColombiaDate(expiryDate.split("T")[0]),
-        cost,
+        cost: cost ?? 0,
         reminderDays: reminderDays || 30,
         reminderEnabled: reminderEnabled ?? true,
-        accountId: accountId || null,
-        subAccountId: subAccountId || null,
-        debtId: debtId || null,
-        installmentCount: installmentCount || null,
+        accountId: skipFinanceEntry ? null : (accountId || null),
+        subAccountId: skipFinanceEntry ? null : (subAccountId || null),
+        debtId: skipFinanceEntry ? null : (debtId || null),
+        installmentCount: skipFinanceEntry ? null : (installmentCount || null),
         notes,
       },
     });
 
-    // Create finance entry with full integration
-    const subCategory = getTransportSubCategory("document", type);
-    const financeResult = await createFinanceEntry({
-      userId: session.user.id,
-      amount: cost,
-      description: getTransportDescription("document", vehicle.name, vehicle.type, docTypeLabel),
-      category: "Transporte",
-      subCategory,
-      date: createColombiaDate(issueDate.split("T")[0]),
-      sourceModule: "transport",
-      sourceId: document.id,
-      paymentType: paymentType || "account",
-      accountId,
-      subAccountId,
-      debtId,
-      installmentCount,
-      notes: documentNumber ? `Documento #: ${documentNumber}` : notes,
-      vehicleName: vehicle.name,
-    });
+    // Only create finance entry if cost > 0 and not explicitly skipped
+    let financeResult: FinanceIntegrationResult | null = null;
+    if (!skipFinanceEntry && (cost ?? 0) > 0) {
+      const subCategory = getTransportSubCategory("document", type);
+      financeResult = await createFinanceEntry({
+        userId: session.user.id,
+        amount: cost,
+        description: getTransportDescription("document", vehicle.name, vehicle.type, docTypeLabel),
+        category: "Transporte",
+        subCategory,
+        date: createColombiaDate(issueDate.split("T")[0]),
+        sourceModule: "transport",
+        sourceId: document.id,
+        paymentType: paymentType || "account",
+        accountId,
+        subAccountId,
+        debtId,
+        installmentCount,
+        notes: documentNumber ? `Documento #: ${documentNumber}` : notes,
+        vehicleName: vehicle.name,
+      });
+    }
 
     return NextResponse.json({
       ...document,
-      _finance: financeResult,
+      ...(financeResult ? { _finance: financeResult } : {}),
     }, { status: 201 });
   } catch (error) {
     if (error instanceof Response) return error;
