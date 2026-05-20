@@ -38,6 +38,7 @@ export type {
   MaintenanceRecord,
   FuelLevelData,
   FuelPrice,
+  VehicleDocument,
 } from './transport';
 
 // Health

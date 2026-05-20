@@ -24,6 +24,7 @@ export type SidebarAction =
   | "create-vehicle"
   | "log-fuel"
   | "log-maintenance"
+  | "register-document"
   | "update-fuel-price"
   // Health
   | "create-medication"
