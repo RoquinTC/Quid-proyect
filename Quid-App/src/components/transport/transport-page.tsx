@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Car, Fuel, Wrench, Plus, HelpCircle,
   Droplets, CircleDot, ShieldAlert, Settings, Package,
+  FileText, Shield,
   ChevronDown, Gauge, MapPin, AlertTriangle, Bell, Clock,
   Trash2, Pencil, MoreVertical, ArrowLeft, MoreHorizontal,
   Activity, RefreshCw,
@@ -13,6 +14,7 @@ import {
 import { VehicleForm } from "./vehicle-form";
 import { FuelLogForm } from "./fuel-log-form";
 import { MaintenanceForm } from "./maintenance-form";
+import { VehicleDocumentForm } from "./vehicle-document-form";
 import { FuelPriceWidget } from "./fuel-price-widget";
 import { QuickKmUpdate } from "./quick-km-update";
 import { VehicleIcon } from "./vehicle-icon";
@@ -34,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { apiFetch, formatCurrency, formatShortDate } from "@/lib/api";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
-import type { Vehicle, FuelLog, MaintenanceRecord } from "@/lib/types";
+import type { Vehicle, FuelLog, MaintenanceRecord, VehicleDocument } from "@/lib/types";
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────
@@ -129,6 +131,8 @@ export function TransportPage() {
   const [editFuelLog, setEditFuelLog] = useState<FuelLog | null>(null);
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
   const [editMaintenance, setEditMaintenance] = useState<MaintenanceRecord | null>(null);
+  const [showDocumentForm, setShowDocumentForm] = useState(false);
+  const [editDocument, setEditDocument] = useState<VehicleDocument | null>(null);
   const [showFuelPriceDialog, setShowFuelPriceDialog] = useState(false);
   const [showKmUpdate, setShowKmUpdate] = useState(false);
 
@@ -220,6 +224,7 @@ export function TransportPage() {
       "create-vehicle": () => { setEditVehicle(null); setShowVehicleForm(true); },
       "log-fuel": () => { setEditFuelLog(null); setShowFuelLogForm(true); },
       "log-maintenance": () => { setEditMaintenance(null); setShowMaintenanceForm(true); },
+      "register-document": () => { setEditDocument(null); setShowDocumentForm(true); },
       "update-fuel-price": () => setShowFuelPriceDialog(true),
     };
     const handler = actionMap[sidebarAction];
@@ -822,6 +827,10 @@ export function TransportPage() {
               <Wrench className="size-4 mr-2 text-amber-500" />
               Registrar Mantenimiento
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { setEditDocument(null); setShowDocumentForm(true); }}>
+              <Shield className="size-4 mr-2 text-violet-500" />
+              Registrar Documento
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setShowFuelPriceDialog(true)}>
               <Settings className="size-4 mr-2 text-blue-500" />
               Precio Combustible
@@ -860,6 +869,14 @@ export function TransportPage() {
         onOpenChange={setShowMaintenanceForm}
         preselectedVehicleId={selectedVehicleId}
         record={editMaintenance}
+        onSuccess={refetchVehicles}
+      />
+
+      <VehicleDocumentForm
+        open={showDocumentForm}
+        onOpenChange={setShowDocumentForm}
+        preselectedVehicleId={selectedVehicleId}
+        document={editDocument}
         onSuccess={refetchVehicles}
       />
 

@@ -31,6 +31,7 @@ import {
   PlusCircle,
   Fuel,
   Wrench,
+  Shield,
   // Health actions
   Pill,
   Stethoscope,
@@ -103,6 +104,7 @@ const moduleItems: ModuleDef[] = [
       { id: "create-vehicle", label: "Nuevo Vehículo", icon: PlusCircle },
       { id: "log-fuel", label: "Registrar Recarga", icon: Fuel },
       { id: "log-maintenance", label: "Registrar Mantenimiento", icon: Wrench },
+      { id: "register-document", label: "Registrar Documento", icon: Shield },
       { id: "update-fuel-price", label: "Actualizar Precio Combustible", icon: Landmark },
     ],
   },
