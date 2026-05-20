@@ -6,10 +6,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Car, Fuel, Wrench, Plus, HelpCircle,
   Droplets, CircleDot, ShieldAlert, Settings, Package,
-  FileText, Shield,
+  FileText, Shield, FileCheck,
   ChevronDown, Gauge, MapPin, AlertTriangle, Bell, Clock,
   Trash2, Pencil, MoreVertical, ArrowLeft, MoreHorizontal,
-  Activity, RefreshCw,
+  Activity, RefreshCw, ChevronRight,
 } from "lucide-react";
 import { VehicleForm } from "./vehicle-form";
 import { FuelLogForm } from "./fuel-log-form";
@@ -37,6 +37,7 @@ import {
 import { apiFetch, formatCurrency, formatShortDate } from "@/lib/api";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
 import type { Vehicle, FuelLog, MaintenanceRecord, VehicleDocument } from "@/lib/types";
+import { MAINTENANCE_TYPES } from "@/lib/types/transport";
 import { toast } from "sonner";
 
 // ─── Constants ────────────────────────────────────────────────────
@@ -54,12 +55,21 @@ const fuelTypeLabels: Record<string, string> = {
 };
 const maintTypeIcons: Record<string, typeof Wrench> = {
   oil_change: Droplets, tire_change: CircleDot, brake_service: ShieldAlert,
-  general: Settings, parts_replacement: Package, other: HelpCircle,
+  general: Settings, parts_replacement: Package,
+  alignment: Settings, suspension: Package, transmission: Settings,
+  electrical: ShieldAlert, cooling: Droplets, ac: Settings,
+  battery: ShieldAlert, inspection: Settings, wash: Droplets,
+  aesthetics: HelpCircle, other: HelpCircle,
 };
 const maintTypeLabels: Record<string, string> = {
   oil_change: "Cambio de aceite", tire_change: "Cambio de llantas",
   brake_service: "Servicio de frenos", general: "Revisión general",
-  parts_replacement: "Cambio de repuestos", other: "Otro",
+  parts_replacement: "Cambio de repuestos",
+  alignment: "Alineación/Balanceo", suspension: "Suspensión",
+  transmission: "Transmisión", electrical: "Sistema eléctrico",
+  cooling: "Sistema de enfriamiento", ac: "Aire acondicionado",
+  battery: "Batería", inspection: "Inspección/Revisión",
+  wash: "Lavado", aesthetics: "Estética", other: "Otro",
 };
 const maintTypeColors: Record<string, string> = {
   oil_change: "text-amber-600 bg-amber-100 dark:bg-amber-900/30",
@@ -67,12 +77,40 @@ const maintTypeColors: Record<string, string> = {
   brake_service: "text-red-600 bg-red-100 dark:bg-red-900/30",
   general: "text-blue-600 bg-blue-100 dark:bg-blue-900/30",
   parts_replacement: "text-purple-600 bg-purple-100 dark:bg-purple-900/30",
+  alignment: "text-teal-600 bg-teal-100 dark:bg-teal-900/30",
+  suspension: "text-orange-600 bg-orange-100 dark:bg-orange-900/30",
+  transmission: "text-indigo-600 bg-indigo-100 dark:bg-indigo-900/30",
+  electrical: "text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30",
+  cooling: "text-sky-600 bg-sky-100 dark:bg-sky-900/30",
+  ac: "text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30",
+  battery: "text-lime-600 bg-lime-100 dark:bg-lime-900/30",
+  inspection: "text-violet-600 bg-violet-100 dark:bg-violet-900/30",
+  wash: "text-blue-600 bg-blue-100 dark:bg-blue-900/30",
+  aesthetics: "text-pink-600 bg-pink-100 dark:bg-pink-900/30",
   other: "text-gray-600 bg-gray-100 dark:bg-gray-700",
+};
+
+// ─── Document type constants ──────────────────────────────────────
+const docTypeLabels: Record<string, string> = {
+  soat: "SOAT", tecnomecanica: "Tecnomecánica", seguro: "Seguro",
+  impuesto: "Impuesto", otro: "Otro",
+};
+const docTypeColors: Record<string, string> = {
+  soat: "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30",
+  tecnomecanica: "text-amber-600 bg-amber-100 dark:bg-amber-900/30",
+  seguro: "text-blue-600 bg-blue-100 dark:bg-blue-900/30",
+  impuesto: "text-rose-600 bg-rose-100 dark:bg-rose-900/30",
+  otro: "text-gray-600 bg-gray-100 dark:bg-gray-700",
+};
+const docTypeIcons: Record<string, typeof Shield> = {
+  soat: Shield, tecnomecanica: FileCheck, seguro: Shield,
+  impuesto: FileText, otro: FileText,
 };
 
 type VehicleWithDetails = Vehicle & {
   fuelLogs: Array<{ id: string; date: string; km: number; amount: number; pricePerGallon: number; gallons: number; isFullTank?: boolean; notes?: string | null }>;
-  maintenanceRecords: Array<{ id: string; type: string; description: string; km: number; cost: number; date: string; nextDueKm?: number | null; nextDueDate?: string | null; reminderEnabled?: boolean }>;
+  maintenanceRecords: Array<{ id: string; type: string; description: string; km: number; cost: number; date: string; nextDueKm?: number | null; nextDueDate?: string | null; reminderEnabled?: boolean; items?: Array<{ id: string; name: string; quantity: number; unitPrice: number; totalPrice: number }> }>;
+  documents?: Array<{ id: string; vehicleId: string; type: string; documentNumber?: string | null; issueDate: string; expiryDate: string; cost: number; reminderDays: number; reminderEnabled: boolean; notes?: string | null }>;
   fuelLevel?: number;
   currentFuel?: number;
   estimatedRange?: number;
@@ -89,7 +127,7 @@ type VehicleWithDetails = Vehicle & {
 
 type TimelineEntry = {
   id: string;
-  type: "fuel" | "maintenance";
+  type: "fuel" | "maintenance" | "document";
   date: string;
   km: number;
   cost: number;
@@ -106,6 +144,12 @@ type TimelineEntry = {
   nextDueKm?: number | null;
   nextDueDate?: string | null;
   reminderEnabled?: boolean;
+  items?: Array<{ id: string; name: string; quantity: number; unitPrice: number; totalPrice: number }>;
+  // Document-specific
+  docType?: string;
+  documentNumber?: string | null;
+  expiryDate?: string;
+  reminderDays?: number;
 };
 
 // ─── Component ────────────────────────────────────────────────────
@@ -140,7 +184,7 @@ export function TransportPage() {
   const [showFuelDetails, setShowFuelDetails] = useState(false);
 
   // Delete
-  const [deleteTarget, setDeleteTarget] = useState<{ type: "fuel" | "maintenance" | "vehicle"; id: string; vehicleId?: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: "fuel" | "maintenance" | "vehicle" | "document"; id: string; vehicleId?: string } | null>(null);
 
   // Auto-select first vehicle
   useEffect(() => {
@@ -189,6 +233,25 @@ export function TransportPage() {
             nextDueKm: rec.nextDueKm,
             nextDueDate: rec.nextDueDate,
             reminderEnabled: rec.reminderEnabled,
+            items: rec.items,
+          });
+        }
+      }
+      if (v.documents) {
+        for (const doc of v.documents) {
+          entries.push({
+            id: doc.id,
+            type: "document",
+            date: doc.issueDate,
+            km: 0,
+            cost: doc.cost,
+            vehicleId: v.id,
+            vehicleName: v.name,
+            docType: doc.type,
+            documentNumber: doc.documentNumber,
+            expiryDate: doc.expiryDate,
+            reminderDays: doc.reminderDays,
+            reminderEnabled: doc.reminderEnabled,
           });
         }
       }
@@ -343,6 +406,9 @@ export function TransportPage() {
       } else if (deleteTarget.type === "maintenance" && deleteTarget.vehicleId) {
         await apiFetch(`/api/vehicles/${deleteTarget.vehicleId}/maintenance/${deleteTarget.id}`, { method: "DELETE" });
         toast.success("Registro de mantenimiento eliminado");
+      } else if (deleteTarget.type === "document" && deleteTarget.vehicleId) {
+        await apiFetch(`/api/vehicles/${deleteTarget.vehicleId}/documents/${deleteTarget.id}`, { method: "DELETE" });
+        toast.success("Documento eliminado");
       }
       refetchVehicles();
     } catch (error) {
@@ -730,6 +796,96 @@ export function TransportPage() {
           </div>
         )}
 
+        {/* ─── Reminders Section ──────────────────────────────────── */}
+        {selectedVehicle && (() => {
+          const now = new Date();
+          // Maintenance reminders
+          const maintReminders = (selectedVehicle.maintenanceRecords || [])
+            .filter(r => r.reminderEnabled && (r.nextDueKm || r.nextDueDate))
+            .map(r => {
+              const kmRemaining = r.nextDueKm ? r.nextDueKm - selectedVehicle.currentKm : null;
+              const daysUntil = r.nextDueDate ? Math.ceil((new Date(r.nextDueDate).getTime() - now.getTime()) / (1000*60*60*24)) : null;
+              const isOverdue = (kmRemaining !== null && kmRemaining <= 0) || (daysUntil !== null && daysUntil <= 0);
+              const isUrgent = !isOverdue && ((kmRemaining !== null && kmRemaining <= 500) || (daysUntil !== null && daysUntil <= 15));
+              // Get KM interval from MAINTENANCE_TYPES
+              const typeConfig = MAINTENANCE_TYPES.find(t => t.value === r.type);
+              const kmInterval = typeConfig?.nextKmInterval || 0;
+              return { ...r, kmRemaining, daysUntil, isOverdue, isUrgent, kmInterval };
+            })
+            .filter(r => r.isOverdue || r.isUrgent || (r.kmRemaining !== null && r.kmRemaining <= 1000) || (r.daysUntil !== null && r.daysUntil <= 30));
+
+          // Document expiry reminders
+          const docReminders = (selectedVehicle.documents || [])
+            .filter(d => d.reminderEnabled)
+            .map(d => {
+              const daysUntilExpiry = Math.ceil((new Date(d.expiryDate).getTime() - now.getTime()) / (1000*60*60*24));
+              const isExpired = daysUntilExpiry < 0;
+              const isExpiringSoon = !isExpired && daysUntilExpiry <= (d.reminderDays || 30);
+              return { ...d, daysUntilExpiry, isExpired, isExpiringSoon };
+            })
+            .filter(d => d.isExpired || d.isExpiringSoon);
+
+          const hasReminders = maintReminders.length > 0 || docReminders.length > 0;
+
+          if (!hasReminders) return null;
+
+          return (
+            <div className="px-4 pt-3 pb-1">
+              <div className="rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800/30 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Bell className="size-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Recordatorios</span>
+                </div>
+                <div className="space-y-2">
+                  {/* Maintenance reminders */}
+                  {maintReminders.map(r => (
+                    <div key={r.id} className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-800/60 rounded-xl">
+                      <AlertTriangle className={`size-4 flex-shrink-0 ${r.isOverdue ? "text-red-500" : "text-amber-500"}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                          {maintTypeLabels[r.type] || r.type}
+                          {r.kmInterval > 0 && <span className="text-gray-400 font-normal"> · Cada {r.kmInterval.toLocaleString()} km</span>}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {r.kmRemaining !== null && (
+                            <span className={r.isOverdue ? "text-red-500 font-medium" : r.isUrgent ? "text-amber-600 font-medium" : ""}>
+                              {r.isOverdue ? "Vencido" : `Faltan ${r.kmRemaining.toLocaleString("es-CO")} km`}
+                            </span>
+                          )}
+                          {r.daysUntil !== null && (
+                            <span className="ml-2">
+                              <Clock className="size-3 inline" /> {formatShortDate(r.nextDueDate!)}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Document reminders */}
+                  {docReminders.map(d => (
+                    <div key={d.id} className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-800/60 rounded-xl">
+                      <Shield className={`size-4 flex-shrink-0 ${d.isExpired ? "text-red-500" : "text-amber-500"}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                          {docTypeLabels[d.type] || d.type}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          <span className={d.isExpired ? "text-red-500 font-medium" : "text-amber-600 font-medium"}>
+                            {d.isExpired ? "Vencido" : `Vence en ${d.daysUntilExpiry} días`}
+                          </span>
+                          <span className="ml-2">
+                            <Clock className="size-3 inline" /> {formatShortDate(d.expiryDate)}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {timeline.length === 0 ? (
           <div className="p-8 text-center">
             <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-3">
@@ -772,6 +928,19 @@ export function TransportPage() {
                               notes: entry.notes,
                             } as FuelLog);
                             setShowFuelLogForm(true);
+                          } else if (entry.type === "document") {
+                            setEditDocument({
+                              id: entry.id,
+                              vehicleId: entry.vehicleId,
+                              type: entry.docType || "soat",
+                              documentNumber: entry.documentNumber,
+                              issueDate: entry.date,
+                              expiryDate: entry.expiryDate || "",
+                              cost: entry.cost,
+                              reminderDays: entry.reminderDays || 30,
+                              reminderEnabled: entry.reminderEnabled ?? true,
+                            } as VehicleDocument);
+                            setShowDocumentForm(true);
                           } else {
                             setEditMaintenance({
                               id: entry.id,
@@ -913,6 +1082,8 @@ export function TransportPage() {
                 ? "Se eliminará el vehículo y todos sus registros asociados. "
                 : deleteTarget?.type === "fuel"
                 ? "Se eliminará este registro de combustible y su transacción asociada. "
+                : deleteTarget?.type === "document"
+                ? "Se eliminará este documento y su transacción asociada. "
                 : "Se eliminará este registro de mantenimiento y su transacción asociada. "}
               Esta acción no se puede deshacer.
             </AlertDialogDescription>
@@ -945,6 +1116,27 @@ function TimelineCard({
   onDelete: () => void;
 }) {
   const isFuel = entry.type === "fuel";
+  const isDoc = entry.type === "document";
+  const [showItems, setShowItems] = useState(false);
+
+  // Document status
+  const docStatus = (() => {
+    if (!isDoc || !entry.expiryDate) return null;
+    const now = new Date();
+    const expiry = new Date(entry.expiryDate);
+    const daysUntil = Math.ceil((expiry.getTime() - now.getTime()) / (1000*60*60*24));
+    if (daysUntil < 0) return { label: "Vencido", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" };
+    if (daysUntil <= (entry.reminderDays || 30)) return { label: "Por vencer", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" };
+    return { label: "Vigente", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" };
+  })();
+
+  // KM interval from MAINTENANCE_TYPES
+  const kmInterval = !isFuel && !isDoc && entry.maintType
+    ? MAINTENANCE_TYPES.find(t => t.value === entry.maintType)?.nextKmInterval || 0
+    : 0;
+
+  // Doc type icon
+  const DocIcon = isDoc ? (docTypeIcons[entry.docType || ""] || FileText) : FileText;
 
   return (
     <div className="relative">
@@ -952,10 +1144,14 @@ function TimelineCard({
       <div className={`absolute -left-7 top-3 size-5 rounded-full flex items-center justify-center ${
         isFuel
           ? "bg-orange-100 dark:bg-orange-900/30"
+          : isDoc
+          ? docTypeColors[entry.docType || ""]?.replace("text-", "bg-").split(" ")[0] + " dark:bg-gray-700"
           : "bg-blue-100 dark:bg-blue-900/30"
       }`}>
         {isFuel
           ? <Fuel className="size-2.5 text-orange-500" />
+          : isDoc
+          ? <DocIcon className="size-2.5" />
           : <Wrench className="size-2.5 text-blue-500" />
         }
       </div>
@@ -964,12 +1160,22 @@ function TimelineCard({
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 group">
         <div className="flex items-center justify-between mb-0.5">
           <div className="flex items-center gap-2 min-w-0">
+            {isDoc && DocIcon && (
+              <div className={`size-5 rounded-md flex items-center justify-center flex-shrink-0 ${docTypeColors[entry.docType || ""] || docTypeColors.otro}`}>
+                <DocIcon className="size-3" />
+              </div>
+            )}
             <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-              {isFuel ? "Recarga" : (maintTypeLabels[entry.maintType || ""] || entry.maintType || "Mantenimiento")}
+              {isFuel ? "Recarga" : isDoc ? (docTypeLabels[entry.docType || ""] || entry.docType || "Documento") : (maintTypeLabels[entry.maintType || ""] || entry.maintType || "Mantenimiento")}
             </span>
             {isFuel && entry.isFullTank && (
               <Badge variant="secondary" className="text-[11px] h-4 px-1.5 bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300">
                 Lleno
+              </Badge>
+            )}
+            {isDoc && docStatus && (
+              <Badge variant="secondary" className={`text-[11px] h-4 px-1.5 ${docStatus.color}`}>
+                {docStatus.label}
               </Badge>
             )}
           </div>
@@ -998,7 +1204,7 @@ function TimelineCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-gray-500">
+        <div className="flex items-center gap-2 text-[11px] text-gray-500 flex-wrap">
           {showVehicleName && (
             <>
               <span className="font-medium text-gray-600 dark:text-gray-400">{entry.vehicleName}</span>
@@ -1006,22 +1212,60 @@ function TimelineCard({
             </>
           )}
           <span>{formatShortDate(entry.date)}</span>
-          <span>{(entry.km ?? 0).toLocaleString("es-CO")} km</span>
+          {!isDoc && <span>{(entry.km ?? 0).toLocaleString("es-CO")} km</span>}
           {isFuel && entry.gallons && (
             <>
               <span>•</span>
               <span>{entry.gallons.toFixed(2)} gal</span>
             </>
           )}
-          {!isFuel && entry.nextDueKm && (
+          {!isFuel && !isDoc && entry.nextDueKm && (
             <>
               <span>•</span>
               <Badge variant="secondary" className="text-[11px] h-3.5 px-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                 Próx: {entry.nextDueKm.toLocaleString("es-CO")} km
+                {kmInterval > 0 && <span className="font-normal"> · Cada {kmInterval.toLocaleString()} km</span>}
               </Badge>
             </>
           )}
+          {isDoc && entry.documentNumber && (
+            <>
+              <span>•</span>
+              <span className="text-gray-400">#{entry.documentNumber}</span>
+            </>
+          )}
+          {isDoc && entry.expiryDate && (
+            <>
+              <span>•</span>
+              <span>Vence: {formatShortDate(entry.expiryDate)}</span>
+            </>
+          )}
         </div>
+
+        {/* Maintenance items expandable */}
+        {!isFuel && !isDoc && entry.items && entry.items.length > 0 && (
+          <div className="mt-1.5">
+            <button
+              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              onClick={() => setShowItems(!showItems)}
+            >
+              <ChevronRight className={`size-3 transition-transform ${showItems ? "rotate-90" : ""}`} />
+              <span>{entry.items.length} {entry.items.length === 1 ? "item" : "items"}</span>
+            </button>
+            {showItems && (
+              <div className="mt-1.5 space-y-1 pl-4 border-l-2 border-gray-100 dark:border-gray-700">
+                {entry.items.map(item => (
+                  <div key={item.id} className="flex items-center justify-between text-[11px]">
+                    <span className="text-gray-600 dark:text-gray-400 truncate">{item.name}</span>
+                    <span className="text-gray-500 flex-shrink-0 ml-2">
+                      {item.quantity} × {formatCurrency(item.unitPrice)} = {formatCurrency(item.totalPrice)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1043,10 +1287,12 @@ function VehicleDetailView({
   onEditVehicle: (v: VehicleWithDetails) => void;
   onEditFuelLog: (log: FuelLog) => void;
   onEditMaintenance: (rec: MaintenanceRecord) => void;
-  onDelete: (target: { type: "fuel" | "maintenance"; id: string; vehicleId?: string }) => void;
+  onDelete: (target: { type: "fuel" | "maintenance" | "document"; id: string; vehicleId?: string }) => void;
 }) {
   const [showFuelLogForm, setShowFuelLogForm] = useState(false);
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
+  const [showDocumentForm, setShowDocumentForm] = useState(false);
+  const [editDocument, setEditDocument] = useState<VehicleDocument | null>(null);
   const [showKmUpdate, setShowKmUpdate] = useState(false);
 
   const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
@@ -1057,6 +1303,7 @@ function VehicleDetailView({
 
   const totalFuelSpent = (vehicle.fuelLogs || []).reduce((s, l) => s + l.amount, 0);
   const totalMaintenanceSpent = (vehicle.maintenanceRecords || []).reduce((s, r) => s + r.cost, 0);
+  const totalDocSpent = (vehicle.documents || []).reduce((s, d) => s + d.cost, 0);
 
   const getFuelColor = (level: number) => {
     if (level > 50) return "bg-emerald-500";
@@ -1077,19 +1324,44 @@ function VehicleDetailView({
       date: String(rec.date),
       km: rec.km, cost: rec.cost, vehicleId: vehicle.id, vehicleName: vehicle.name,
       maintType: rec.type, maintDescription: rec.description, nextDueKm: rec.nextDueKm,
-      nextDueDate: rec.nextDueDate, reminderEnabled: rec.reminderEnabled,
+      nextDueDate: rec.nextDueDate, reminderEnabled: rec.reminderEnabled, items: rec.items,
+    })),
+    ...(vehicle.documents || []).map((doc) => ({
+      id: doc.id, type: "document" as const, date: doc.issueDate,
+      km: 0, cost: doc.cost, vehicleId: vehicle.id, vehicleName: vehicle.name,
+      docType: doc.type, documentNumber: doc.documentNumber,
+      expiryDate: doc.expiryDate, reminderDays: doc.reminderDays,
+      reminderEnabled: doc.reminderEnabled,
     })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // Upcoming maintenance
-  const upcomingMaintenance = (vehicle.maintenanceRecords || []).filter((r) => {
-    if (!r.reminderEnabled) return false;
-    if (r.nextDueKm) {
-      const kmRemaining = r.nextDueKm - vehicle.currentKm;
-      return kmRemaining <= 1000;
-    }
-    return false;
-  });
+  // Upcoming maintenance with KM intervals
+  const now = new Date();
+  const upcomingMaintenance = (vehicle.maintenanceRecords || [])
+    .filter(r => r.reminderEnabled && (r.nextDueKm || r.nextDueDate))
+    .map(r => {
+      const kmRemaining = r.nextDueKm ? r.nextDueKm - vehicle.currentKm : null;
+      const daysUntil = r.nextDueDate ? Math.ceil((new Date(r.nextDueDate).getTime() - now.getTime()) / (1000*60*60*24)) : null;
+      const isOverdue = (kmRemaining !== null && kmRemaining <= 0) || (daysUntil !== null && daysUntil <= 0);
+      const isUrgent = !isOverdue && ((kmRemaining !== null && kmRemaining <= 500) || (daysUntil !== null && daysUntil <= 15));
+      const typeConfig = MAINTENANCE_TYPES.find(t => t.value === r.type);
+      const kmInterval = typeConfig?.nextKmInterval || 0;
+      return { ...r, kmRemaining, daysUntil, isOverdue, isUrgent, kmInterval };
+    })
+    .filter(r => r.isOverdue || r.isUrgent || (r.kmRemaining !== null && r.kmRemaining <= 1000) || (r.daysUntil !== null && r.daysUntil <= 30));
+
+  // Document expiry reminders
+  const docReminders = (vehicle.documents || [])
+    .filter(d => d.reminderEnabled)
+    .map(d => {
+      const daysUntilExpiry = Math.ceil((new Date(d.expiryDate).getTime() - now.getTime()) / (1000*60*60*24));
+      const isExpired = daysUntilExpiry < 0;
+      const isExpiringSoon = !isExpired && daysUntilExpiry <= (d.reminderDays || 30);
+      return { ...d, daysUntilExpiry, isExpired, isExpiringSoon };
+    })
+    .filter(d => d.isExpired || d.isExpiringSoon);
+
+  const hasReminders = upcomingMaintenance.length > 0 || docReminders.length > 0;
 
   return (
     <div className="flex flex-col h-full">
@@ -1154,6 +1426,12 @@ function VehicleDetailView({
           <Wrench className="size-3 text-amber-500" />
           <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">{formatCurrency(totalMaintenanceSpent)}</span>
         </div>
+        {(vehicle.documents || []).length > 0 && (
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-50 dark:bg-violet-900/20">
+            <Shield className="size-3 text-violet-500" />
+            <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">{formatCurrency(totalDocSpent)}</span>
+          </div>
+        )}
         {avgKmPerGallon > 0 && (
           <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20">
             <Gauge className="size-3 text-blue-500" />
@@ -1182,31 +1460,57 @@ function VehicleDetailView({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {/* Upcoming maintenance alerts */}
-        {upcomingMaintenance.length > 0 && (
-          <div className="px-4 pt-3">
-            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Bell className="size-3.5 text-amber-600" />
-                <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                  Próximos mantenimientos
-                </span>
+        {/* ─── Reminders Section ──────────────────────────────────── */}
+        {hasReminders && (
+          <div className="px-4 pt-3 pb-1">
+            <div className="rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800/30 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Bell className="size-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Recordatorios</span>
               </div>
-              {upcomingMaintenance.map((r) => {
-                const kmRemaining = r.nextDueKm ? r.nextDueKm - vehicle.currentKm : null;
-                const isOverdue = kmRemaining !== null && kmRemaining <= 0;
-                return (
-                  <div key={r.id} className="flex items-center gap-2 py-1">
-                    <AlertTriangle className={`size-3 ${isOverdue ? "text-red-500" : "text-amber-500"}`} />
-                    <span className="text-[11px] text-gray-700 dark:text-gray-300">
-                      {maintTypeLabels[r.type] || r.type}
-                    </span>
-                    <span className={`text-xs ml-auto font-semibold ${isOverdue ? "text-red-500" : "text-amber-600"}`}>
-                      {isOverdue ? "Vencido" : `Faltan ${kmRemaining?.toLocaleString("es-CO")} km`}
-                    </span>
+              <div className="space-y-2">
+                {upcomingMaintenance.map(r => (
+                  <div key={r.id} className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-800/60 rounded-xl">
+                    <AlertTriangle className={`size-4 flex-shrink-0 ${r.isOverdue ? "text-red-500" : "text-amber-500"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                        {maintTypeLabels[r.type] || r.type}
+                        {r.kmInterval > 0 && <span className="text-gray-400 font-normal"> · Cada {r.kmInterval.toLocaleString()} km</span>}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {r.kmRemaining !== null && (
+                          <span className={r.isOverdue ? "text-red-500 font-medium" : r.isUrgent ? "text-amber-600 font-medium" : ""}>
+                            {r.isOverdue ? "Vencido" : `Faltan ${r.kmRemaining.toLocaleString("es-CO")} km`}
+                          </span>
+                        )}
+                        {r.daysUntil !== null && (
+                          <span className="ml-2">
+                            <Clock className="size-3 inline" /> {formatShortDate(r.nextDueDate!)}
+                          </span>
+                        )}
+                      </p>
+                    </div>
                   </div>
-                );
-              })}
+                ))}
+                {docReminders.map(d => (
+                  <div key={d.id} className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-800/60 rounded-xl">
+                    <Shield className={`size-4 flex-shrink-0 ${d.isExpired ? "text-red-500" : "text-amber-500"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                        {docTypeLabels[d.type] || d.type}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        <span className={d.isExpired ? "text-red-500 font-medium" : "text-amber-600 font-medium"}>
+                          {d.isExpired ? "Vencido" : `Vence en ${d.daysUntilExpiry} días`}
+                        </span>
+                        <span className="ml-2">
+                          <Clock className="size-3 inline" /> {formatShortDate(d.expiryDate)}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -1219,6 +1523,89 @@ function VehicleDetailView({
               <p className="text-xs text-red-600 dark:text-red-400">
                 Consumo anormal detectado — posible fuga o problema mecánico
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Documents Section ──────────────────────────────────── */}
+        {(vehicle.documents || []).length > 0 && (
+          <div className="px-4 pt-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Documentos</h3>
+            <div className="space-y-2">
+              {(vehicle.documents || []).map((doc) => {
+                const DocIcon = docTypeIcons[doc.type] || FileText;
+                const colorClass = docTypeColors[doc.type] || docTypeColors.otro;
+                const daysUntil = Math.ceil((new Date(doc.expiryDate).getTime() - now.getTime()) / (1000*60*60*24));
+                const isExpired = daysUntil < 0;
+                const isExpiringSoon = !isExpired && daysUntil <= (doc.reminderDays || 30);
+                const statusLabel = isExpired ? "Vencido" : isExpiringSoon ? "Por vencer" : "Vigente";
+                const statusColor = isExpired
+                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                  : isExpiringSoon
+                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                  : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300";
+
+                return (
+                  <div key={doc.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`size-8 rounded-lg flex items-center justify-center flex-shrink-0 ${colorClass}`}>
+                        <DocIcon className="size-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                            {docTypeLabels[doc.type] || doc.type}
+                          </span>
+                          <Badge variant="secondary" className={`text-[11px] h-3.5 px-1 ${statusColor}`}>
+                            {statusLabel}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
+                          {doc.documentNumber && <span>#{doc.documentNumber}</span>}
+                          <span>Emisión: {formatShortDate(doc.issueDate)}</span>
+                          <span>•</span>
+                          <span>Vence: {formatShortDate(doc.expiryDate)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white">
+                          {formatCurrency(doc.cost)}
+                        </span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="size-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                              <MoreHorizontal className="size-3.5" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="rounded-xl">
+                            <DropdownMenuItem onClick={() => {
+                              setEditDocument({
+                                id: doc.id,
+                                vehicleId: doc.vehicleId,
+                                type: doc.type,
+                                documentNumber: doc.documentNumber,
+                                issueDate: doc.issueDate,
+                                expiryDate: doc.expiryDate,
+                                cost: doc.cost,
+                                reminderDays: doc.reminderDays,
+                                reminderEnabled: doc.reminderEnabled,
+                              } as VehicleDocument);
+                              setShowDocumentForm(true);
+                            }}>
+                              <Pencil className="size-4 mr-2 text-blue-500" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onDelete({ type: "document", id: doc.id, vehicleId: doc.vehicleId })} className="text-red-600">
+                              <Trash2 className="size-4 mr-2" />
+                              Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1251,6 +1638,19 @@ function VehicleDetailView({
                           isFullTank: entry.isFullTank ?? true,
                           notes: entry.notes,
                         } as FuelLog);
+                      } else if (entry.type === "document") {
+                        setEditDocument({
+                          id: entry.id,
+                          vehicleId: entry.vehicleId,
+                          type: entry.docType || "soat",
+                          documentNumber: entry.documentNumber,
+                          issueDate: entry.date,
+                          expiryDate: entry.expiryDate || "",
+                          cost: entry.cost,
+                          reminderDays: entry.reminderDays || 30,
+                          reminderEnabled: entry.reminderEnabled ?? true,
+                        } as VehicleDocument);
+                        setShowDocumentForm(true);
                       } else {
                         onEditMaintenance({
                           id: entry.id,
@@ -1295,6 +1695,14 @@ function VehicleDetailView({
         open={showMaintenanceForm}
         onOpenChange={setShowMaintenanceForm}
         preselectedVehicleId={vehicle.id}
+        onSuccess={onRefresh}
+      />
+
+      <VehicleDocumentForm
+        open={showDocumentForm}
+        onOpenChange={setShowDocumentForm}
+        preselectedVehicleId={vehicle.id}
+        document={editDocument}
         onSuccess={onRefresh}
       />
 
