@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useAppSession } from "@/lib/use-app-session";
 import { useAppStore } from "@/lib/store";
 import { performLogout } from "@/lib/logout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,7 +15,7 @@ import {
 import { NotificationPanel } from "@/components/layout/notification-panel";
 
 export function Header() {
-  const { data: session } = useSession();
+  const { session } = useAppSession();
   const { toggleSidebar } = useAppStore();
 
   const userInitials = session?.user?.name
@@ -25,7 +25,7 @@ export function Header() {
         .join("")
         .toUpperCase()
         .slice(0, 2)
-    : "UH";
+    : "Q";
 
   // performLogout clears all session state (localStorage, IndexedDB, SW cache, cookies) before redirecting
   // This prevents the race condition where the redirect kills cleanup effects
@@ -78,7 +78,7 @@ export function Header() {
                 </p>
               </div>
               <DropdownMenuItem
-                onClick={performLogout}
+                onClick={async () => { await performLogout(); }}
                 className="text-red-600 focus:text-red-600 cursor-pointer rounded-lg"
               >
                 <LogOut className="mr-2 size-4" />

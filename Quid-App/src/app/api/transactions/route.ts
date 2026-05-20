@@ -301,7 +301,7 @@ export async function POST(req: NextRequest) {
 
     // If transfer, create the counterpart income transaction and link them
     // Collect updated balances for notification
-    const updatedBalances: Array<{ name: string; balance: number; isSubAccount: boolean }> = [];
+    const updatedBalances: Array<{ id: string; name: string; balance: number; isSubAccount: boolean }> = [];
 
     if (type === "transfer" && transferToAccountId) {
       const sourceAccount = await db.account.findUnique({
@@ -353,6 +353,7 @@ export async function POST(req: NextRequest) {
       });
       if (updatedSub) {
         updatedBalances.push({
+          id: subAccountId,
           name: `${updatedSub.account.name} → ${updatedSub.name}`,
           balance: toNumber(updatedSub.balance),
           isSubAccount: true,
@@ -365,6 +366,7 @@ export async function POST(req: NextRequest) {
       });
       if (updatedAcc) {
         updatedBalances.push({
+          id: accountId,
           name: updatedAcc.name,
           balance: toNumber(updatedAcc.balance),
           isSubAccount: false,
@@ -381,6 +383,7 @@ export async function POST(req: NextRequest) {
         });
         if (updatedDestSub) {
           updatedBalances.push({
+            id: transferToSubAccountId,
             name: `${updatedDestSub.account.name} → ${updatedDestSub.name}`,
             balance: toNumber(updatedDestSub.balance),
             isSubAccount: true,
@@ -393,6 +396,7 @@ export async function POST(req: NextRequest) {
         });
         if (updatedDestAcc) {
           updatedBalances.push({
+            id: transferToAccountId,
             name: updatedDestAcc.name,
             balance: toNumber(updatedDestAcc.balance),
             isSubAccount: false,

@@ -54,10 +54,18 @@ export function useAppSession(): {
   }, [status, nextAuthSession, offlineSession, setOfflineSession]);
 
   // Also cache the session for offline use whenever next-auth has one
+  // BUT: skip if user just logged out (prevents re-caching during logout)
   useEffect(() => {
+    try {
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("quid-just-logged-out") === "true") return;
+    } catch {}
     if (status === "authenticated" && nextAuthSession?.user) {
       // Cache in localStorage via offline-session module
       import("@/lib/offline-session").then(({ cacheOfflineSession }) => {
+        // Double-check: don't cache if logout happened during the dynamic import
+        try {
+          if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("quid-just-logged-out") === "true") return;
+        } catch {}
         cacheOfflineSession(nextAuthSession as any);
       }).catch(() => {});
     }

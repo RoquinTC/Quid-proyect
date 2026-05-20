@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, ReactNode, useMemo } from "react";
 import { apiFetch, formatCurrency, calcPercentage, getColombiaNow, parseLocalDate } from "@/lib/api";
 import { useMultiQuery } from "@/lib/local/hooks/queries";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { useAppStore } from "@/lib/store";
 import { AccountForm } from "./account-form";
 import { TransactionForm } from "./transaction-form";
@@ -666,7 +667,7 @@ export function AccountsView() {
   const { setFinanceSubView, isOnline } = useAppStore();
 
   // ── Local-first data fetching via useMultiQuery ──
-  const { data: multiData, loading, syncing } = useMultiQuery({
+  const { data: multiData, loading, syncing, refetch: refetchAccountsData } = useMultiQuery({
     accounts: "/api/accounts",
     budgets: "/api/budgets",
     debts: "/api/debts",
@@ -675,6 +676,10 @@ export function AccountsView() {
     transactions: "/api/transactions",
     monthlySummary: "/api/dashboard/monthly-summary?months=12",
   });
+
+  // ── Reactivity: refetch when transactions or accounts change ──
+  useDataEvent("transactions", refetchAccountsData);
+  useDataEvent("accounts", refetchAccountsData);
 
   // Extract and cast data from useMultiQuery results
   const accounts = (multiData.accounts || []) as Account[];

@@ -12,68 +12,76 @@ import {
 } from "@/lib/transport-finance";
 import { DOCUMENT_TYPES } from "@/lib/types/transport";
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; docId: string }> }
-) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string; documentId: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    const { id, docId } = await params;
+    const { id: vehicleId, documentId } = await params;
     const body = await validateBody(req, vehicleDocumentUpdateSchema);
+    const {
+      type, documentNumber, issueDate, expiryDate, cost,
+      skipFinanceEntry,
+      reminderDays, reminderEnabled,
+      paymentType, accountId, subAccountId, debtId, installmentCount, notes,
+    } = body;
 
+    // Verify vehicle ownership
     const vehicle = await db.vehicle.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id: vehicleId, userId: session.user.id },
     });
 
     if (!vehicle) {
       return NextResponse.json({ error: "Vehículo no encontrado" }, { status: 404 });
     }
 
+    // Verify document exists and belongs to vehicle
     const existing = await db.vehicleDocument.findFirst({
-      where: { id: docId, vehicleId: id },
+      where: { id: documentId, vehicleId },
     });
 
     if (!existing) {
       return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
     }
 
-    const {
-      type, documentNumber, issueDate, expiryDate, cost,
-      reminderDays, reminderEnabled,
-      paymentType, accountId, subAccountId, debtId, installmentCount, notes,
-    } = body;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData: any = {};
-
+    // Build update data
+    const updateData: Record<string, unknown> = {};
     if (type !== undefined) updateData.type = type;
     if (documentNumber !== undefined) updateData.documentNumber = documentNumber || null;
     if (issueDate !== undefined) updateData.issueDate = createColombiaDate(issueDate.split("T")[0]);
     if (expiryDate !== undefined) updateData.expiryDate = createColombiaDate(expiryDate.split("T")[0]);
-    if (cost !== undefined) updateData.cost = Number(cost);
+    if (cost !== undefined) updateData.cost = cost;
     if (reminderDays !== undefined) updateData.reminderDays = reminderDays;
     if (reminderEnabled !== undefined) updateData.reminderEnabled = reminderEnabled;
-    if (accountId !== undefined) updateData.accountId = accountId || null;
-    if (subAccountId !== undefined) updateData.subAccountId = subAccountId || null;
-    if (debtId !== undefined) updateData.debtId = debtId || null;
-    if (installmentCount !== undefined) updateData.installmentCount = installmentCount || null;
     if (notes !== undefined) updateData.notes = notes || null;
 
+    // Handle finance fields — if skipping, clear them
+    if (skipFinanceEntry) {
+      updateData.accountId = null;
+      updateData.subAccountId = null;
+      updateData.debtId = null;
+      updateData.installmentCount = null;
+      updateData.cost = 0;
+    } else {
+      if (accountId !== undefined) updateData.accountId = accountId || null;
+      if (subAccountId !== undefined) updateData.subAccountId = subAccountId || null;
+      if (debtId !== undefined) updateData.debtId = debtId || null;
+      if (installmentCount !== undefined) updateData.installmentCount = installmentCount || null;
+    }
+
     const document = await db.vehicleDocument.update({
-      where: { id: docId },
+      where: { id: documentId },
       data: updateData,
     });
 
     // Update the linked finance transaction if cost changed
-    if (cost !== undefined && Number(cost) !== Number(existing.cost)) {
+    if (cost !== undefined && Number(cost) !== Number(existing.cost) && !skipFinanceEntry) {
       const docTypeLabel = DOCUMENT_TYPES.find(d => d.value === (type || existing.type))?.label || (type || existing.type);
 
       await db.transaction.updateMany({
-        where: { sourceModule: "transport", sourceId: docId },
+        where: { sourceModule: "transport", sourceId: documentId },
         data: {
           amount: Number(cost),
           description: getTransportDescription("document", vehicle.name, vehicle.type, docTypeLabel),
@@ -89,45 +97,50 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string; docId: string }> }
-) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string; documentId: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    const { id, docId } = await params;
+    const { id: vehicleId, documentId } = await params;
 
+    // Verify vehicle ownership
     const vehicle = await db.vehicle.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id: vehicleId, userId: session.user.id },
     });
 
     if (!vehicle) {
       return NextResponse.json({ error: "Vehículo no encontrado" }, { status: 404 });
     }
 
+    // Verify document exists and belongs to vehicle
     const existing = await db.vehicleDocument.findFirst({
-      where: { id: docId, vehicleId: id },
+      where: { id: documentId, vehicleId },
     });
 
     if (!existing) {
       return NextResponse.json({ error: "Documento no encontrado" }, { status: 404 });
     }
 
-    // ── Capture finance data before deletion ──
+    // Capture finance data before deletion for CC installment reversal
     const docFinance = await db.vehicleDocument.findFirst({
-      where: { id: docId },
+      where: { id: documentId },
       select: { debtId: true, cost: true, accountId: true },
     });
 
-    // ── Step 1: Reverse account-based finance entry ──
-    // This restores account balance, budget spent, and deletes the transaction
-    await reverseFinanceEntry(docId, session.user.id);
+    // Step 1: Reverse account-based finance entry if one exists
+    if (Number(existing.cost) > 0 && (existing.accountId || existing.debtId)) {
+      try {
+        await reverseFinanceEntry(documentId, session.user.id);
+      } catch (reverseError) {
+        console.error("Error reversing finance entry for document:", reverseError);
+        // Continue with deletion even if reverse fails
+      }
+    }
 
-    // ── Step 2: Reverse CC installment if applicable ──
+    // Step 2: Reverse CC installment if applicable
     if (docFinance?.debtId) {
       const installments = await db.installment.findMany({
         where: {
@@ -150,8 +163,10 @@ export async function DELETE(
       }
     }
 
-    // ── Step 3: Delete the document record itself ──
-    await db.vehicleDocument.delete({ where: { id: docId } });
+    // Step 3: Delete the document record itself
+    await db.vehicleDocument.delete({
+      where: { id: documentId },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSession } from "next-auth/react";
+import { useAppSession } from "@/lib/use-app-session";
 import { useAppStore, type ModuleType, type SidebarAction } from "@/lib/store";
 import { performLogout } from "@/lib/logout";
 import {
@@ -141,7 +141,7 @@ const simulatorItems = [
 ];
 
 export function AppSidebar() {
-  const { data: session } = useSession();
+  const { session } = useAppSession();
   const { sidebarOpen, setSidebarOpen, setActiveModule, setFinanceSubView, setAuthView, setSidebarAction } = useAppStore();
   const [expandedModule, setExpandedModule] = useState<string | null>(null);
   const [simulatorsOpen, setSimulatorsOpen] = useState(false);
@@ -173,10 +173,10 @@ export function AppSidebar() {
 
   return (
     <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-      <SheetContent side="left" className="w-[300px] p-0 rounded-r-3xl">
+      <SheetContent side="left" className="w-[300px] p-0 gap-0 rounded-r-3xl bg-transparent">
         {/* User Profile Header */}
         <div className="bg-gradient-to-br from-emerald-600 to-teal-500 p-5 pb-6 rounded-tr-3xl">
-          <SheetHeader className="mb-3">
+          <SheetHeader className="mb-3 p-0 space-y-0">
             <SheetTitle className="text-white text-left text-lg">Menú</SheetTitle>
           </SheetHeader>
           <div className="flex items-center gap-3">

@@ -23,6 +23,7 @@ import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
 import { BackupRestorePrompt } from "@/components/settings/backup-restore-prompt";
 import { LockScreen } from "@/components/security/lock-screen";
 import { OfflineLockScreen } from "@/components/security/offline-lock-screen";
+import { AchievementsProvider } from "@/hooks/use-achievements";
 import { useUpdateChecker } from "@/hooks/use-update-checker";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -226,7 +227,11 @@ export function AppShell() {
   }, [setOfflineSession]);
 
   // Cache session for offline access whenever it's available
+  // BUT: skip if user just logged out (prevents re-caching during logout)
   useEffect(() => {
+    try {
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("quid-just-logged-out") === "true") return;
+    } catch {}
     if (session?.user?.id && !isOffline) {
       cacheOfflineSession(session as any);
     }
@@ -301,12 +306,14 @@ export function AppShell() {
 
   // Authenticated and onboarded - show main app
   return (
-    <div className="h-dvh flex flex-col overflow-hidden bg-gray-50/50 dark:bg-gray-950">
-      <Header />
-      <ModuleContent />
-      <BottomNav />
-      <AppSidebar />
-      {showBackupPrompt && <BackupRestorePrompt />}
-    </div>
+    <AchievementsProvider>
+      <div className="h-dvh flex flex-col overflow-hidden bg-gray-50/50 dark:bg-gray-950">
+        <Header />
+        <ModuleContent />
+        <BottomNav />
+        <AppSidebar />
+        {showBackupPrompt && <BackupRestorePrompt />}
+      </div>
+    </AchievementsProvider>
   );
 }

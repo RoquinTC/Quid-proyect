@@ -354,15 +354,27 @@ async function cacheGetResponse(url: string, data: unknown): Promise<void> {
     if (!table) return;
 
     if (isCollection && Array.isArray(data)) {
-      // Replace all records for this table with server data
-      const now = Date.now();
-      const enriched = data.map((record: any) => ({
-        ...record,
-        _syncStatus: "synced",
-        _version: 1,
-        _lastModified: now,
-      }));
-      await table.bulkPut(enriched);
+      // Replace all records for this table with server data.
+      // We must delete stale records that no longer exist on the server,
+      // so we use replaceAllInTable instead of bulkPut.
+      // However, replaceAllInTable requires a userId — extract it from
+      // the data if available, otherwise fall back to bulkPut.
+      const userId = (data as any[])?.[0]?.userId;
+      if (userId) {
+        const { replaceAllInTable } = await import("./local/db");
+        await replaceAllInTable(tableName, userId, data as any[]);
+      } else {
+        // No userId available — fall back to bulkPut (best effort)
+        // This may leave stale records but is better than nothing
+        const now = Date.now();
+        const enriched = (data as any[]).map((record: any) => ({
+          ...record,
+          _syncStatus: "synced",
+          _version: 1,
+          _lastModified: now,
+        }));
+        await table.bulkPut(enriched);
+      }
     }
     // Single record caching is handled by the sync engine
   } catch (err) {
@@ -374,6 +386,12 @@ async function cacheGetResponse(url: string, data: unknown): Promise<void> {
 /**
  * Update IndexedDB after a successful mutation.
  * This keeps the local data in sync with the server.
+ *
+ * Also handles cross-table updates: when a transaction is created,
+ * the server returns `updatedBalances` with the new account balances.
+ * We update the accounts/subAccounts tables in IndexedDB so that
+ * the finance UI reflects the new balance immediately without
+ * needing a full refetch.
  */
 async function updateLocalAfterMutation(url: string, options: RequestInit, data: any): Promise<void> {
   const method = options.method?.toUpperCase() || "POST";
@@ -407,6 +425,76 @@ async function updateLocalAfterMutation(url: string, options: RequestInit, data:
       const parts = url.split("/");
       const id = parts[parts.length - 1];
       await table.delete(id);
+    }
+
+    // ── Cross-table balance updates ──────────────────────────────
+    // When a transaction changes account balances, the server returns
+    // `updatedBalances` with the new balance for each affected account.
+    // We must update the IndexedDB accounts/subAccounts tables so the
+    // liveQuery subscriptions emit the new data immediately.
+    //
+    // The server now includes the `id` field in updatedBalances, allowing
+    // direct lookup by primary key (O(1) and doesn't require an index on `name`).
+    // For backward compatibility with older server responses that lack `id`,
+    // we fall back to a full table scan filtered by name.
+    if (data?.updatedBalances && Array.isArray(data.updatedBalances)) {
+      for (const ub of data.updatedBalances) {
+        if (ub.isSubAccount) {
+          // Update subAccount balance in IndexedDB
+          const subAccountsTable = (_localDB as any).subAccounts;
+          if (subAccountsTable) {
+            if (ub.id) {
+              // Direct lookup by primary key — fast and reliable
+              try {
+                await subAccountsTable.update(ub.id, {
+                  balance: ub.balance,
+                  _lastModified: now,
+                });
+              } catch {
+                // Record might not exist in local DB yet — that's OK
+              }
+            } else {
+              // Fallback: scan by name (slower, but works with old server)
+              const allSubs = await subAccountsTable.toArray();
+              for (const sub of allSubs) {
+                if (sub.name === ub.name || `${sub.accountName || ''} → ${sub.name}` === ub.name) {
+                  await subAccountsTable.update(sub.id, {
+                    balance: ub.balance,
+                    _lastModified: now,
+                  });
+                }
+              }
+            }
+          }
+        } else {
+          // Update account balance in IndexedDB
+          const accountsTable = (_localDB as any).accounts;
+          if (accountsTable) {
+            if (ub.id) {
+              // Direct lookup by primary key — fast and reliable
+              try {
+                await accountsTable.update(ub.id, {
+                  balance: ub.balance,
+                  _lastModified: now,
+                });
+              } catch {
+                // Record might not exist in local DB yet — that's OK
+              }
+            } else {
+              // Fallback: scan by name (slower, but works with old server)
+              const allAccs = await accountsTable.toArray();
+              for (const acc of allAccs) {
+                if (acc.name === ub.name) {
+                  await accountsTable.update(acc.id, {
+                    balance: ub.balance,
+                    _lastModified: now,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
     }
   } catch (err) {
     // Non-critical

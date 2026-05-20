@@ -52,6 +52,7 @@ model User {
   pushSubscriptions   PushSubscription[]
   storedBackups       StoredBackup[]
   authCredentials     AuthCredential[]
+  achievements        AchievementProgress[]
 }
 
 // ============================================
@@ -917,4 +918,23 @@ model AuthCredential {
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("auth_credentials")
+}
+
+// ============================================
+// ACHIEVEMENTS / DISCOVERY PROGRESS
+// ============================================
+
+model AchievementProgress {
+  id              String    @id @default(cuid())
+  userId          String
+  module          String    // "finance" | "transport" | "health" | "pantry"
+  feature         String    // e.g. "create-transaction", "log-fuel", etc.
+  discovered      Boolean   @default(false)
+  discoveredAt    DateTime?
+  dismissed       Boolean   @default(false) // User dismissed the hint
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, module, feature])
+  @@map("achievement_progress")
 }

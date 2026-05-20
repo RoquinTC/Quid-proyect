@@ -36,6 +36,7 @@ import { useSession } from "next-auth/react";
 import { useAppStore } from "@/lib/store";
 import { formatCurrency, calcPercentage, getColombiaNow, parseLocalDate } from "@/lib/api";
 import { useMultiQuery } from "@/lib/local/hooks/queries";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { motion } from "framer-motion";
 import {
   LineChart,
@@ -422,7 +423,7 @@ export function FinanceOverview() {
   const { setFinanceSubView, isOnline } = useAppStore();
 
   // ── Local-first data fetching via useMultiQuery ──
-  const { data: multiData, loading, syncing } = useMultiQuery({
+  const { data: multiData, loading, syncing, refetch: refetchFinanceData } = useMultiQuery({
     accounts: "/api/accounts",
     transactions: "/api/transactions",
     budgets: "/api/budgets",
@@ -430,6 +431,11 @@ export function FinanceOverview() {
     recurring: "/api/recurring",
     monthlySummary: "/api/dashboard/monthly-summary?months=12",
   });
+
+  // ── Reactivity: refetch when transactions or accounts change ──
+  // This ensures the balance updates immediately after a transaction is created
+  useDataEvent("transactions", refetchFinanceData);
+  useDataEvent("accounts", refetchFinanceData);
 
   // Extract and cast data from useMultiQuery results
   const accounts = (multiData.accounts || []) as Account[];

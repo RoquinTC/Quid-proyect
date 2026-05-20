@@ -109,14 +109,18 @@ export function useLocalQuery<T extends { id: string }>(
 
     try {
       const serverData = await apiFetch<T[]>(apiPath);
+
+      // Persist to IndexedDB FIRST, then update React state.
+      // This order prevents a race condition where the liveQuery
+      // reads stale (empty) IndexedDB data between setData() and
+      // replaceAllInTable(), which would overwrite server data with []
+      if (tableName) {
+        await replaceAllInTable(tableName, userId, serverData);
+      }
+
       if (mountedRef.current) {
         setData(serverData);
         setError(null);
-
-        // Persist to IndexedDB
-        if (tableName) {
-          await replaceAllInTable(tableName, userId, serverData);
-        }
       }
     } catch (err: any) {
       if (mountedRef.current) {

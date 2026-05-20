@@ -9,6 +9,10 @@
  *   - Credentials in localStorage survive → offline login still works
  *
  * Solution: SYNCHRONOUSLY clean everything BEFORE the redirect.
+ *
+ * Additionally, we set a "quid-just-logged-out" flag BEFORE clearing
+ * so that useAppSession stops returning session data immediately,
+ * preventing re-caching effects from re-saving the session.
  */
 
 import { signOut } from "next-auth/react";
@@ -16,6 +20,12 @@ import { clearOfflineSession, clearOfflineCredentials } from "./offline-session"
 import { useAppStore } from "./store";
 
 export async function performLogout(): Promise<void> {
+  // 0. Set logout flag FIRST — this prevents useAppSession from returning
+  // session data and re-caching it while we're cleaning up
+  try {
+    sessionStorage.setItem("quid-just-logged-out", "true");
+  } catch {}
+
   // 1. SYNCHRONOUSLY clear Zustand state
   const { setOfflineSession, setAuthView } = useAppStore.getState();
   setOfflineSession(null);
@@ -60,21 +70,24 @@ export async function performLogout(): Promise<void> {
     }
   }
 
-  // 6. Clear IndexedDB (local data)
+  // 6. Clear IndexedDB (local data) — WITH TIMEOUT
+  // clearLocalDB() can hang indefinitely if the SyncProvider is holding
+  // a read-write transaction on the same tables. We race against a 5s timeout
+  // so the user isn't stuck on a non-responsive logout.
   try {
     const { clearLocalDB } = await import("./local/db");
-    await clearLocalDB();
+    const clearPromise = clearLocalDB();
+    const timeoutPromise = new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error("clearLocalDB timeout")), 5000)
+    );
+    await Promise.race([clearPromise, timeoutPromise]);
   } catch {
-    // IndexedDB not available
+    // Timeout or error — proceed with redirect anyway.
+    // The Service Worker and server-side session will be cleared
+    // so the user won't see stale data on next login.
   }
 
-  // 7. Set a logout flag to prevent auto-restore on next load
-  // (defense in case any cache survived the cleanup above)
-  try {
-    sessionStorage.setItem("quid-just-logged-out", "true");
-  } catch {}
-
-  // 8. Sign out from NextAuth (clears session cookie on server)
+  // 7. Sign out from NextAuth (clears session cookie on server)
   try {
     await signOut({ redirect: false });
   } catch {
@@ -82,6 +95,6 @@ export async function performLogout(): Promise<void> {
     // we already cleared everything locally
   }
 
-  // 9. Hard redirect — now safe because everything is already cleaned up
+  // 8. Hard redirect — now safe because everything is already cleaned up
   window.location.href = window.location.origin + "/";
 }

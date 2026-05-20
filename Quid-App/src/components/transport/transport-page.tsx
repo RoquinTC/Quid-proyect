@@ -158,7 +158,7 @@ export function TransportPage() {
   const { sidebarAction, setSidebarAction } = useAppStore();
 
   // Data
-  const { data: vehiclesData, refetch: refetchVehicles } = useLocalQuery<VehicleWithDetails>("/api/vehicles");
+  const { data: vehiclesData, refetch: refetchVehicles, loading: vehiclesLoading } = useLocalQuery<VehicleWithDetails>("/api/vehicles");
   const vehicles = (vehiclesData || []) as VehicleWithDetails[];
 
   // ─── Reactive data event subscriptions ────────────────────────────
@@ -461,6 +461,23 @@ export function TransportPage() {
       setReverseTarget(null);
     }
   };
+
+  // ─── Loading state ────────────────────────────────────────────
+  if (vehiclesLoading && vehicles.length === 0) {
+    return (
+      <div className="p-4 flex flex-col items-center justify-center h-full">
+        <div className="size-10 rounded-full border-3 border-cyan-200 border-t-cyan-600 animate-spin mb-4" />
+        <p className="text-sm text-gray-400">Cargando vehículos...</p>
+
+        <VehicleForm
+          open={showVehicleForm}
+          onOpenChange={setShowVehicleForm}
+          vehicle={editVehicle}
+          onSuccess={refetchVehicles}
+        />
+      </div>
+    );
+  }
 
   // ─── If viewing detail ──────────────────────────────────────────
   if (detailVehicleId && detailVehicle) {
