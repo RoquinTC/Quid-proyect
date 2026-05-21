@@ -605,7 +605,8 @@ export async function getAllFromTable<T>(tableName: string, userId: string): Pro
   try {
     const table = (localDB as any)[tableName] as Table<any, string> | undefined;
     if (!table) return [];
-    return (await table.where("userId").equals(userId).toArray()) as T[];
+    const records = await table.where("userId").equals(userId).toArray();
+    return records.filter((record) => record._syncStatus !== "pending_delete") as T[];
   } catch {
     return [];
   }
@@ -622,9 +623,21 @@ export async function replaceAllInTable<T extends { id: string }>(
   if (!table) return;
 
   await localDB.transaction("rw", table, async () => {
-    await table.where("userId").equals(userId).delete();
-    if (data.length > 0) {
-      const enriched = data.map((record) => ({
+    const localRecords = await table.where("userId").equals(userId).toArray();
+    const pendingRecords = localRecords.filter((record) =>
+      typeof record._syncStatus === "string" && record._syncStatus.startsWith("pending_")
+    );
+    const pendingIds = new Set(pendingRecords.map((record) => record.id));
+
+    await table
+      .where("userId")
+      .equals(userId)
+      .filter((record) => !String(record._syncStatus || "").startsWith("pending_"))
+      .delete();
+
+    const serverRecordsToStore = data.filter((record) => !pendingIds.has(record.id));
+    if (serverRecordsToStore.length > 0) {
+      const enriched = serverRecordsToStore.map((record) => ({
         ...record,
         _syncStatus: "synced" as const,
         _version: 1,
@@ -655,10 +668,15 @@ export async function setInitialSyncDone(userId: string): Promise<void> {
 // ─── Helper: Get pending mutation count ───
 
 export async function getPendingMutationCount(): Promise<number> {
-  return await localDB.mutationQueue
+  const pending = await localDB.mutationQueue
     .where("status")
     .equals("pending")
     .count();
+  const inProgress = await localDB.mutationQueue
+    .where("status")
+    .equals("in_progress")
+    .count();
+  return pending + inProgress;
 }
 
 // ─── Helper: Clear all local data (for logout) ───

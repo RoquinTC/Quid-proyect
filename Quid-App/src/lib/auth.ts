@@ -2,6 +2,8 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { db } from "@/lib/db";
+import { isSecureCookieEnabled, SESSION_COOKIE_NAME } from "@/lib/auth-cookie";
+import { consumeWebAuthnLoginToken } from "@/lib/webauthn-login-tokens";
 
 /**
  * Cookie configuration for DUAL-MODE access (local + tunnel):
@@ -10,33 +12,35 @@ import { db } from "@/lib/db";
  *   - LOCAL: http://localhost:5678 (direct access, no tunnel needed)
  *   - TUNNEL: https://quid.roquintc.app (Cloudflare tunnel, when available)
  *
- * Strategy: Use SameSite=Lax cookies WITHOUT the __Secure- prefix.
+ * Strategy: Use SameSite=Lax cookies with an opt-in Secure flag.
  * This works for both HTTP and HTTPS because:
  *   - SameSite=Lax is compatible with direct browser access (both HTTP and HTTPS)
- *   - No __Secure- prefix means cookies are sent over both HTTP and HTTPS
+ *   - No __Secure- prefix keeps cookie names stable for HTTP local testing
  *   - The tunnel proxies to the same container, so cookies are shared
  *
- * Note: SameSite=None + Secure would NOT work because Secure cookies
- * are never sent over HTTP (localhost), making the app unusable offline.
+ * In production behind HTTPS, set AUTH_COOKIE_SECURE=true (or NEXTAUTH_URL=https://...)
+ * so browsers only send session cookies over HTTPS.
  */
 
 function getCookieConfig() {
+  const secure = isSecureCookieEnabled();
+
   return {
     sessionToken: {
-      name: "next-auth.session-token",
-      options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure: false },
+      name: SESSION_COOKIE_NAME,
+      options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure },
     },
     callbackUrl: {
       name: "next-auth.callback-url",
-      options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure: false },
+      options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure },
     },
     csrfToken: {
       name: "next-auth.csrf-token",
-      options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure: false },
+      options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure },
     },
     pkceCodeVerifier: {
       name: "next-auth.pkce.code_verifier",
-      options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure: false },
+      options: { httpOnly: true, sameSite: "lax" as const, path: "/", secure },
     },
   };
 }
@@ -78,18 +82,28 @@ export const authOptions: NextAuthOptions = {
           throw new Error("No se encontró una cuenta con este correo");
         }
 
-        // WebAuthn bypass: when biometric login succeeds on the client,
-        // the server already verified the credential in /api/auth/webauthn/auth-verify.
-        // The client then calls signIn with a special password marker.
-        if (credentials.password === "__webauthn_bypass__") {
-          // Verify the user has at least one registered WebAuthn credential
+        if (credentials.password.startsWith("__webauthn:")) {
+          const loginToken = credentials.password.slice("__webauthn:".length);
+          if (!consumeWebAuthnLoginToken(loginToken, user.id)) {
+            throw new Error("Autenticación biométrica expirada o inválida");
+          }
+
           const hasCredential = await db.authCredential.findFirst({
             where: { userId: user.id },
           });
+
           if (!hasCredential) {
             throw new Error("Autenticación biométrica no configurada");
           }
-          // Bypass successful — don't check password
+
+          const settings = await db.userSettings.findUnique({
+            where: { userId: user.id },
+            select: { biometricEnabled: true },
+          });
+
+          if (!settings?.biometricEnabled) {
+            throw new Error("Autenticación biométrica desactivada");
+          }
         } else {
           const isValid = await compare(credentials.password, user.password);
           if (!isValid) {

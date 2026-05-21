@@ -67,11 +67,15 @@ export function useLocalMutation<T extends { id: string; userId?: string }>(
 
   const updatePendingCount = useCallback(async () => {
     try {
-      const count = await localDB.mutationQueue
+      const pending = await localDB.mutationQueue
         .where("status")
         .equals("pending")
         .count();
-      setPendingCount(count);
+      const inProgress = await localDB.mutationQueue
+        .where("status")
+        .equals("in_progress")
+        .count();
+      setPendingCount(pending + inProgress);
     } catch {
       // DB not ready
     }
@@ -377,11 +381,15 @@ export function useSyncQueue() {
 
   const refreshCount = useCallback(async () => {
     try {
-      const count = await localDB.mutationQueue
+      const pending = await localDB.mutationQueue
         .where("status")
         .equals("pending")
         .count();
-      setPendingCount(count);
+      const inProgress = await localDB.mutationQueue
+        .where("status")
+        .equals("in_progress")
+        .count();
+      setPendingCount(pending + inProgress);
     } catch {
       // DB not ready
     }

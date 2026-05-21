@@ -103,7 +103,7 @@ export function generateAuthenticationOptions(
     // For usernameless (discoverable) credentials, we MUST require user verification
     // and NOT restrict to specific allowCredentials — the browser will present
     // all discoverable credentials registered for this RP ID.
-    userVerification: allowUsernameless ? 'required' : 'preferred',
+    userVerification: 'required',
     ...(existingCredentialIds.length > 0
       ? {
           allowCredentials: existingCredentialIds.map((id) => ({
@@ -141,7 +141,7 @@ export function verifyAuthenticationResponse(
       publicKey: Buffer.from(credentialPublicKey, 'base64url'),
       counter: credentialCounter,
     },
-    requireUserVerification: false,
+    requireUserVerification: true,
   };
 
   return _verifyAuthenticationResponse(opts);

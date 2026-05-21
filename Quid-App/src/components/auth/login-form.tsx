@@ -195,11 +195,11 @@ export function LoginForm() {
 
       const verifyData = await verifyRes.json();
 
-      if (verifyData.verified && verifyData.email) {
-        // Success! Sign in via next-auth with the biometric bypass
+      if (verifyData.verified && verifyData.email && verifyData.loginToken) {
+        // Success! Sign in via next-auth with a short-lived, one-time biometric token.
         const result = await signIn("credentials", {
           email: verifyData.email,
-          password: "__webauthn_bypass__",
+          password: `__webauthn:${verifyData.loginToken}`,
           redirect: false,
         });
 

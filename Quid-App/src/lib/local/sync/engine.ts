@@ -1,6 +1,7 @@
 import { localDB, isLocalDBPopulated, getSyncMeta, setSyncMeta } from '../db';
 import type { SyncMeta } from '../db';
 import { MAX_RETRY_COUNT, getNextRetryAt, isReadyForRetry, getRetryDelay } from './utils';
+import { reconcileCreatedRecord } from './reconcile';
 
 const SYNC_META_DEFAULTS: SyncMeta = {
   _syncStatus: 'synced',
@@ -175,6 +176,17 @@ export async function performPush(): Promise<void> {
           break; // Stop pushing — server is busy
         }
 
+        if ((mutation.apiMethod || 'POST') === 'DELETE' && (response.status === 404 || response.status === 410)) {
+          const table = localDB.table(mutation.tableName);
+          if (table) await table.delete(mutation.recordId);
+          await localDB.mutationQueue.update(mutation.id, {
+            status: 'completed',
+            error: undefined,
+            updatedAt: Date.now(),
+          });
+          continue;
+        }
+
         if (!response.ok) throw new Error(`Server returned ${response.status}`);
       } else {
         // Simple CRUD
@@ -202,6 +214,17 @@ export async function performPush(): Promise<void> {
           break;
         }
 
+        if (method === 'DELETE' && (response.status === 404 || response.status === 410)) {
+          const table = localDB.table(mutation.tableName);
+          if (table) await table.delete(mutation.recordId);
+          await localDB.mutationQueue.update(mutation.id, {
+            status: 'completed',
+            error: undefined,
+            updatedAt: Date.now(),
+          });
+          continue;
+        }
+
         if (!response.ok) throw new Error(`Server returned ${response.status}`);
 
         // Update local record with server response
@@ -209,11 +232,15 @@ export async function performPush(): Promise<void> {
           const serverData = await response.json();
           const table = localDB.table(mutation.tableName);
           if (table) {
-            await table.update(mutation.recordId, {
-              ...serverData,
-              _syncStatus: 'synced',
-              _lastModified: Date.now(),
-            });
+            if (mutation.operation === 'create') {
+              await reconcileCreatedRecord(mutation.tableName, mutation.recordId, serverData);
+            } else {
+              await table.update(mutation.recordId, {
+                ...serverData,
+                _syncStatus: 'synced',
+                _lastModified: Date.now(),
+              });
+            }
           }
         } else {
           // For deletes, remove from local DB

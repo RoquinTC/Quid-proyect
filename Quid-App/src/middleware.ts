@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { isSecureCookieEnabled, SESSION_COOKIE_NAME } from "@/lib/auth-cookie";
 
 // ---------------------------------------------------------------------------
 // Rate Limiting — sliding window counter (in-memory, per user/IP)
@@ -124,7 +125,8 @@ export async function middleware(request: NextRequest) {
   try {
     const token = await getToken({
       req: request,
-      secureCookie: false,
+      cookieName: SESSION_COOKIE_NAME,
+      secureCookie: isSecureCookieEnabled(),
       secret: (() => {
         if (process.env.NEXTAUTH_SECRET) return process.env.NEXTAUTH_SECRET;
         if (process.env.NODE_ENV === "production") {

@@ -185,7 +185,7 @@ async function readFromLocalDB<T>(url: string): Promise<T | null> {
 /**
  * Queue a mutation for later replay when the server is unreachable.
  */
-async function queueOfflineMutation(url: string, options: RequestInit): Promise<void> {
+async function queueOfflineMutation(url: string, options: RequestInit, recordIdOverride?: string): Promise<void> {
   const method = options.method?.toUpperCase() || "POST";
   const { tableName, isComplex } = parseApiUrl(url);
 
@@ -195,7 +195,7 @@ async function queueOfflineMutation(url: string, options: RequestInit): Promise<
     id: _generateTempId(),
     operation: isComplex ? "complex" : method === "POST" ? "create" : method === "DELETE" ? "delete" : "update",
     tableName: tableName || "unknown",
-    recordId: isComplex ? "complex" : (url.split("/").pop() || _generateTempId()),
+    recordId: isComplex ? "complex" : (recordIdOverride || url.split("/").pop() || _generateTempId()),
     payload: options.body?.toString() || "{}",
     apiRoute: url,
     apiMethod: method,
@@ -218,30 +218,32 @@ async function queueOfflineMutation(url: string, options: RequestInit): Promise<
  * Apply an optimistic write to IndexedDB for immediate UI feedback.
  * This is a best-effort operation — the sync engine will correct any discrepancies.
  */
-async function applyOptimisticWrite(url: string, options: RequestInit): Promise<void> {
+async function applyOptimisticWrite(url: string, options: RequestInit): Promise<{ recordId?: string; data?: unknown }> {
   const method = options.method?.toUpperCase() || "POST";
   const { tableName, isComplex } = parseApiUrl(url);
 
-  if (isComplex || !tableName || !_localDB) return; // Don't try optimistic writes for complex operations
+  if (isComplex || !tableName || !_localDB) return {}; // Don't try optimistic writes for complex operations
 
   try {
     const table = (_localDB as any)[tableName];
-    if (!table) return;
+    if (!table) return {};
 
     const body = options.body ? JSON.parse(options.body.toString()) : {};
     const now = Date.now();
 
     if (method === "POST") {
       // Create: add with temp ID
-      if (!_generateTempId) return;
+      if (!_generateTempId) return {};
       const tempId = _generateTempId();
-      await table.put({
+      const optimisticRecord = {
         ...body,
         id: tempId,
         _syncStatus: "pending_create",
         _version: 1,
         _lastModified: now,
-      });
+      };
+      await table.put(optimisticRecord);
+      return { recordId: tempId, data: optimisticRecord };
     } else if (method === "PUT") {
       // Update: modify existing record
       const parts = url.split("/");
@@ -254,6 +256,7 @@ async function applyOptimisticWrite(url: string, options: RequestInit): Promise<
           _version: (existing._version || 0) + 1,
           _lastModified: now,
         });
+        return { recordId: id, data: { ...existing, ...body, id } };
       }
     } else if (method === "DELETE") {
       // Delete: mark as pending_delete
@@ -265,11 +268,14 @@ async function applyOptimisticWrite(url: string, options: RequestInit): Promise<
           _syncStatus: "pending_delete",
           _lastModified: now,
         });
+        return { recordId: id };
       }
     }
+    return {};
   } catch (err) {
     // Best effort — don't fail the operation if optimistic write fails
     console.warn("[Offline] Optimistic write failed:", err);
+    return {};
   }
 }
 
@@ -327,22 +333,22 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
   } catch {
     // Server unreachable — queue mutation and apply optimistically
     console.log(`[Offline] Server unreachable, queuing ${options?.method} ${url}`);
-    await queueOfflineMutation(url, options!);
-    await applyOptimisticWrite(url, options!);
+    const optimistic = await applyOptimisticWrite(url, options!);
+    await queueOfflineMutation(url, options!, optimistic.recordId);
     // Emit data event for instant UI updates even when offline
     try { emitMutationEvent(url, options?.method || "POST"); } catch {}
 
     // Return a mock success response so the UI can continue
-    return { success: true, offline: true } as T;
+    return (optimistic.data ?? { success: true, offline: true }) as T;
   }
 
   if (!response.ok) {
     if (isOfflineLikeStatus(response.status)) {
       console.log(`[Offline] Server returned ${response.status}, queuing ${options?.method} ${url}`);
-      await queueOfflineMutation(url, options!);
-      await applyOptimisticWrite(url, options!);
+      const optimistic = await applyOptimisticWrite(url, options!);
+      await queueOfflineMutation(url, options!, optimistic.recordId);
       try { emitMutationEvent(url, options?.method || "POST"); } catch {}
-      return { success: true, offline: true } as T;
+      return (optimistic.data ?? { success: true, offline: true }) as T;
     }
 
     throw new Error(await readApiError(response));

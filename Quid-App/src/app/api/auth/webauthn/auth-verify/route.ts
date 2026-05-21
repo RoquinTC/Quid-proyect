@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyAuthenticationResponse, getChallenge, deleteChallenge } from '@/lib/webauthn';
+import { createWebAuthnLoginToken } from '@/lib/webauthn-login-tokens';
 
 export async function POST(request: Request) {
   try {
@@ -21,6 +22,25 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Credencial no encontrada' },
         { status: 404 },
+      );
+    }
+
+    if (providedUserId && authCred.userId !== providedUserId) {
+      return NextResponse.json(
+        { error: 'Credencial no autorizada para este usuario' },
+        { status: 403 },
+      );
+    }
+
+    const biometricEnabled = await db.userSettings.findUnique({
+      where: { userId: authCred.userId },
+      select: { biometricEnabled: true },
+    });
+
+    if (!biometricEnabled?.biometricEnabled) {
+      return NextResponse.json(
+        { error: 'Autenticación biométrica desactivada' },
+        { status: 403 },
       );
     }
 
@@ -68,6 +88,7 @@ export async function POST(request: Request) {
       verified: true,
       userId: authCred.userId,
       email: authCred.user.email,
+      loginToken: createWebAuthnLoginToken(authCred.userId),
     });
   } catch (error) {
     console.error('[WebAuthn] Auth verify error:', error);

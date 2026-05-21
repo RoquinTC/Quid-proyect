@@ -194,7 +194,11 @@ export function useLocalQuery<T extends { id: string }>(
         if (!table || cancelled) return;
 
         const observable = liveQuery(() =>
-          table.where("userId").equals(userId).toArray() as Promise<T[]>
+          table
+            .where("userId")
+            .equals(userId)
+            .filter((record: any) => record._syncStatus !== "pending_delete")
+            .toArray() as Promise<T[]>
         );
 
         const sub = observable.subscribe({

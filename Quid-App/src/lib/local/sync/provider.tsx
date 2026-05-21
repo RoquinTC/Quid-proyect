@@ -42,6 +42,7 @@ import { generateTempId } from "./utils";
 import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 import { isBrowserOnline, MAX_RETRY_COUNT, sleep, getNextRetryAt, isReadyForRetry, getRetryDelay } from "./utils";
+import { reconcileCreatedRecord } from "./reconcile";
 
 // ============================================
 // SYNC CONFIGURATION
@@ -52,6 +53,9 @@ const BACKGROUND_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 /** How often to drain the mutation queue (ms) */
 const QUEUE_DRAIN_INTERVAL = 30 * 1000; // 30 seconds
+
+/** Stale in-progress queue items are returned to pending after app restarts/crashes. */
+const IN_PROGRESS_STALE_MS = 2 * 60 * 1000;
 
 /** API endpoints to sync during initial load and background refresh */
 const SYNC_ENDPOINTS = [
@@ -246,6 +250,15 @@ export function SyncProvider({ children }: SyncProviderProps) {
     isDrainingRef.current = true;
 
     try {
+      await localDB.mutationQueue
+        .where("status")
+        .equals("in_progress")
+        .filter((mutation) => Date.now() - mutation.updatedAt > IN_PROGRESS_STALE_MS)
+        .modify({
+          status: "pending",
+          updatedAt: Date.now(),
+        });
+
       // Get all pending mutations sorted by sequence
       const pending = await localDB.mutationQueue
         .where("status")
@@ -342,6 +355,17 @@ export function SyncProvider({ children }: SyncProviderProps) {
               break;
             }
 
+            if (method === "DELETE" && (response.status === 404 || response.status === 410)) {
+              const table = (localDB as any)[mutation.tableName];
+              if (table) await table.delete(mutation.recordId);
+              await localDB.mutationQueue.update(mutation.id, {
+                status: "completed",
+                error: undefined,
+                updatedAt: Date.now(),
+              });
+              continue;
+            }
+
             if (!response.ok) {
               throw new Error(`Server returned ${response.status}`);
             }
@@ -352,12 +376,16 @@ export function SyncProvider({ children }: SyncProviderProps) {
                 const serverData = await response.json();
                 const table = (localDB as any)[mutation.tableName];
                 if (table && serverData?.id) {
-                  await table.put({
-                    ...serverData,
-                    _syncStatus: "synced",
-                    _version: 1,
-                    _lastModified: Date.now(),
-                  });
+                  if (mutation.operation === "create") {
+                    await reconcileCreatedRecord(mutation.tableName, mutation.recordId, serverData);
+                  } else {
+                    await table.put({
+                      ...serverData,
+                      _syncStatus: "synced",
+                      _version: 1,
+                      _lastModified: Date.now(),
+                    });
+                  }
                 }
               } catch {
                 // Can't parse response — record still exists with pending status
