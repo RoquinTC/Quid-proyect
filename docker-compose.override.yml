@@ -1,0 +1,4 @@
+services:
+  quid-app:
+    ports:
+      - "5678:3000"
