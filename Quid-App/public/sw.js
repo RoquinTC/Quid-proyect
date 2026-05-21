@@ -1,10 +1,10 @@
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'quid-v3-security-sync';
-const STATIC_CACHE = 'quid-static-v3-security-sync';
-const DYNAMIC_CACHE = 'quid-dynamic-v3-security-sync';
-const API_CACHE = 'quid-api-v3-security-sync';
-const AUTH_CACHE = 'quid-auth-v3-security-sync';
+const CACHE_NAME = 'quid-v6-server-reminders';
+const STATIC_CACHE = 'quid-static-v6-server-reminders';
+const DYNAMIC_CACHE = 'quid-dynamic-v6-server-reminders';
+const API_CACHE = 'quid-api-v6-server-reminders';
+const AUTH_CACHE = 'quid-auth-v6-server-reminders';
 
 // Assets to cache on install (app shell)
 const APP_SHELL = [
@@ -319,6 +319,7 @@ async function networkFirst(request) {
 // Network First Strategy — for HTML pages
 async function htmlNetworkFirst(request) {
   const cache = await caches.open(DYNAMIC_CACHE);
+  const staticCache = await caches.open(STATIC_CACHE);
   const cachedResponse = await cache.match(request);
 
   try {
@@ -328,7 +329,14 @@ async function htmlNetworkFirst(request) {
     }
     return networkResponse;
   } catch {
-    return cachedResponse || cache.match('/offline.html') || new Response('Sin conexión', { status: 503 });
+    return (
+      cachedResponse ||
+      await staticCache.match(request) ||
+      await staticCache.match('/') ||
+      await cache.match('/') ||
+      await cache.match('/offline.html') ||
+      new Response('Sin conexión', { status: 503 })
+    );
   }
 }
 
@@ -403,6 +411,24 @@ self.addEventListener('push', (event) => {
       actions = [
         { action: 'view', title: 'Ver pagos' },
         { action: 'dismiss', title: 'Recordar después' },
+      ];
+      break;
+    case 'transport_fuel_low':
+      actions = [
+        { action: 'view', title: 'Ver vehículo' },
+        { action: 'dismiss', title: 'Descartar' },
+      ];
+      break;
+    case 'transport_maintenance_due':
+      actions = [
+        { action: 'view', title: 'Ver mantenimiento' },
+        { action: 'dismiss', title: 'Descartar' },
+      ];
+      break;
+    case 'transport_document_due':
+      actions = [
+        { action: 'view', title: 'Ver documento' },
+        { action: 'dismiss', title: 'Descartar' },
       ];
       break;
     case 'budget_limit':

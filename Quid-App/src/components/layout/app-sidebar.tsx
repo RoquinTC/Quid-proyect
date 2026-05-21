@@ -173,27 +173,27 @@ export function AppSidebar() {
 
   return (
     <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-      <SheetContent side="left" className="w-[300px] p-0 gap-0 rounded-r-3xl overflow-hidden border-r border-emerald-100 bg-emerald-50/95 text-gray-900 shadow-2xl backdrop-blur-xl dark:border-emerald-900/30 dark:bg-gray-950/95 dark:text-gray-100">
+      <SheetContent side="left" className="w-[300px] p-0 gap-0 rounded-r-3xl overflow-hidden border-r border-border bg-white/95 text-gray-900 shadow-2xl backdrop-blur-xl dark:bg-gray-950/95 dark:text-gray-100">
         {/* User Profile Header */}
-        <div className="bg-gradient-to-br from-emerald-600 to-teal-500 p-5 pb-6">
+        <div className="border-b border-gray-100 bg-white/80 p-5 pb-5 dark:border-gray-800 dark:bg-gray-950/80">
           <SheetHeader className="mb-3 p-0 space-y-0">
-            <SheetTitle className="text-white text-left text-lg">Menú</SheetTitle>
+            <SheetTitle className="text-left text-lg text-gray-900 dark:text-gray-100">Menú</SheetTitle>
           </SheetHeader>
           <div className="flex items-center gap-3">
-            <Avatar className="size-12 ring-2 ring-white/30">
+            <Avatar className="size-12 ring-2 ring-primary/25">
               <AvatarImage
                 src={session?.user?.image || ""}
                 alt={session?.user?.name || "Usuario"}
               />
-              <AvatarFallback className="bg-white/20 text-white text-sm font-bold">
+              <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
                 {userInitials}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white truncate">
+              <p className="text-sm font-semibold text-gray-900 truncate dark:text-gray-100">
                 {session?.user?.name || "Usuario"}
               </p>
-              <p className="text-[11px] text-emerald-100 truncate">
+              <p className="text-[11px] text-gray-500 truncate dark:text-gray-400">
                 {session?.user?.email}
               </p>
             </div>

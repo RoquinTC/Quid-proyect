@@ -20,6 +20,31 @@ import {
   type CachedSession,
 } from "@/lib/offline-session";
 
+async function cacheCurrentSessionForOffline() {
+  try {
+    const sessionRes = await fetch("/api/auth/session");
+    if (sessionRes.ok) {
+      const sessionData = await sessionRes.json();
+      if (sessionData?.user) {
+        cacheOfflineSession(sessionData as CachedSession);
+      }
+    }
+  } catch {
+    // Non-critical
+  }
+}
+
+function finishSuccessfulLogin(message: string) {
+  toast.success(message);
+  try {
+    sessionStorage.setItem("quid-just-logged-in", "true");
+  } catch {}
+
+  setTimeout(() => {
+    window.location.href = window.location.origin + "/";
+  }, 250);
+}
+
 export function LoginForm() {
   const { setAuthView, setOfflineSession } = useAppStore();
   const [email, setEmail] = useState("");
@@ -99,7 +124,6 @@ export function LoginForm() {
         }
         setLoading(false);
       } else if (result?.ok) {
-        toast.success("¡Sesión iniciada!");
         // Mark fresh login so AppShell skips the lock screen on reload
         try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
 
@@ -117,22 +141,8 @@ export function LoginForm() {
         }
 
         // Cache session for offline use
-        try {
-          const sessionRes = await fetch("/api/auth/session");
-          if (sessionRes.ok) {
-            const sessionData = await sessionRes.json();
-            if (sessionData?.user) {
-              cacheOfflineSession(sessionData as CachedSession);
-            }
-          }
-        } catch {
-          // Non-critical
-        }
-
-        // Hard redirect to pick up the new session from next-auth cookies
-        setTimeout(() => {
-          window.location.href = window.location.origin + "/";
-        }, 600);
+        await cacheCurrentSessionForOffline();
+        finishSuccessfulLogin("¡Sesión iniciada!");
       }
     } catch {
       // Network error — try offline login
@@ -204,9 +214,8 @@ export function LoginForm() {
         });
 
         if (result?.ok) {
-          toast.success("¡Sesión iniciada con huella!");
-          // Mark fresh login so AppShell skips the lock screen on reload
-          try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
+          await cacheCurrentSessionForOffline();
+          finishSuccessfulLogin("¡Sesión iniciada con huella!");
         } else {
           toast.error("Error al iniciar sesión con huella");
         }

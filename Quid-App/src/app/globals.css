@@ -72,6 +72,7 @@
   --chart-3: oklch(0.55 0.2 330);
   --chart-4: oklch(0.75 0.15 85);
   --chart-5: oklch(0.65 0.2 30);
+  --selection-background: oklch(0.55 0.17 160 / 20%);
   --sidebar: oklch(0.98 0.005 155);
   --sidebar-foreground: oklch(0.15 0.01 155);
   --sidebar-primary: oklch(0.55 0.17 160);
@@ -106,6 +107,7 @@
   --chart-3: oklch(0.65 0.2 330);
   --chart-4: oklch(0.82 0.15 85);
   --chart-5: oklch(0.7 0.2 30);
+  --selection-background: oklch(0.65 0.17 160 / 24%);
   --sidebar: oklch(0.17 0.01 155);
   --sidebar-foreground: oklch(0.95 0.005 155);
   --sidebar-primary: oklch(0.65 0.17 160);
@@ -203,13 +205,13 @@ body.no-pull-refresh {
 
 /* Selection color */
 ::selection {
-  background-color: oklch(0.55 0.17 160 / 20%);
-  color: oklch(0.15 0.01 155);
+  background-color: var(--selection-background);
+  color: var(--foreground);
 }
 
 /* Focus visible */
 :focus-visible {
-  outline: 2px solid oklch(0.55 0.17 160);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: 8px;
 }

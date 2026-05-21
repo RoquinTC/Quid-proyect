@@ -9,7 +9,7 @@ import {
   FileText, Shield, FileCheck,
   ChevronDown, Gauge, MapPin, AlertTriangle, Bell, Clock,
   Trash2, Pencil, MoreVertical, ArrowLeft, MoreHorizontal,
-  Activity, RefreshCw, ChevronRight, RotateCcw,
+  Activity, RefreshCw, ChevronRight, RotateCcw, Wallet, CalendarClock,
 } from "lucide-react";
 import { VehicleForm } from "./vehicle-form";
 import { FuelLogForm } from "./fuel-log-form";
@@ -124,6 +124,7 @@ type VehicleWithDetails = Vehicle & {
   gallonsToRefuel?: number;
   isLowFuel?: boolean;
   isLearning?: boolean;
+  lastPricePerGallon?: number;
 };
 
 type TimelineEntry = {
@@ -326,6 +327,31 @@ export function TransportPage() {
   const isLowFuel = selectedVehicle?.isLowFuel ?? false;
   const avgKmPerDay = selectedVehicle?.avgKmPerDay ?? 0;
   const isLearning = selectedVehicle?.isLearning ?? true;
+  const lastFuelPricePerGallon = selectedVehicle?.lastPricePerGallon && selectedVehicle.lastPricePerGallon > 0
+    ? selectedVehicle.lastPricePerGallon
+    : selectedVehicle?.fuelLogs?.find((log) => log.pricePerGallon > 0)?.pricePerGallon ?? 0;
+  const estimatedRefuelCost = gallonsToRefuel > 0 && lastFuelPricePerGallon > 0
+    ? gallonsToRefuel * lastFuelPricePerGallon
+    : null;
+  const selectedTotalFuelSpent = selectedVehicle?.fuelLogs?.reduce((sum, log) => sum + log.amount, 0) ?? 0;
+  const selectedTotalMaintenanceSpent = selectedVehicle?.maintenanceRecords?.reduce((sum, record) => sum + record.cost, 0) ?? 0;
+  const selectedFuelLogsAsc = [...(selectedVehicle?.fuelLogs ?? [])].sort((a, b) => a.km - b.km);
+  const selectedTrackedKm = selectedFuelLogsAsc.length >= 2
+    ? Math.max(0, selectedFuelLogsAsc[selectedFuelLogsAsc.length - 1].km - selectedFuelLogsAsc[0].km)
+    : 0;
+  const selectedCostPerKm = selectedTrackedKm > 0
+    ? (selectedTotalFuelSpent + selectedTotalMaintenanceSpent) / selectedTrackedKm
+    : null;
+  const currentMonthStart = new Date();
+  currentMonthStart.setDate(1);
+  currentMonthStart.setHours(0, 0, 0, 0);
+  const selectedMonthlyTransportCost =
+    (selectedVehicle?.fuelLogs ?? [])
+      .filter((log) => new Date(log.date) >= currentMonthStart)
+      .reduce((sum, log) => sum + log.amount, 0) +
+    (selectedVehicle?.maintenanceRecords ?? [])
+      .filter((record) => new Date(record.date) >= currentMonthStart)
+      .reduce((sum, record) => sum + record.cost, 0);
 
   // Format the refuel date nicely
   const formatRefuelDate = (isoDate: string | null) => {
@@ -751,11 +777,23 @@ export function TransportPage() {
                           >
                             {/* Gallons to refuel */}
                             {gallonsToRefuel > 0 && (
-                              <div className="flex items-center gap-2 mb-1.5">
+                              <div className="flex items-start gap-2 mb-1.5">
                                 <Droplets className={`size-3.5 flex-shrink-0 ${isLowFuel ? "text-red-500" : "text-cyan-600 dark:text-cyan-400"}`} />
-                                <span className={`text-[11px] font-semibold ${isLowFuel ? "text-red-700 dark:text-red-300" : "text-cyan-700 dark:text-cyan-300"}`}>
-                                  {gallonsToRefuel.toFixed(1)} gal para llenar
-                                </span>
+                                <div className="flex flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                  <span className={`text-[11px] font-semibold ${isLowFuel ? "text-red-700 dark:text-red-300" : "text-cyan-700 dark:text-cyan-300"}`}>
+                                    {gallonsToRefuel.toFixed(1)} gal para llenar
+                                  </span>
+                                  {estimatedRefuelCost != null && (
+                                    <span className={`text-[11px] font-bold ${isLowFuel ? "text-red-800 dark:text-red-200" : "text-cyan-800 dark:text-cyan-200"}`}>
+                                      {formatCurrency(estimatedRefuelCost)}
+                                    </span>
+                                  )}
+                                  {estimatedRefuelCost != null && (
+                                    <span className={`basis-full text-[10px] ${isLowFuel ? "text-red-500 dark:text-red-400" : "text-cyan-500 dark:text-cyan-400"}`}>
+                                      calculado con el ultimo precio: {formatCurrency(lastFuelPricePerGallon)}/gal
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             )}
                             {/* Days until refuel */}
@@ -783,6 +821,33 @@ export function TransportPage() {
                               </p>
                             )}
                           </motion.div>
+                        )}
+
+                        {(selectedCostPerKm != null || selectedMonthlyTransportCost > 0) && (
+                          <div className="grid grid-cols-2 gap-2 mb-3">
+                            {selectedCostPerKm != null && (
+                              <div className="rounded-xl border border-blue-100 bg-blue-50 p-2 dark:border-blue-900/40 dark:bg-blue-950/30">
+                                <p className="text-[11px] text-blue-600 dark:text-blue-300">Costo por km</p>
+                                <p className="text-sm font-bold text-blue-800 dark:text-blue-100">
+                                  {formatCurrency(selectedCostPerKm)}
+                                </p>
+                                <p className="text-[10px] text-blue-500 dark:text-blue-400">
+                                  {selectedTrackedKm.toLocaleString("es-CO")} km medidos
+                                </p>
+                              </div>
+                            )}
+                            {selectedMonthlyTransportCost > 0 && (
+                              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-2 dark:border-emerald-900/40 dark:bg-emerald-950/30">
+                                <p className="text-[11px] text-emerald-600 dark:text-emerald-300">Gasto este mes</p>
+                                <p className="text-sm font-bold text-emerald-800 dark:text-emerald-100">
+                                  {formatCurrency(selectedMonthlyTransportCost)}
+                                </p>
+                                <p className="text-[10px] text-emerald-500 dark:text-emerald-400">
+                                  combustible y mantenimiento
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         )}
 
                         {/* Quick Update KM button if outdated */}
@@ -1515,10 +1580,34 @@ function VehicleDetailView({
   const currentFuel = vehicle.currentFuel ?? 0;
   const estimatedRange = vehicle.estimatedRange ?? 0;
   const avgKmPerGallon = vehicle.avgKmPerGallon ?? 0;
+  const detailGallonsToRefuel = vehicle.gallonsToRefuel ?? 0;
+  const detailLastFuelPrice = vehicle.lastPricePerGallon && vehicle.lastPricePerGallon > 0
+    ? vehicle.lastPricePerGallon
+    : vehicle.fuelLogs?.find((log) => log.pricePerGallon > 0)?.pricePerGallon ?? 0;
+  const detailRefuelCost = detailGallonsToRefuel > 0 && detailLastFuelPrice > 0
+    ? detailGallonsToRefuel * detailLastFuelPrice
+    : null;
 
   const totalFuelSpent = (vehicle.fuelLogs || []).reduce((s, l) => s + l.amount, 0);
   const totalMaintenanceSpent = (vehicle.maintenanceRecords || []).reduce((s, r) => s + r.cost, 0);
   const totalDocSpent = (vehicle.documents || []).reduce((s, d) => s + d.cost, 0);
+  const detailLogsAsc = [...(vehicle.fuelLogs || [])].sort((a, b) => a.km - b.km);
+  const detailTrackedKm = detailLogsAsc.length >= 2
+    ? Math.max(0, detailLogsAsc[detailLogsAsc.length - 1].km - detailLogsAsc[0].km)
+    : 0;
+  const detailCostPerKm = detailTrackedKm > 0
+    ? (totalFuelSpent + totalMaintenanceSpent) / detailTrackedKm
+    : null;
+  const detailMonthStart = new Date();
+  detailMonthStart.setDate(1);
+  detailMonthStart.setHours(0, 0, 0, 0);
+  const detailMonthlyCost =
+    (vehicle.fuelLogs || [])
+      .filter((log) => new Date(log.date) >= detailMonthStart)
+      .reduce((sum, log) => sum + log.amount, 0) +
+    (vehicle.maintenanceRecords || [])
+      .filter((record) => new Date(record.date) >= detailMonthStart)
+      .reduce((sum, record) => sum + record.cost, 0);
 
   const getFuelColor = (level: number) => {
     if (level > 50) return "bg-emerald-500";
@@ -1643,45 +1732,64 @@ function VehicleDetailView({
       </div>
 
       {/* Quick stats pills */}
-      <div className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
-        <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-900/20">
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex min-w-0 items-center gap-1 px-2 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-900/20">
           <Fuel className="size-3 text-cyan-500" />
           <span className="text-[11px] font-semibold text-cyan-700 dark:text-cyan-300">{formatCurrency(totalFuelSpent)}</span>
         </div>
-        <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+        <div className="flex min-w-0 items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20">
           <Wrench className="size-3 text-amber-500" />
           <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">{formatCurrency(totalMaintenanceSpent)}</span>
         </div>
         {(vehicle.documents || []).length > 0 && (
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-50 dark:bg-violet-900/20">
+          <div className="flex min-w-0 items-center gap-1 px-2 py-1 rounded-lg bg-violet-50 dark:bg-violet-900/20">
             <Shield className="size-3 text-violet-500" />
             <span className="text-[11px] font-semibold text-violet-700 dark:text-violet-300">{formatCurrency(totalDocSpent)}</span>
           </div>
         )}
         {avgKmPerGallon > 0 && (
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+          <div className="flex min-w-0 items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20">
             <Gauge className="size-3 text-blue-500" />
             <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">{avgKmPerGallon} km/g</span>
           </div>
         )}
-        <div className="flex-1" />
-        <Button
-          size="sm"
-          className="h-7 rounded-lg text-[11px] bg-gradient-to-r from-cyan-600 to-blue-600 px-2.5"
-          onClick={() => setShowFuelLogForm(true)}
-        >
-          <Plus className="size-3 mr-0.5" />
-          Recarga
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 rounded-lg text-[11px] border-cyan-300 text-cyan-600 px-2.5"
-          onClick={() => setShowMaintenanceForm(true)}
-        >
-          <Plus className="size-3 mr-0.5" />
-          Mant.
-        </Button>
+        {detailRefuelCost != null && (
+          <div className="flex min-w-0 items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20">
+            <Wallet className="size-3 text-emerald-500" />
+            <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Llenar: {formatCurrency(detailRefuelCost)}</span>
+          </div>
+        )}
+        {detailCostPerKm != null && (
+          <div className="flex min-w-0 items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+            <Activity className="size-3 text-blue-500" />
+            <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300">{formatCurrency(detailCostPerKm)}/km</span>
+          </div>
+        )}
+        {detailMonthlyCost > 0 && (
+          <div className="flex min-w-0 items-center gap-1 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800">
+            <CalendarClock className="size-3 text-slate-500" />
+            <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Mes: {formatCurrency(detailMonthlyCost)}</span>
+          </div>
+        )}
+        <div className="flex basis-full gap-2 sm:basis-auto sm:ml-auto">
+          <Button
+            size="sm"
+            className="h-8 flex-1 rounded-lg text-[11px] bg-gradient-to-r from-cyan-600 to-blue-600 px-2.5 sm:flex-none"
+            onClick={() => setShowFuelLogForm(true)}
+          >
+            <Plus className="size-3 mr-0.5" />
+            Recarga
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 flex-1 rounded-lg text-[11px] border-cyan-300 text-cyan-600 px-2.5 dark:border-cyan-800 dark:text-cyan-300 dark:hover:bg-cyan-950/30 sm:flex-none"
+            onClick={() => setShowMaintenanceForm(true)}
+          >
+            <Plus className="size-3 mr-0.5" />
+            Mant.
+          </Button>
+        </div>
       </div>
 
       {/* Content */}

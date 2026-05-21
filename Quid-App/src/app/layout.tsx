@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { QueryClientProvider } from "@/components/providers/query-provider";
+import { AppearanceProvider } from "@/components/providers/appearance-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -69,17 +70,19 @@ export default async function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <QueryClientProvider>
-              {children}
-              <Toaster
-                position="top-center"
-                richColors
-                closeButton
-                toastOptions={{
-                  className: "rounded-xl",
-                }}
-              />
-            </QueryClientProvider>
+            <AppearanceProvider>
+              <QueryClientProvider>
+                {children}
+                <Toaster
+                  position="top-center"
+                  richColors
+                  closeButton
+                  toastOptions={{
+                    className: "rounded-xl",
+                  }}
+                />
+              </QueryClientProvider>
+            </AppearanceProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

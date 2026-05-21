@@ -5,8 +5,9 @@ import { useSession } from 'next-auth/react';
 import { apiFetch } from '@/lib/api';
 
 /**
- * RecurringReminder checks for pending recurring payments due today
- * and sends a push notification on app load (once per day).
+ * Client-side fallback for reminders. The production path is
+ * /api/push/reminders called by a server cron so notifications can arrive
+ * even when the app is closed.
  */
 export function RecurringReminder() {
   const { data: session } = useSession();
@@ -28,11 +29,11 @@ export function RecurringReminder() {
       localStorage.setItem('quid-recurring-checked', today);
     }
 
-    // Trigger the recurring reminder check
-    apiFetch<{ sent?: boolean; count?: number }>('/api/push/recurring-reminder')
+    // Trigger the reminder check as a fallback when the app opens.
+    apiFetch<{ sent?: number }>('/api/push/reminders')
       .then((data) => {
-        if (data?.sent) {
-          console.log(`[RecurringReminder] ${data.count} payment(s) due today, notification sent`);
+        if (data?.sent && data.sent > 0) {
+          console.log(`[RecurringReminder] ${data.sent} reminder notification(s) sent`);
         }
       })
       .catch((err) => {

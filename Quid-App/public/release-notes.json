@@ -1,6 +1,39 @@
 {
-  "currentVersion": "quid-v3-security-sync",
+  "currentVersion": "quid-v6-server-reminders",
   "releases": [
+    {
+      "version": "quid-v6-server-reminders",
+      "date": "2026-05-21",
+      "title": "Recordatorios reales y metricas de transporte",
+      "changes": [
+        "Nueva ruta de servidor para enviar recordatorios push aunque la app este cerrada.",
+        "Recordatorios push para pagos recurrentes, combustible bajo, mantenimientos y documentos por vencer.",
+        "Transporte ahora muestra costo por kilometro y gasto mensual por vehiculo.",
+        "Se agrego CRON_SECRET para proteger la ejecucion programada desde el servidor."
+      ]
+    },
+    {
+      "version": "quid-v5-offline-login-transport",
+      "date": "2026-05-21",
+      "title": "Login offline y ajustes de transporte",
+      "changes": [
+        "La app vuelve a abrir desde cache cuando el dispositivo inicia sin conexion.",
+        "El ingreso con huella redirige correctamente despues de autenticar.",
+        "Mejoras visuales en notificaciones, menu lateral y detalle de vehiculo.",
+        "Transporte muestra el costo estimado para completar el tanque con el ultimo precio registrado."
+      ]
+    },
+    {
+      "version": "quid-v4-personalization",
+      "date": "2026-05-21",
+      "title": "Personalizacion visual",
+      "changes": [
+        "Nuevo selector de color de acento en Ajustes.",
+        "El color elegido se guarda en el dispositivo y funciona sin conexion.",
+        "El acento se aplica a botones base, foco, seleccion de texto y detalles del sistema.",
+        "El resumen de actualizacion tambien incluye este cambio para usuarios con versiones pendientes."
+      ]
+    },
     {
       "version": "quid-v3-security-sync",
       "date": "2026-05-20",

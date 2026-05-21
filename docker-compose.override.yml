@@ -2,3 +2,6 @@ services:
   quid-app:
     ports:
       - "5678:3000"
+    environment:
+      - CRON_SECRET=${CRON_SECRET}
+

@@ -90,6 +90,20 @@ export function AppShell() {
     } catch {}
   }, []);
 
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    try {
+      const wasFreshLogin = sessionStorage.getItem("quid-just-logged-in") === "true";
+      if (!wasFreshLogin) return;
+
+      sessionStorage.removeItem("quid-just-logged-in");
+      sessionStorage.removeItem("quid-just-logged-out");
+      setJustLoggedIn(true);
+      setManuallyUnlocked(true);
+    } catch {}
+  }, [session?.user?.id]);
+
   // Auto-unlock for offline sessions (they already verified PIN/password)
   useEffect(() => {
     if (isOffline && session && !manuallyUnlocked) {

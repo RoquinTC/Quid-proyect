@@ -25,6 +25,7 @@ services:
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:quid@app.com}
       - AURA_API_KEY=${AURA_API_KEY:-AuraSecretKey2026}
       - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-false}
+      - CRON_SECRET=${CRON_SECRET}
     volumes:
       - qapital-db:/data/db
     restart: unless-stopped

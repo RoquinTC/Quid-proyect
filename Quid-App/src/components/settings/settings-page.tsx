@@ -61,6 +61,8 @@ import {
   MessageSquare,
   Share2,
   Trophy,
+  Palette,
+  Check,
 } from "lucide-react";
 import { AccountManager } from "@/components/finance/account-manager";
 import { CategoriesManager } from "@/components/finance/categories-manager";
@@ -81,6 +83,13 @@ import { performLogout } from "@/lib/logout";
 import type { UserSettings } from "@/lib/types";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { ShareInvite } from "@/components/pwa/share-invite";
+import {
+  ACCENT_OPTIONS,
+  applyAccent,
+  readStoredAccent,
+  storeAccent,
+  type AccentColor,
+} from "@/lib/personalization";
 
 type AppSettings = UserSettings & {
   userId: string;
@@ -136,6 +145,7 @@ export function SettingsPage() {
   const { setTheme: applyTheme } = useTheme();
   const push = usePushNotifications();
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [accentColor, setAccentColor] = useState<AccentColor>("emerald");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentBuildId, setCurrentBuildId] = useState<string>('...');
@@ -146,6 +156,10 @@ export function SettingsPage() {
       .then(res => res.json())
       .then(data => setCurrentBuildId(data.buildId))
       .catch(() => setCurrentBuildId('Error'));
+  }, []);
+
+  useEffect(() => {
+    setAccentColor(readStoredAccent());
   }, []);
   const mountedRef = useRef(true);
   const [saving, setSaving] = useState(false);
@@ -237,6 +251,14 @@ export function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateAccentColor = (accent: AccentColor) => {
+    setAccentColor(accent);
+    storeAccent(accent);
+    applyAccent(accent);
+    setSaveMessage("Guardado");
+    setTimeout(() => setSaveMessage(null), 2000);
   };
 
   const handleResetBudgets = async () => {
@@ -507,6 +529,49 @@ export function SettingsPage() {
                         <SelectItem value="system">Sistema</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Accent color */}
+              <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
+                <CardContent className="p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="size-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                        <Palette className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">Color de acento</p>
+                        <p className="text-xs text-gray-400">Personaliza botones, enfoque y detalles de la app</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-1.5 max-w-40">
+                      {ACCENT_OPTIONS.map((option) => {
+                        const selected = accentColor === option.id;
+
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => updateAccentColor(option.id)}
+                            title={option.label}
+                            aria-label={`Usar color ${option.label}`}
+                            aria-pressed={selected}
+                            className={`relative size-8 rounded-lg border transition-all ${
+                              selected
+                                ? "border-gray-900 ring-2 ring-primary ring-offset-2 ring-offset-white dark:border-white dark:ring-offset-gray-900"
+                                : "border-gray-200 hover:scale-105 dark:border-gray-700"
+                            }`}
+                            style={{ backgroundColor: option.swatch }}
+                          >
+                            {selected && (
+                              <Check className="absolute inset-0 m-auto size-4 text-white drop-shadow" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </CardContent>
               </Card>

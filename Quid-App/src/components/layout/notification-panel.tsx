@@ -76,35 +76,35 @@ function formatRelativeTime(dateStr: string): string {
 function getNotificationIcon(type: string, data: Record<string, any> | null) {
   switch (type) {
     case "invitation_received":
-      return { Icon: UserPlus, color: "text-blue-500", bg: "bg-blue-50" };
+      return { Icon: UserPlus, color: "text-blue-600 dark:text-blue-300", bg: "bg-blue-50 dark:bg-blue-950/60" };
     case "invitation_accepted":
-      return { Icon: CheckCircle, color: "text-emerald-500", bg: "bg-emerald-50" };
+      return { Icon: CheckCircle, color: "text-emerald-600 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-950/60" };
     case "invitation_rejected":
-      return { Icon: XCircle, color: "text-red-500", bg: "bg-red-50" };
+      return { Icon: XCircle, color: "text-red-600 dark:text-red-300", bg: "bg-red-50 dark:bg-red-950/60" };
     case "shared_transaction": {
       const isIncome = data?.transactionType === "income";
       return {
         Icon: isIncome ? ArrowDownRight : ArrowUpRight,
-        color: isIncome ? "text-emerald-500" : "text-orange-500",
-        bg: isIncome ? "bg-emerald-50" : "bg-orange-50",
+        color: isIncome ? "text-emerald-600 dark:text-emerald-300" : "text-orange-600 dark:text-orange-300",
+        bg: isIncome ? "bg-emerald-50 dark:bg-emerald-950/60" : "bg-orange-50 dark:bg-orange-950/60",
       };
     }
     case "member_removed":
-      return { Icon: UserMinus, color: "text-amber-500", bg: "bg-amber-50" };
+      return { Icon: UserMinus, color: "text-amber-600 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/60" };
     case "role_changed":
-      return { Icon: Shield, color: "text-purple-500", bg: "bg-purple-50" };
+      return { Icon: Shield, color: "text-purple-600 dark:text-purple-300", bg: "bg-purple-50 dark:bg-purple-950/60" };
     case "recurring_due":
-      return { Icon: CalendarClock, color: "text-blue-500", bg: "bg-blue-50" };
+      return { Icon: CalendarClock, color: "text-blue-600 dark:text-blue-300", bg: "bg-blue-50 dark:bg-blue-950/60" };
     case "recurring_upcoming":
-      return { Icon: Clock, color: "text-indigo-500", bg: "bg-indigo-50" };
+      return { Icon: Clock, color: "text-indigo-600 dark:text-indigo-300", bg: "bg-indigo-50 dark:bg-indigo-950/60" };
     case "budget_limit":
-      return { Icon: AlertTriangle, color: "text-amber-500", bg: "bg-amber-50" };
+      return { Icon: AlertTriangle, color: "text-amber-600 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/60" };
     case "goal_completed":
-      return { Icon: Trophy, color: "text-amber-500", bg: "bg-amber-50" };
+      return { Icon: Trophy, color: "text-amber-600 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/60" };
     case "goal_near_completion":
-      return { Icon: Trophy, color: "text-purple-500", bg: "bg-purple-50" };
+      return { Icon: Trophy, color: "text-purple-600 dark:text-purple-300", bg: "bg-purple-50 dark:bg-purple-950/60" };
     case "yield_ready":
-      return { Icon: TrendingUp, color: "text-emerald-500", bg: "bg-emerald-50" };
+      return { Icon: TrendingUp, color: "text-emerald-600 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-950/60" };
     default:
       return { Icon: Bell, color: "text-muted-foreground", bg: "bg-muted" };
   }
@@ -294,10 +294,10 @@ export function NotificationPanel() {
 
       <PopoverContent
         align="end"
-        className="w-[calc(100vw-2rem)] sm:w-96 p-0 rounded-xl shadow-xl border-0 ring-1 ring-black/5"
+        className="w-[calc(100vw-2rem)] sm:w-96 p-0 rounded-xl bg-white text-gray-900 shadow-xl ring-1 ring-black/5 dark:bg-gray-950 dark:text-gray-100 dark:ring-white/10"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <h3 className="text-sm font-semibold text-foreground">
             Notificaciones
           </h3>
@@ -305,7 +305,7 @@ export function NotificationPanel() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 gap-1 px-2"
+              className="h-7 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 gap-1 px-2 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
               onClick={markAllAsRead}
             >
               <CheckCheck className="size-3.5" />
@@ -351,7 +351,7 @@ export function NotificationPanel() {
                     {idx > 0 && <Separator className="mx-4" />}
                     <div
                       className={`flex gap-3 px-4 py-3 transition-colors cursor-pointer hover:bg-accent/50 ${
-                        !notification.read ? "bg-emerald-50/50" : ""
+                        !notification.read ? "bg-emerald-50/70 dark:bg-emerald-950/30" : ""
                       }`}
                       onClick={() => {
                         if (!notification.read) markAsRead(notification.id);
@@ -410,7 +410,7 @@ export function NotificationPanel() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 px-3"
+                              className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 px-3 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/30"
                               disabled={isActionLoading}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -435,7 +435,7 @@ export function NotificationPanel() {
 
         {/* Footer – only visible when there are visible notifications */}
         {visibleNotifications.length > 0 && (
-          <div className="border-t px-4 py-2">
+          <div className="border-t border-gray-100 px-4 py-2 dark:border-gray-800">
             <p className="text-[11px] text-center text-muted-foreground/60">
               Se actualiza cada 30 segundos
             </p>
