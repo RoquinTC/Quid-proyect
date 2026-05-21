@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiFetch, getColombiaTodayString } from "@/lib/api";
+import { apiFetch, getColombiaTodayString, sanitizeDateForInput } from "@/lib/api";
 import type { Vehicle, FuelLog, PaymentMethodType } from "@/lib/types/transport";
 import { PaymentMethodSelector } from "@/components/transport/payment-method-selector";
 import { Loader2, Calculator, Fuel, Gauge, TrendingUp, AlertTriangle, MapPin } from "lucide-react";
@@ -368,7 +368,7 @@ export function FuelLogForm({
             <Input
               id="fuel-date"
               type="date"
-              value={date}
+              value={sanitizeDateForInput(date)}
               onChange={(e) => setDate(e.target.value)}
               className="rounded-xl"
             />

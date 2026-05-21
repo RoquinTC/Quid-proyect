@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -164,6 +165,9 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
           <DialogTitle>
             {isEditing ? "Editar Vehículo" : "Nuevo Vehículo"}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            {isEditing ? "Formulario para editar vehículo" : "Formulario para crear vehículo"}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 mt-2">

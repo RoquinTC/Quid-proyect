@@ -581,6 +581,28 @@ export function toColombiaDateString(date: Date | string): string {
   return date.toLocaleDateString("sv-SE", { timeZone: COLOMBIA_TIMEZONE });
 }
 
+/**
+ * Sanitize a date value for use in an `<input type="date">`.
+ * Ensures the value conforms to the required "yyyy-MM-dd" format.
+ * Returns "" if the value cannot be parsed into a valid date.
+ */
+export function sanitizeDateForInput(value: string | null | undefined): string {
+  if (!value) return "";
+  // If already a valid YYYY-MM-DD string, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  // Try to extract a valid date from ISO strings or other formats
+  try {
+    const d = parseLocalDate(value);
+    if (isNaN(d.getTime())) return "";
+    const formatted = d.toLocaleDateString("sv-SE", { timeZone: COLOMBIA_TIMEZONE });
+    // Double-check the format (sv-SE should give YYYY-MM-DD)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) return formatted;
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 // Parse a date string as a Colombia-local date (avoids UTC/browser timezone offset shifting the day)
 // Always creates Date at midnight Colombia (05:00 UTC) so toColombiaDateString() returns the correct date
 function parseLocalDate(date: Date | string): Date {

@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiFetch, getColombiaTodayString } from "@/lib/api";
+import { apiFetch, getColombiaTodayString, sanitizeDateForInput } from "@/lib/api";
 import type {
   Vehicle,
   VehicleDocument,
@@ -448,7 +448,7 @@ export function VehicleDocumentForm({
               <Input
                 id="doc-issue-date"
                 type="date"
-                value={issueDate}
+                value={sanitizeDateForInput(issueDate)}
                 onChange={(e) => setIssueDate(e.target.value)}
                 className="rounded-xl"
                 required
@@ -465,7 +465,7 @@ export function VehicleDocumentForm({
               <Input
                 id="doc-expiry-date"
                 type="date"
-                value={expiryDate}
+                value={sanitizeDateForInput(expiryDate)}
                 onChange={(e) => setExpiryDate(e.target.value)}
                 className="rounded-xl"
                 required

@@ -32,7 +32,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { apiFetch, formatCurrency, formatShortDate } from "@/lib/api";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
@@ -1229,6 +1229,9 @@ export function TransportPage() {
               <Fuel className="size-5 text-cyan-600" />
               Precio del Combustible
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Consultar y actualizar precios del combustible
+            </DialogDescription>
           </DialogHeader>
           <FuelPriceWidget />
         </DialogContent>

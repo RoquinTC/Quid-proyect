@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiFetch, getColombiaTodayString, formatCurrency } from "@/lib/api";
+import { apiFetch, getColombiaTodayString, formatCurrency, sanitizeDateForInput } from "@/lib/api";
 import type {
   Vehicle,
   MaintenanceRecord,
@@ -600,7 +600,7 @@ export function MaintenanceForm({
               </Label>
               <Input
                 type="date"
-                value={date}
+                value={sanitizeDateForInput(date)}
                 onChange={(e) => setDate(e.target.value)}
                 className="rounded-xl"
               />
@@ -779,7 +779,7 @@ export function MaintenanceForm({
                 <Input
                   id="maint-nextdate"
                   type="date"
-                  value={nextDueDate}
+                  value={sanitizeDateForInput(nextDueDate)}
                   onChange={(e) => setNextDueDate(e.target.value)}
                   className="rounded-xl"
                 />
