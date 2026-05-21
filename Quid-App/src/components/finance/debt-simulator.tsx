@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { formatCurrency, formatDate, getColombiaNow, createColombiaDate } from "@/lib/api";
+import { formatCurrency, formatDate, getColombiaNow, createColombiaDate, toColombiaDateString } from "@/lib/api";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
@@ -143,7 +143,7 @@ function projectLoanFixed(
   while (currentBalance > 0 && month < 600) {
     month++;
     const payDate = addMonths(startDate, month - 1);
-    const dateStr = payDate.toISOString().split("T")[0];
+    const dateStr = toColombiaDateString(payDate);
 
     // Calculate interest and capital for normal cuota
     const interest = currentBalance * monthlyRate;
@@ -296,7 +296,7 @@ function projectCreditCard(
   while (month < originalMonths + 120) {
     month++;
     const payDate = addMonths(startDate, month - 1);
-    const dateStr = payDate.toISOString().split("T")[0];
+    const dateStr = toColombiaDateString(payDate);
 
     const totalBalance = instStates.reduce((sum, s) => sum + Math.max(s.remainingBalance, 0), 0);
     if (totalBalance <= 0) break;
@@ -431,7 +431,7 @@ export function DebtSimulator() {
   const [newExtraType, setNewExtraType] = useState<"one-time" | "recurring">("recurring");
   const [newExtraDate, setNewExtraDate] = useState(() => {
     const now = getColombiaNow();
-    return now.toISOString().split("T")[0];
+    return toColombiaDateString(now);
   });
 
   const selectedDebt = debts.find((d) => d.id === selectedDebtId) ?? null;

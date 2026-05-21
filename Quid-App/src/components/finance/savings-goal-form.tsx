@@ -14,7 +14,7 @@ import {
   AlertCircle, ArrowRightLeft, Wallet, Unlink
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/format'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, toColombiaDateString } from '@/lib/api'
 import type { SubAccount, Account, CDT } from '@/lib/types'
 
 interface LinkedAccountItem {
@@ -292,7 +292,7 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
   const populateFromGoal = (goal: any) => {
     setName(goal.name || '')
     setTargetAmount(goal.targetAmount?.toString() || '')
-    setDeadline(goal.deadline ? new Date(goal.deadline).toISOString().split('T')[0] : '')
+    setDeadline(goal.deadline ? toColombiaDateString(goal.deadline) : '')
     setFrequency(goal.frequency || 'mensual')
     setMonthlyDay(goal.monthlyDay || 1)
     setSourceAccountId(goal.sourceAccountId || '')
@@ -357,8 +357,8 @@ export function SavingsGoalForm({ open, onOpenChange, editingGoal, onSuccess }: 
           amount,
           bank: newCDTBank || 'Banco',
           effectiveRate: rate,
-          startDate: startDate.toISOString().split('T')[0],
-          endDate: endDate.toISOString().split('T')[0],
+          startDate: toColombiaDateString(startDate),
+          endDate: toColombiaDateString(endDate),
           termDays: newCDTTerm,
         }),
       })

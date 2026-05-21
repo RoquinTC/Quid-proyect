@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { apiFetch, formatCurrency, formatDate } from "@/lib/api";
+import { apiFetch, formatCurrency, formatDate, toColombiaDateString } from "@/lib/api";
 import { useLocalSingleQuery, useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
 import { DebtCard } from "./debt-card";
@@ -132,7 +132,7 @@ export function DebtDetail() {
   const [abonoSelections, setAbonoSelections] = useState<Record<string, { selected: boolean; amount: string }>>({});
   const [abonoAccountId, setAbonoAccountId] = useState<string>("");
   const [abonoSubAccountId, setAbonoSubAccountId] = useState<string>("");
-  const [abonoDate, setAbonoDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [abonoDate, setAbonoDate] = useState<string>(toColombiaDateString(new Date()));
   const [processingAbono, setProcessingAbono] = useState(false);
 
   // ── Abono history & reverse state ──
@@ -406,7 +406,7 @@ export function DebtDetail() {
     setAbonoSelections(initial);
     setAbonoAccountId("");
     setAbonoSubAccountId("");
-    setAbonoDate(new Date().toISOString().split("T")[0]);
+    setAbonoDate(toColombiaDateString(new Date()));
     setShowAbonoDialog(true);
   };
 

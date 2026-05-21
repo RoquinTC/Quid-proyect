@@ -561,24 +561,45 @@ export function createColombiaDate(dateStr: string): Date {
 
 /**
  * Format a Date to YYYY-MM-DD in Colombia timezone.
+ * Guarantees 4-digit year to satisfy <input type="date"> "yyyy-MM-dd" requirement.
  */
 export function formatDateToColombiaISO(date: Date): string {
-  return date.toLocaleDateString("sv-SE", { timeZone: COLOMBIA_TIMEZONE });
+  return formatWith4DigitYear(date);
 }
 
 /**
  * Get a YYYY-MM-DD date string from a Date or date string, in Colombia timezone.
  * Useful for populating date inputs from API data.
+ * Guarantees 4-digit year to satisfy <input type="date"> "yyyy-MM-dd" requirement.
  */
 export function toColombiaDateString(date: Date | string): string {
   if (typeof date === "string") {
-    // If it's already a YYYY-MM-DD string, return as-is
+    // If it's already a valid YYYY-MM-DD string, return as-is
     if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
     // Otherwise parse and convert to Colombia date
     const d = parseLocalDate(date);
-    return d.toLocaleDateString("sv-SE", { timeZone: COLOMBIA_TIMEZONE });
+    return formatWith4DigitYear(d);
   }
-  return date.toLocaleDateString("sv-SE", { timeZone: COLOMBIA_TIMEZONE });
+  return formatWith4DigitYear(date);
+}
+
+/**
+ * Format a Date to YYYY-MM-DD in Colombia timezone with guaranteed 4-digit year.
+ * toLocaleDateString("sv-SE") does NOT zero-pad years < 1000 (e.g. year 203 → "203-04-10"),
+ * which violates the "yyyy-MM-dd" format required by <input type="date">.
+ */
+function formatWith4DigitYear(date: Date): string {
+  const formatted = date.toLocaleDateString("sv-SE", { timeZone: COLOMBIA_TIMEZONE });
+  if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) return formatted;
+  // Fallback: manually construct with padded year
+  const parts = formatted.split("-");
+  if (parts.length === 3) {
+    const year = parts[0].padStart(4, "0");
+    const month = parts[1].padStart(2, "0");
+    const day = parts[2].padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  return formatted;
 }
 
 /**
@@ -594,8 +615,8 @@ export function sanitizeDateForInput(value: string | null | undefined): string {
   try {
     const d = parseLocalDate(value);
     if (isNaN(d.getTime())) return "";
-    const formatted = d.toLocaleDateString("sv-SE", { timeZone: COLOMBIA_TIMEZONE });
-    // Double-check the format (sv-SE should give YYYY-MM-DD)
+    const formatted = formatWith4DigitYear(d);
+    // Double-check the format
     if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) return formatted;
     return "";
   } catch {

@@ -23,7 +23,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { apiFetch, formatCurrency, formatDate } from "@/lib/api";
+import { apiFetch, formatCurrency, formatDate, toColombiaDateString } from "@/lib/api";
 import {
   Loader2,
   Calendar,
@@ -190,16 +190,16 @@ export function RecurringForm({
           setBiweeklyDay2(day);
           setBiweeklyAmount2(editingPayment.amount.toString());
         }
-        setScheduledDate(new Date(editingPayment.scheduledDate).toISOString().split("T")[0]);
+        setScheduledDate(toColombiaDateString(editingPayment.scheduledDate));
       } else if (editingPayment.frequency === "weekly") {
         const day = new Date(editingPayment.scheduledDate).getDay();
         setWeeklyDayOfWeek(day);
         setWeeklyAmount(editingPayment.amount.toString());
-        setScheduledDate(new Date(editingPayment.scheduledDate).toISOString().split("T")[0]);
+        setScheduledDate(toColombiaDateString(editingPayment.scheduledDate));
       } else {
         setAmount(editingPayment.amount.toString());
         setScheduledDate(
-          new Date(editingPayment.scheduledDate).toISOString().split("T")[0]
+          toColombiaDateString(editingPayment.scheduledDate)
         );
       }
 
@@ -392,11 +392,11 @@ export function RecurringForm({
     // Try current month
     const candidate = new Date(year, month, dayOfMonth, 12, 0, 0);
     if (candidate >= now) {
-      return candidate.toISOString().split("T")[0];
+      return toColombiaDateString(candidate);
     }
     // Try next month
     const next = new Date(year, month + 1, dayOfMonth, 12, 0, 0);
-    return next.toISOString().split("T")[0];
+    return toColombiaDateString(next);
   };
 
   // Helper to compute next occurrence of a day-of-week
@@ -408,7 +408,7 @@ export function RecurringForm({
     const next = new Date(now);
     next.setDate(now.getDate() + daysUntil);
     next.setHours(12, 0, 0, 0);
-    return next.toISOString().split("T")[0];
+    return toColombiaDateString(next);
   };
 
   const handleSubmit = async () => {

@@ -69,6 +69,7 @@ function DialogContent({
             : "grid gap-4 p-6",
           className
         )}
+        aria-describedby={undefined}
         {...props}
       >
         {children}
