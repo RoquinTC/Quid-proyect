@@ -29,6 +29,7 @@ import {
   localDB,
   API_TABLE_MAP,
   TABLE_API_MAP,
+  API_RESPONSE_EXTRACTOR,
   getAllFromTable,
   replaceAllInTable,
   isInitialSyncDone,
@@ -124,19 +125,30 @@ export function SyncProvider({ children }: SyncProviderProps) {
 
           try {
             const data = await apiFetch<any[]>(endpoint);
-            if (Array.isArray(data)) {
-              await replaceAllInTable(tableName, userId, data);
-            } else {
-              // Single object (e.g. /api/settings)
-              const table = (localDB as any)[tableName];
-              if (table) {
-                await table.put({
-                  ...(data as Record<string, unknown>),
-                  userId,
-                  _syncStatus: "synced",
-                  _version: 1,
-                  _lastModified: Date.now(),
-                });
+            // Some endpoints return wrapped objects (e.g. { transactions: [...] })
+            // Use API_RESPONSE_EXTRACTOR to unwrap them into plain arrays
+            const extractor = API_RESPONSE_EXTRACTOR[endpoint];
+            const extracted = extractor ? extractor(data) : null;
+            const records = extracted ?? data;
+
+            if (Array.isArray(records)) {
+              await replaceAllInTable(tableName, userId, records);
+            } else if (records && typeof records === "object" && !Array.isArray(records)) {
+              // Single object (e.g. /api/settings) — must have an id for key path
+              const obj = records as Record<string, unknown>;
+              if (obj.id) {
+                const table = (localDB as any)[tableName];
+                if (table) {
+                  await table.put({
+                    ...obj,
+                    userId,
+                    _syncStatus: "synced",
+                    _version: 1,
+                    _lastModified: Date.now(),
+                  });
+                }
+              } else {
+                console.warn(`[Sync] Skipping ${endpoint}: response is not an array and has no 'id' field`);
               }
             }
           } catch (err) {
@@ -188,18 +200,26 @@ export function SyncProvider({ children }: SyncProviderProps) {
 
           try {
             const data = await apiFetch<any[]>(endpoint);
-            if (Array.isArray(data)) {
-              await replaceAllInTable(tableName, userId, data);
-            } else {
-              const table = (localDB as any)[tableName];
-              if (table) {
-                await table.put({
-                  ...(data as Record<string, unknown>),
-                  userId,
-                  _syncStatus: "synced",
-                  _version: 1,
-                  _lastModified: Date.now(),
-                });
+            // Some endpoints return wrapped objects (e.g. { transactions: [...] })
+            const extractor = API_RESPONSE_EXTRACTOR[endpoint];
+            const extracted = extractor ? extractor(data) : null;
+            const records = extracted ?? data;
+
+            if (Array.isArray(records)) {
+              await replaceAllInTable(tableName, userId, records);
+            } else if (records && typeof records === "object" && !Array.isArray(records)) {
+              const obj = records as Record<string, unknown>;
+              if (obj.id) {
+                const table = (localDB as any)[tableName];
+                if (table) {
+                  await table.put({
+                    ...obj,
+                    userId,
+                    _syncStatus: "synced",
+                    _version: 1,
+                    _lastModified: Date.now(),
+                  });
+                }
               }
             }
           } catch {

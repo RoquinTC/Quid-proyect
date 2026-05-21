@@ -353,28 +353,37 @@ async function cacheGetResponse(url: string, data: unknown): Promise<void> {
     const table = (_localDB as any)[tableName];
     if (!table) return;
 
-    if (isCollection && Array.isArray(data)) {
-      // Replace all records for this table with server data.
-      // We must delete stale records that no longer exist on the server,
-      // so we use replaceAllInTable instead of bulkPut.
-      // However, replaceAllInTable requires a userId — extract it from
-      // the data if available, otherwise fall back to bulkPut.
-      const userId = (data as any[])?.[0]?.userId;
-      if (userId) {
-        const { replaceAllInTable } = await import("./local/db");
-        await replaceAllInTable(tableName, userId, data as any[]);
-      } else {
-        // No userId available — fall back to bulkPut (best effort)
-        // This may leave stale records but is better than nothing
-        const now = Date.now();
-        const enriched = (data as any[]).map((record: any) => ({
-          ...record,
-          _syncStatus: "synced",
-          _version: 1,
-          _lastModified: now,
-        }));
-        await table.bulkPut(enriched);
+    if (isCollection) {
+      // Some API endpoints return wrapped objects instead of plain arrays.
+      // Extract the actual records array if a wrapper is detected.
+      let records = data;
+      const { API_RESPONSE_EXTRACTOR } = await import("./local/db");
+      const extractor = API_RESPONSE_EXTRACTOR[url];
+      if (extractor) {
+        const extracted = extractor(data);
+        if (extracted) records = extracted;
       }
+
+      if (Array.isArray(records)) {
+        // Replace all records for this table with server data.
+        const userId = (records as any[])?.[0]?.userId;
+        if (userId) {
+          const { replaceAllInTable } = await import("./local/db");
+          await replaceAllInTable(tableName, userId, records as any[]);
+        } else {
+          // No userId available — fall back to bulkPut (best effort)
+          const now = Date.now();
+          const enriched = (records as any[]).map((record: any) => ({
+            ...record,
+            _syncStatus: "synced",
+            _version: 1,
+            _lastModified: now,
+          }));
+          await table.bulkPut(enriched);
+        }
+      }
+      // If not an array even after extraction, skip — single object caching
+      // is handled by the sync engine
     }
     // Single record caching is handled by the sync engine
   } catch (err) {

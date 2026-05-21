@@ -534,6 +534,15 @@ export const API_TABLE_MAP: Record<string, string> = {
   "/api/settings": "userSettings",
 };
 
+// ─── Helper: Extract the records array from an API response ───
+// Some endpoints return wrapped objects instead of plain arrays.
+// This map tells the sync layer how to extract the actual records.
+
+export const API_RESPONSE_EXTRACTOR: Record<string, (data: any) => any[] | null> = {
+  "/api/transactions": (data) => data.transactions ?? null,
+  "/api/pantry": (data) => data.items ?? null,
+};
+
 // ─── Helper: Table name → API route mapping ───
 
 export const TABLE_TO_ROUTE: Record<string, string> = {

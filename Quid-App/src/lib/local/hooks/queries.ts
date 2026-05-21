@@ -19,6 +19,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   localDB,
   API_TABLE_MAP,
+  API_RESPONSE_EXTRACTOR,
   getAllFromTable,
   replaceAllInTable,
   isInitialSyncDone,
@@ -110,16 +111,25 @@ export function useLocalQuery<T extends { id: string }>(
     try {
       const serverData = await apiFetch<T[]>(apiPath);
 
+      // Some API endpoints return wrapped objects instead of plain arrays.
+      // Extract the actual records array if a wrapper is detected.
+      let records = serverData;
+      const extractor = API_RESPONSE_EXTRACTOR[apiPath];
+      if (extractor) {
+        const extracted = extractor(serverData);
+        if (extracted) records = extracted;
+      }
+
       // Persist to IndexedDB FIRST, then update React state.
       // This order prevents a race condition where the liveQuery
       // reads stale (empty) IndexedDB data between setData() and
       // replaceAllInTable(), which would overwrite server data with []
-      if (tableName) {
-        await replaceAllInTable(tableName, userId, serverData);
+      if (tableName && Array.isArray(records)) {
+        await replaceAllInTable(tableName, userId, records);
       }
 
       if (mountedRef.current) {
-        setData(serverData);
+        setData(Array.isArray(records) ? records : serverData);
         setError(null);
       }
     } catch (err: any) {
@@ -422,12 +432,21 @@ export function useMultiQuery(
     const promises = Object.entries(queries).map(async ([key, apiPath]) => {
       try {
         const serverData = await apiFetch<any[]>(apiPath);
-        results[key] = serverData;
+
+        // Some API endpoints return wrapped objects — extract the array
+        let records = serverData;
+        const extractor = API_RESPONSE_EXTRACTOR[apiPath];
+        if (extractor) {
+          const extracted = extractor(serverData);
+          if (extracted) records = extracted;
+        }
+
+        results[key] = records;
 
         // Persist to IndexedDB
         const tableName = API_TABLE_MAP[apiPath];
-        if (tableName) {
-          await replaceAllInTable(tableName, userId, serverData);
+        if (tableName && Array.isArray(records)) {
+          await replaceAllInTable(tableName, userId, records);
         }
 
         newErrors[key] = null;
