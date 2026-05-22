@@ -67,3 +67,13 @@ export type {
   MutationQueueEntry,
   SyncMetaRecord,
 } from './sync';
+
+// Smart Planner
+export type {
+  RadarEvent,
+  RadarEventAction,
+  RadarEventKind,
+  RadarEventSeverity,
+  RadarEventSource,
+  RadarEventStatus,
+} from './smart-planner';

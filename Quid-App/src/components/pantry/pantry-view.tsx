@@ -36,6 +36,8 @@ const itemVariants = {
   show: { opacity: 1, y: 0 },
 };
 
+type PantryResponse = { items?: PantryItem[]; lowStockItems?: PantryItem[] } | PantryItem[];
+
 export function PantryView() {
   const [items, setItems] = useState<PantryItem[]>([]);
   const [lowStockItems, setLowStockItems] = useState<PantryItem[]>([]);
@@ -48,11 +50,22 @@ export function PantryView() {
 
   const fetchItems = useCallback(async () => {
     try {
-      const data = await apiFetch<{ items: PantryItem[]; lowStockItems: PantryItem[] }>("/api/pantry");
-      setItems(data.items);
-      setLowStockItems(data.lowStockItems);
+      const data = await apiFetch<PantryResponse>("/api/pantry");
+      const nextItems = Array.isArray(data) ? data : data.items ?? [];
+      const nextLowStockItems = Array.isArray(data)
+        ? data.filter((item) =>
+            item.minStock !== null &&
+            item.minStock !== undefined &&
+            Number(item.quantity) < Number(item.minStock)
+          )
+        : data.lowStockItems ?? [];
+
+      setItems(nextItems);
+      setLowStockItems(nextLowStockItems);
     } catch (error) {
       console.error("Error fetching pantry items:", error);
+      setItems([]);
+      setLowStockItems([]);
     } finally {
       setLoading(false);
     }

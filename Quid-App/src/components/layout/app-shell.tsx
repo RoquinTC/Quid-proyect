@@ -24,6 +24,7 @@ import { BackupRestorePrompt } from "@/components/settings/backup-restore-prompt
 import { LockScreen } from "@/components/security/lock-screen";
 import { OfflineLockScreen } from "@/components/security/offline-lock-screen";
 import { ModuleErrorBoundary } from "@/components/layout/module-error-boundary";
+import { DiscoveryCoach } from "@/components/discovery/discovery-coach";
 import { AchievementsProvider } from "@/hooks/use-achievements";
 import { useUpdateChecker } from "@/hooks/use-update-checker";
 import { motion, AnimatePresence } from "framer-motion";
@@ -329,6 +330,7 @@ export function AppShell() {
         <ModuleContent />
         <BottomNav />
         <AppSidebar />
+        <DiscoveryCoach />
         {showBackupPrompt && <BackupRestorePrompt />}
       </div>
     </AchievementsProvider>

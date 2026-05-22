@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,7 +9,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ChevronRight,
-  Calendar,
   PiggyBank,
   Receipt,
   LayoutDashboard,
@@ -16,12 +16,14 @@ import {
   CloudOff,
   Fuel,
   MapPin,
+  Sparkles,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { formatCurrency } from "@/lib/api";
 import { useMultiQuery, useLocalQuery } from "@/lib/local/hooks/queries";
 import type { Account, Budget, Debt, Vehicle } from "@/lib/types";
 import { motion } from "framer-motion";
+import { SmartPlannerRadar } from "./smart-planner-radar";
 
 // ============================================================
 // ANIMATION VARIANTS
@@ -46,6 +48,7 @@ const itemVariants = {
 
 export function DashboardPage() {
   const { setActiveModule, setFinanceSubView, setTransportSubView, isOnline, pendingCount } = useAppStore();
+  const [dashboardSection, setDashboardSection] = useState<"summary" | "planner">("summary");
 
   // Local-first data: reads from IndexedDB instantly, syncs with server in background
   const { data, loading, syncing } = useMultiQuery({
@@ -100,16 +103,6 @@ export function DashboardPage() {
   const savingsPercentage = totalIncomeBudget > 0
     ? Math.round((savingsBudgetAmount / totalIncomeBudget) * 100)
     : 0;
-
-  // Upcoming bills from debts
-  const upcomingBills = activeDebts
-    .slice(0, 3)
-    .map((d) => ({
-      id: d.id,
-      name: d.name,
-      amount: d.monthlyPayment || d.currentBalance,
-      dueDate: d.paymentDate ? `Día ${d.paymentDate}` : "Próximo",
-    }));
 
   // ============================================================
   // NAVIGATION HELPER
@@ -187,6 +180,34 @@ export function DashboardPage() {
           </div>
         </div>
       </motion.div>
+
+      <motion.div variants={itemVariants} className="grid grid-cols-2 gap-1 rounded-2xl bg-gray-100 p-1 dark:bg-gray-800">
+        <button
+          type="button"
+          onClick={() => setDashboardSection("summary")}
+          className={`h-11 rounded-xl text-sm font-medium transition-all ${
+            dashboardSection === "summary"
+              ? "bg-white text-gray-950 shadow-sm dark:bg-gray-950 dark:text-gray-100"
+              : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+          }`}
+        >
+          Resumen
+        </button>
+        <button
+          type="button"
+          onClick={() => setDashboardSection("planner")}
+          className={`h-11 rounded-xl text-sm font-medium transition-all ${
+            dashboardSection === "planner"
+              ? "bg-white text-gray-950 shadow-sm dark:bg-gray-950 dark:text-gray-100"
+              : "text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+          }`}
+        >
+          Planner
+        </button>
+      </motion.div>
+
+      {dashboardSection === "summary" ? (
+        <div className="space-y-4">
 
       {/* ============================================================ */}
       {/* BALANCE CARD */}
@@ -306,6 +327,11 @@ export function DashboardPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-white">Combustible</span>
+                    {primaryVehicle.plate && (
+                      <span className="rounded bg-white/25 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-normal text-white">
+                        {primaryVehicle.plate}
+                      </span>
+                    )}
                     {hasLowFuel && (
                       <span className="text-[11px] bg-white/30 text-white rounded-full px-1.5 py-0.5 animate-pulse">
                         Bajo
@@ -371,51 +397,31 @@ export function DashboardPage() {
       </motion.div>
 
       {/* ============================================================ */}
-      {/* UPCOMING BILLS */}
+      {/* AURA ENTRY */}
       {/* ============================================================ */}
-      {upcomingBills.length > 0 && (
-        <motion.div variants={itemVariants}>
-          <Card className="border-0 shadow-md rounded-2xl">
-            <div className="pb-2 pt-4 px-5">
-              <h3 className="text-sm font-semibold flex items-center gap-2">
-                <Calendar className="size-4 text-rose-500" />
-                Próximos Pagos
-              </h3>
-            </div>
-            <CardContent className="px-5 pb-4">
-              <div className="space-y-3">
-                {upcomingBills.map((bill) => (
-                  <div
-                    key={bill.id}
-                    className="flex items-center justify-between p-3 bg-rose-50/60 dark:bg-rose-900/10 rounded-xl cursor-pointer"
-                    onClick={() => {
-                      setActiveModule("finance");
-                      setFinanceSubView("debts");
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="size-9 rounded-xl bg-gradient-to-br from-rose-400 to-pink-400 flex items-center justify-center">
-                        <CreditCard className="size-4 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {bill.name}
-                        </p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500">
-                          Vence: {bill.dueDate}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="text-sm font-semibold text-rose-600 dark:text-rose-400">
-                      {formatCurrency(bill.amount)}
-                    </span>
-                  </div>
-                ))}
+      <motion.div variants={itemVariants}>
+        <Card
+          className="border-0 shadow-md rounded-2xl cursor-pointer hover:shadow-lg transition-all overflow-hidden"
+          onClick={() => setActiveModule("settings")}
+        >
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-sky-500 flex items-center justify-center flex-shrink-0">
+                <Sparkles className="size-6 text-white" />
               </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  Aura
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  IA integrada de Quid. Por ahora puedes vincularla desde ajustes.
+                </p>
+              </div>
+              <ChevronRight className="size-5 text-gray-400 flex-shrink-0" />
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* ============================================================ */}
       {/* QUICK ACTIONS */}
@@ -457,6 +463,16 @@ export function DashboardPage() {
           </Button>
         </div>
       </motion.div>
+        </div>
+      ) : (
+        <motion.div variants={itemVariants} className="space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Planner</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Línea de tiempo predictiva para actuar a tiempo</p>
+          </div>
+          <SmartPlannerRadar />
+        </motion.div>
+      )}
     </motion.div>
   );
 }

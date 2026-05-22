@@ -11,6 +11,10 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
+    "db:sqlite:generate": "prisma generate --schema prisma/schema.sqlite.prisma",
+    "db:postgres:generate": "prisma generate --schema prisma/schema.postgres.prisma",
+    "db:postgres:push": "prisma db push --schema prisma/schema.postgres.prisma",
+    "db:migrate:sqlite-to-postgres": "node scripts/migrate-sqlite-to-postgres.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

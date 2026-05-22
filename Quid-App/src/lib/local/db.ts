@@ -291,6 +291,7 @@ export interface LocalVehicle extends SyncMeta {
   tankCapacity?: number | null;
   fuelType?: string | null;
   currentKm: number;
+  plate?: string | null;
   icon?: string | null;
   createdAt: string;
   updatedAt: string;

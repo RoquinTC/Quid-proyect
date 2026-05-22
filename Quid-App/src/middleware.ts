@@ -29,9 +29,10 @@ function cleanupStaleEntries() {
 }
 
 const RATE_WINDOW_MS = 60_000; // 1 minute window
-const RATE_MAX_REQUESTS = 60; // 60 requests per minute per identity
+const PUBLIC_RATE_MAX_REQUESTS = 60;
+const AUTH_RATE_MAX_REQUESTS = 240; // Initial sync + dashboard widgets can legitimately burst.
 
-function checkRateLimit(identity: string): { allowed: boolean; retryAfterMs: number } {
+function checkRateLimit(identity: string, maxRequests: number): { allowed: boolean; retryAfterMs: number } {
   cleanupStaleEntries();
 
   const now = Date.now();
@@ -46,7 +47,7 @@ function checkRateLimit(identity: string): { allowed: boolean; retryAfterMs: num
 
   bucket.count++;
 
-  if (bucket.count > RATE_MAX_REQUESTS) {
+  if (bucket.count > maxRequests) {
     const retryAfterMs = RATE_WINDOW_MS - (now - bucket.windowStart);
     return { allowed: false, retryAfterMs: Math.max(retryAfterMs, 1000) };
   }
@@ -108,7 +109,7 @@ export async function middleware(request: NextRequest) {
   // For protected routes: rate limit by user ID (after auth check)
   if (isPublicRoute) {
     const ip = getClientIp(request);
-    const { allowed, retryAfterMs } = checkRateLimit(`ip:${ip}`);
+    const { allowed, retryAfterMs } = checkRateLimit(`ip:${ip}`, PUBLIC_RATE_MAX_REQUESTS);
     if (!allowed) {
       return NextResponse.json(
         { error: "Demasiadas solicitudes. Intenta de nuevo en unos segundos." },
@@ -145,7 +146,7 @@ export async function middleware(request: NextRequest) {
 
     // Rate limit by user ID (more accurate than IP)
     const userId = token.id as string;
-    const { allowed, retryAfterMs } = checkRateLimit(`user:${userId}`);
+    const { allowed, retryAfterMs } = checkRateLimit(`user:${userId}`, AUTH_RATE_MAX_REQUESTS);
     if (!allowed) {
       return NextResponse.json(
         { error: "Demasiadas solicitudes. Intenta de nuevo en unos segundos." },

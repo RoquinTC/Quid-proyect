@@ -160,7 +160,18 @@ async function readFromLocalDB<T>(url: string): Promise<T | null> {
       // but IndexedDB already has only the current user's data
       const allRecords = await table.where("_syncStatus").notEqual("pending_delete").toArray();
       // Strip sync metadata from response
-      return allRecords.map(({ _syncStatus, _version, _lastModified, ...rest }: any) => rest) as T;
+      const records = allRecords.map(({ _syncStatus, _version, _lastModified, ...rest }: any) => rest);
+
+      if (url.split("?")[0] === "/api/pantry") {
+        const lowStockItems = records.filter((item: any) =>
+          item.minStock !== null &&
+          item.minStock !== undefined &&
+          Number(item.quantity) < Number(item.minStock)
+        );
+        return { items: records, lowStockItems } as T;
+      }
+
+      return records as T;
     } else {
       // Single record — extract ID from URL
       const cleanUrl = url.split("?")[0];

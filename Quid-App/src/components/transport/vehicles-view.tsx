@@ -150,6 +150,11 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
                   <span className="text-sm font-semibold text-white">
                     Nivel de Combustible
                   </span>
+                  {vehiclesWithTank.length === 1 && primaryVehicle.plate && (
+                    <span className="rounded bg-white/25 px-1.5 py-0.5 text-[11px] font-semibold uppercase text-white">
+                      {primaryVehicle.plate}
+                    </span>
+                  )}
                   {vehiclesWithTank.length > 1 && (
                     <span className="text-xs bg-white/20 text-white rounded-full px-2 py-0.5 ml-auto">
                       {vehiclesWithTank.length} vehículos
@@ -202,7 +207,9 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
                   <div className="space-y-2">
                     {vehiclesWithTank.map((v) => (
                       <div key={v.id} className="flex items-center gap-3">
-                        <span className="text-xs text-white/80 w-20 truncate">{v.name}</span>
+                        <span className="text-xs text-white/80 w-24 truncate">
+                          {v.plate ? `${v.plate} · ${v.name}` : v.name}
+                        </span>
                         <div className="flex-1 h-2 bg-white/20 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-white/80 rounded-full transition-all"

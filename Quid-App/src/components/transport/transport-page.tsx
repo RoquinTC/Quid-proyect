@@ -566,6 +566,11 @@ export function TransportPage() {
                   <VehicleIcon icon={selectedVehicle.icon} type={selectedVehicle.type} className="size-4 text-cyan-500" />
                 )}
                 <SelectValue placeholder="Seleccionar vehículo" />
+                {selectedVehicle?.plate && (
+                  <span className="ml-1 rounded-md bg-cyan-50 px-1.5 py-0.5 text-[11px] font-bold uppercase text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300">
+                    {selectedVehicle.plate}
+                  </span>
+                )}
               </div>
             </SelectTrigger>
             <SelectContent>
@@ -574,6 +579,11 @@ export function TransportPage() {
                     <div className="flex items-center gap-2">
                       <VehicleIcon icon={v.icon} type={v.type} className="size-3.5 text-cyan-500" />
                       <span>{v.name}</span>
+                      {v.plate && (
+                        <span className="rounded bg-cyan-50 px-1.5 py-0.5 text-[11px] font-bold uppercase text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300">
+                          {v.plate}
+                        </span>
+                      )}
                       <span className="text-xs text-gray-400">
                         {vehicleTypeLabels[v.type] || v.type}
                       </span>
@@ -613,6 +623,14 @@ export function TransportPage() {
         {/* ─── Compact Indicators Row ─────────────────────────── */}
         {selectedVehicle && (
           <div className="flex items-center gap-2 mt-2 flex-wrap">
+            {selectedVehicle.plate && (
+              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-cyan-50 dark:bg-cyan-950/30">
+                <Car className="size-3 text-cyan-500" />
+                <span className="text-[11px] font-bold uppercase text-cyan-700 dark:text-cyan-300">
+                  {selectedVehicle.plate}
+                </span>
+              </div>
+            )}
             {/* Fuel bar + level + range — clickable to show fuel details */}
             {tankCapacity > 0 && (
               <button

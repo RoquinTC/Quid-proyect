@@ -20,3 +20,4 @@ upload/
 download/
 agent-ctx/
 worklog.md
+scripts/.generated/
