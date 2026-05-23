@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { createColombiaDate } from "@/lib/api";
 import { validateBody, appointmentUpdateSchema } from "@/lib/validations";
 
 export async function PUT(
@@ -36,10 +35,14 @@ export async function PUT(
     if (body.doctorName !== undefined) updateData.doctorName = body.doctorName;
     if (body.specialty !== undefined) updateData.specialty = body.specialty;
     if (body.location !== undefined) updateData.location = body.location;
-    if (body.date !== undefined) updateData.date = createColombiaDate(body.date.split("T")[0]);
+    if (body.date !== undefined) updateData.date = new Date(body.date);
     if (body.notes !== undefined) updateData.notes = body.notes;
     if (body.reminderEnabled !== undefined) updateData.reminderEnabled = body.reminderEnabled;
     if (body.status !== undefined) updateData.status = body.status;
+    if (body.copayAmount !== undefined) updateData.copayAmount = body.copayAmount;
+    if (body.accountId !== undefined) updateData.accountId = body.accountId;
+    if (body.subAccountId !== undefined) updateData.subAccountId = body.subAccountId;
+    if (body.debtId !== undefined) updateData.debtId = body.debtId;
 
     const appointment = await db.medicalAppointment.update({
       where: { id },

@@ -42,6 +42,15 @@ import type { Vehicle, FuelLog, MaintenanceRecord, VehicleDocument, VehicleRemin
 import { MAINTENANCE_TYPES } from "@/lib/types/transport";
 import { toast } from "sonner";
 
+type TransportTab = "summary" | "fuel" | "maintenance" | "reminders";
+
+const transportTabs: Array<{ id: TransportTab; label: string; icon: typeof Car }> = [
+  { id: "summary", label: "Resumen", icon: Car },
+  { id: "fuel", label: "Combustible", icon: Fuel },
+  { id: "maintenance", label: "Mantenimiento", icon: Wrench },
+  { id: "reminders", label: "Recordatorios", icon: Bell },
+];
+
 // ─── Constants ────────────────────────────────────────────────────
 const vehicleTypeLabels: Record<string, string> = {
   motorcycle: "Moto", car: "Carro", truck: "Camión", other: "Otro",
@@ -203,6 +212,7 @@ export function TransportPage() {
 
   // Reminders expanded state
   const [showReminderDetails, setShowReminderDetails] = useState(false);
+  const [transportTab, setTransportTab] = useState<TransportTab>("summary");
 
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<{ type: "fuel" | "maintenance" | "vehicle" | "document" | "reminder"; id: string; vehicleId?: string } | null>(null);
@@ -286,12 +296,18 @@ export function TransportPage() {
   }, [vehicles, selectedVehicleId]);
 
   const timeline = buildTimeline();
+  const visibleTimeline = useMemo(() => {
+    if (transportTab === "fuel") return timeline.filter((entry) => entry.type === "fuel");
+    if (transportTab === "maintenance") return timeline.filter((entry) => entry.type === "maintenance");
+    if (transportTab === "reminders") return [];
+    return timeline;
+  }, [timeline, transportTab]);
 
   // ─── Group timeline by month ────────────────────────────────────
   const groupedTimeline = useCallback(() => {
     const groups: { month: string; entries: TimelineEntry[] }[] = [];
     let currentMonth = "";
-    for (const entry of timeline) {
+    for (const entry of visibleTimeline) {
       const d = new Date(entry.date);
       const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
       const monthLabel = d.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
@@ -302,7 +318,7 @@ export function TransportPage() {
       groups[groups.length - 1].entries.push(entry);
     }
     return groups;
-  }, [timeline]);
+  }, [visibleTimeline]);
 
   // ─── Sidebar quick-action listener ──────────────────────────────
   useEffect(() => {
@@ -357,6 +373,89 @@ export function TransportPage() {
     (selectedVehicle?.maintenanceRecords ?? [])
       .filter((record) => new Date(record.date) >= currentMonthStart)
       .reduce((sum, record) => sum + record.cost, 0);
+  const latestFuelLog = useMemo(() => {
+    return [...(selectedVehicle?.fuelLogs ?? [])]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] ?? null;
+  }, [selectedVehicle]);
+  const latestMaintenanceRecord = useMemo(() => {
+    return [...(selectedVehicle?.maintenanceRecords ?? [])]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] ?? null;
+  }, [selectedVehicle]);
+  const summaryAlerts = useMemo(() => {
+    if (!selectedVehicle) return [];
+    const today = new Date();
+    const weekLimit = 7;
+    const alerts: Array<{
+      id: string;
+      kind: "reminder" | "maintenance" | "document";
+      title: string;
+      detail: string;
+      severity: "danger" | "warning" | "info";
+      dueScore: number;
+    }> = [];
+
+    for (const reminder of selectedVehicle.reminders ?? []) {
+      if (!reminder.isActive) continue;
+      const daysUntil = reminder.dueDate
+        ? Math.ceil((new Date(reminder.dueDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+      const kmRemaining = reminder.dueKm != null ? reminder.dueKm - selectedVehicle.currentKm : null;
+      const byDate = daysUntil != null && daysUntil <= weekLimit;
+      const byKm = kmRemaining != null && kmRemaining <= (reminder.warningKm ?? 500);
+      if (!byDate && !byKm) continue;
+      const isOverdue = (daysUntil != null && daysUntil <= 0) || (kmRemaining != null && kmRemaining <= 0);
+      alerts.push({
+        id: `reminder-${reminder.id}`,
+        kind: "reminder",
+        title: reminder.title,
+        detail: [
+          daysUntil != null ? (daysUntil <= 0 ? "Vence hoy" : `En ${daysUntil} día${daysUntil === 1 ? "" : "s"}`) : null,
+          kmRemaining != null ? (kmRemaining <= 0 ? "límite alcanzado" : `faltan ${Math.round(kmRemaining).toLocaleString("es-CO")} km`) : null,
+        ].filter(Boolean).join(" · "),
+        severity: isOverdue ? "danger" : "warning",
+        dueScore: Math.min(daysUntil ?? 999, kmRemaining != null ? kmRemaining / 100 : 999),
+      });
+    }
+
+    for (const record of selectedVehicle.maintenanceRecords ?? []) {
+      if (!record.reminderEnabled || (!record.nextDueDate && !record.nextDueKm)) continue;
+      const daysUntil = record.nextDueDate
+        ? Math.ceil((new Date(record.nextDueDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+      const kmRemaining = record.nextDueKm != null ? record.nextDueKm - selectedVehicle.currentKm : null;
+      const byDate = daysUntil != null && daysUntil <= weekLimit;
+      const byKm = kmRemaining != null && kmRemaining <= 500;
+      if (!byDate && !byKm) continue;
+      const isOverdue = (daysUntil != null && daysUntil <= 0) || (kmRemaining != null && kmRemaining <= 0);
+      alerts.push({
+        id: `maintenance-${record.id}`,
+        kind: "maintenance",
+        title: maintTypeLabels[record.type] || record.description || "Mantenimiento",
+        detail: [
+          daysUntil != null ? (daysUntil <= 0 ? "Vence hoy" : `En ${daysUntil} día${daysUntil === 1 ? "" : "s"}`) : null,
+          kmRemaining != null ? (kmRemaining <= 0 ? "límite alcanzado" : `faltan ${Math.round(kmRemaining).toLocaleString("es-CO")} km`) : null,
+        ].filter(Boolean).join(" · "),
+        severity: isOverdue ? "danger" : "warning",
+        dueScore: Math.min(daysUntil ?? 999, kmRemaining != null ? kmRemaining / 100 : 999),
+      });
+    }
+
+    for (const doc of selectedVehicle.documents ?? []) {
+      if (!doc.reminderEnabled) continue;
+      const daysUntil = Math.ceil((new Date(doc.expiryDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntil > weekLimit) continue;
+      alerts.push({
+        id: `document-${doc.id}`,
+        kind: "document",
+        title: docTypeLabels[doc.type] || "Documento",
+        detail: daysUntil <= 0 ? "Vencido o vence hoy" : `Vence en ${daysUntil} día${daysUntil === 1 ? "" : "s"}`,
+        severity: daysUntil <= 0 ? "danger" : "warning",
+        dueScore: daysUntil,
+      });
+    }
+
+    return alerts.sort((a, b) => a.dueScore - b.dueScore).slice(0, 4);
+  }, [selectedVehicle]);
 
   // Format the refuel date nicely
   const formatRefuelDate = (isoDate: string | null) => {
@@ -722,14 +821,40 @@ export function TransportPage() {
             )}
           </div>
         )}
+
+        <div className="mt-3 flex gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
+          {transportTabs.map((tab) => {
+            const Icon = tab.icon;
+            const active = transportTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setTransportTab(tab.id);
+                  if (tab.id === "fuel") setShowFuelDetails(true);
+                  if (tab.id === "reminders") setShowReminderDetails(true);
+                }}
+                className={`flex min-w-fit flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                  active
+                    ? "bg-white text-cyan-700 shadow-sm dark:bg-gray-950 dark:text-cyan-300"
+                    : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                }`}
+              >
+                <Icon className="size-3.5" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ─── Timeline Content ──────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
         {/* ─── Fuel Status Card ─────────────────────────────────── */}
-        {selectedVehicle && tankCapacity > 0 && (
+        {selectedVehicle && tankCapacity > 0 && (transportTab === "summary" || transportTab === "fuel") && (
           <AnimatePresence>
-            {showFuelDetails && (
+            {(transportTab === "summary" || showFuelDetails) && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
@@ -752,12 +877,14 @@ export function TransportPage() {
                           )}
                         </div>
                       </div>
-                      <button
-                        onClick={() => setShowFuelDetails(false)}
-                        className="size-6 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        <ChevronDown className="size-4" />
-                      </button>
+                      {transportTab !== "summary" && (
+                        <button
+                          onClick={() => setShowFuelDetails(false)}
+                          className="size-6 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        >
+                          <ChevronDown className="size-4" />
+                        </button>
+                      )}
                     </div>
 
                     {hasFuelLogs ? (
@@ -941,7 +1068,7 @@ export function TransportPage() {
         )}
 
         {/* Show fuel status card collapsed hint when there's tank capacity and no timeline items */}
-        {selectedVehicle && tankCapacity > 0 && !showFuelDetails && hasFuelLogs && (
+        {selectedVehicle && tankCapacity > 0 && !showFuelDetails && hasFuelLogs && transportTab === "fuel" && (
           <div className="px-4 pt-2">
             <button
               onClick={() => setShowFuelDetails(true)}
@@ -969,7 +1096,7 @@ export function TransportPage() {
         )}
 
         {/* ─── Reminders Section (compact bar, always visible when vehicle selected) ─── */}
-        {selectedVehicle && (() => {
+        {selectedVehicle && (transportTab === "summary" || transportTab === "reminders") && (() => {
           const now = new Date();
           const maintReminders = (selectedVehicle.maintenanceRecords || [])
             .filter(r => r.reminderEnabled && (r.nextDueKm || r.nextDueDate))
@@ -979,7 +1106,7 @@ export function TransportPage() {
               const isOverdue = (kmRemaining !== null && kmRemaining <= 0) || (daysUntil !== null && daysUntil <= 0);
               const isUrgent = !isOverdue && ((kmRemaining !== null && kmRemaining <= 500) || (daysUntil !== null && daysUntil <= 15));
               const typeConfig = MAINTENANCE_TYPES.find(t => t.value === r.type);
-              const kmInterval = typeConfig?.nextKmInterval || 0;
+              const kmInterval = r.nextDueKm && r.km ? Math.max(0, r.nextDueKm - r.km) : typeConfig?.nextKmInterval || 0;
               const monthInterval = typeConfig?.nextMonthInterval || 0;
               return { ...r, kmRemaining, daysUntil, isOverdue, isUrgent, kmInterval, monthInterval };
             })
@@ -1253,13 +1380,183 @@ export function TransportPage() {
           );
         })()}
 
-        {timeline.length === 0 ? (
+        {transportTab === "summary" ? (
+          <div className="p-4 space-y-3 pb-safe">
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="border-0 shadow-sm rounded-2xl">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="size-8 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center dark:bg-cyan-900/30 dark:text-cyan-300">
+                      <Fuel className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-gray-400">Última recarga</p>
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                        {latestFuelLog ? formatShortDate(latestFuelLog.date) : "Sin datos"}
+                      </p>
+                    </div>
+                  </div>
+                  {latestFuelLog ? (
+                    <>
+                      <p className="text-lg font-black text-gray-900 dark:text-white">
+                        {formatCurrency(latestFuelLog.amount)}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        {latestFuelLog.gallons.toFixed(2)} gal · {latestFuelLog.km.toLocaleString("es-CO")} km
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-400">Registra una recarga para activar esta lectura.</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm rounded-2xl">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="size-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center dark:bg-amber-900/30 dark:text-amber-300">
+                      <Wrench className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] text-gray-400">Último mantenimiento</p>
+                      <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                        {latestMaintenanceRecord ? formatShortDate(latestMaintenanceRecord.date) : "Sin datos"}
+                      </p>
+                    </div>
+                  </div>
+                  {latestMaintenanceRecord ? (
+                    <>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                        {maintTypeLabels[latestMaintenanceRecord.type] || latestMaintenanceRecord.description}
+                      </p>
+                      <p className="text-[11px] text-gray-500">
+                        {formatCurrency(latestMaintenanceRecord.cost)} · {latestMaintenanceRecord.km.toLocaleString("es-CO")} km
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-400">Sin mantenimientos registrados.</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card className="border-0 shadow-sm rounded-2xl">
+              <CardContent className="p-3">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className={`size-8 rounded-xl flex items-center justify-center ${
+                      summaryAlerts.some((alert) => alert.severity === "danger")
+                        ? "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300"
+                        : summaryAlerts.length > 0
+                        ? "bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300"
+                        : "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300"
+                    }`}>
+                      <Bell className="size-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">Próximos 7 días</p>
+                      <p className="text-[11px] text-gray-400">Vencimientos y límites cercanos</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-xl text-xs text-cyan-600"
+                    onClick={() => {
+                      setTransportTab("reminders");
+                      setShowReminderDetails(true);
+                    }}
+                  >
+                    Ver todos
+                    <ChevronRight className="size-3.5 ml-1" />
+                  </Button>
+                </div>
+
+                {summaryAlerts.length > 0 ? (
+                  <div className="space-y-2">
+                    {summaryAlerts.map((alert) => {
+                      const AlertIcon = alert.kind === "document" ? FileText : alert.kind === "maintenance" ? Wrench : Bell;
+                      return (
+                        <div
+                          key={alert.id}
+                          className={`flex items-center gap-2.5 rounded-xl p-2 ${
+                            alert.severity === "danger"
+                              ? "bg-red-50 dark:bg-red-900/20"
+                              : "bg-amber-50 dark:bg-amber-900/20"
+                          }`}
+                        >
+                          <div className={`size-7 rounded-lg flex items-center justify-center shrink-0 ${
+                            alert.severity === "danger"
+                              ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300"
+                              : "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300"
+                          }`}>
+                            <AlertIcon className="size-3.5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">{alert.title}</p>
+                            <p className={`text-[11px] ${
+                              alert.severity === "danger" ? "text-red-600 dark:text-red-300" : "text-amber-700 dark:text-amber-300"
+                            }`}>
+                              {alert.detail}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-emerald-50 p-3 text-center dark:bg-emerald-900/20">
+                    <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                      Sin alertas cercanas
+                    </p>
+                    <p className="text-[11px] text-emerald-600/80 dark:text-emerald-300/80">
+                      No hay vencimientos ni límites críticos esta semana.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Card className="border-0 shadow-sm rounded-2xl">
+                <CardContent className="p-3">
+                  <p className="text-[11px] text-gray-400">Gasto del mes</p>
+                  <p className="text-lg font-black text-gray-900 dark:text-white">
+                    {formatCurrency(selectedMonthlyTransportCost)}
+                  </p>
+                  <p className="text-[11px] text-gray-500">Combustible + mantenimiento</p>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-sm rounded-2xl">
+                <CardContent className="p-3">
+                  <p className="text-[11px] text-gray-400">Costo por km</p>
+                  <p className="text-lg font-black text-gray-900 dark:text-white">
+                    {selectedCostPerKm != null ? formatCurrency(selectedCostPerKm) : "—"}
+                  </p>
+                  <p className="text-[11px] text-gray-500">
+                    {selectedTrackedKm > 0 ? `${selectedTrackedKm.toLocaleString("es-CO")} km medidos` : "Faltan datos"}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        ) : transportTab === "reminders" ? (
+          <div className="px-4 py-5 text-center">
+            <p className="text-xs text-gray-400">
+              Gestiona tus alertas desde la tarjeta de recordatorios de arriba.
+            </p>
+          </div>
+        ) : visibleTimeline.length === 0 ? (
           <div className="p-8 text-center">
             <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-3">
               <Fuel className="size-6 text-gray-300" />
             </div>
             <p className="text-sm text-gray-400">
-              Sin registros aún. Usa el botón + para agregar.
+              {transportTab === "fuel"
+                ? "Sin recargas aún. Usa el botón + para agregar combustible."
+                : transportTab === "maintenance"
+                ? "Sin mantenimientos aún. Registra el primero con el botón +."
+                : "Sin registros aún. Usa el botón + para agregar."}
             </p>
           </div>
         ) : (
@@ -1557,7 +1854,9 @@ function TimelineCard({
 
   // KM interval from MAINTENANCE_TYPES
   const kmInterval = !isFuel && !isDoc && entry.maintType
-    ? MAINTENANCE_TYPES.find(t => t.value === entry.maintType)?.nextKmInterval || 0
+    ? entry.nextDueKm && entry.km
+      ? Math.max(0, entry.nextDueKm - entry.km)
+      : MAINTENANCE_TYPES.find(t => t.value === entry.maintType)?.nextKmInterval || 0
     : 0;
 
   // Doc type icon
@@ -1800,7 +2099,7 @@ function VehicleDetailView({
       const isOverdue = (kmRemaining !== null && kmRemaining <= 0) || (daysUntil !== null && daysUntil <= 0);
       const isUrgent = !isOverdue && ((kmRemaining !== null && kmRemaining <= 500) || (daysUntil !== null && daysUntil <= 15));
       const typeConfig = MAINTENANCE_TYPES.find(t => t.value === r.type);
-      const kmInterval = typeConfig?.nextKmInterval || 0;
+      const kmInterval = r.nextDueKm && r.km ? Math.max(0, r.nextDueKm - r.km) : typeConfig?.nextKmInterval || 0;
       const monthInterval = typeConfig?.nextMonthInterval || 0;
       return { ...r, kmRemaining, daysUntil, isOverdue, isUrgent, kmInterval, monthInterval };
     })

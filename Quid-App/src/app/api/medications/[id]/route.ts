@@ -48,6 +48,10 @@ export async function PUT(
     if (body.reminderEnabled !== undefined) updateData.reminderEnabled = body.reminderEnabled;
     if (body.reminderTimes !== undefined)
       updateData.reminderTimes = body.reminderTimes ? JSON.stringify(body.reminderTimes) : null;
+    if (body.stockQuantity !== undefined) updateData.stockQuantity = body.stockQuantity;
+    if (body.stockUnit !== undefined) updateData.stockUnit = body.stockUnit || "unit";
+    if (body.doseQuantity !== undefined) updateData.doseQuantity = body.doseQuantity;
+    if (body.lowStockThreshold !== undefined) updateData.lowStockThreshold = body.lowStockThreshold;
 
     const medication = await db.medication.update({
       where: { id },

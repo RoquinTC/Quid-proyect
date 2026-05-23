@@ -5,6 +5,60 @@ import { db } from "@/lib/db";
 import { createColombiaDate } from "@/lib/api";
 import { validateBody, maintenanceUpdateSchema } from "@/lib/validations";
 import { reverseFinanceEntry } from "@/lib/transport-finance";
+import { MAINTENANCE_TYPES } from "@/lib/types/transport";
+
+function maintenanceReminderTitle(type: string) {
+  const config = MAINTENANCE_TYPES.find((item) => item.value === type);
+  return config?.label || "Mantenimiento";
+}
+
+async function syncMaintenanceReminder({
+  userId,
+  vehicleId,
+  vehicleName,
+  type,
+  description,
+  dueKm,
+  dueDate,
+  repeatIntervalKm,
+  enabled,
+}: {
+  userId: string;
+  vehicleId: string;
+  vehicleName: string;
+  type: string;
+  description: string;
+  dueKm: number | null;
+  dueDate: Date | null;
+  repeatIntervalKm: number | null;
+  enabled: boolean;
+}) {
+  const title = maintenanceReminderTitle(type);
+
+  await db.vehicleReminder.updateMany({
+    where: { userId, vehicleId, category: "maintenance", title, isActive: true },
+    data: { isActive: false, completedAt: new Date() },
+  });
+
+  if (!enabled || (!dueKm && !dueDate)) return;
+
+  await db.vehicleReminder.create({
+    data: {
+      userId,
+      vehicleId,
+      title,
+      description: description || `Próximo mantenimiento de ${vehicleName}`,
+      category: "maintenance",
+      triggerMode: dueKm && dueDate ? "hybrid" : dueKm ? "km" : "date",
+      dueKm,
+      dueDate,
+      warningKm: repeatIntervalKm ? Math.min(500, Math.max(100, Math.round(repeatIntervalKm * 0.2))) : 500,
+      warningDays: 15,
+      repeatIntervalKm,
+      isActive: true,
+    },
+  });
+}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string; recordId: string }> }) {
   try {
@@ -32,15 +86,29 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
     }
 
-    const { type, description, cost, km, date, nextDueKm, nextDueDate, reminderEnabled } = body;
+    const { type, description, cost, km, date, repeatIntervalKm, nextDueKm, nextDueDate, reminderEnabled } = body;
+    const finalKm = km !== undefined ? Number(km) : existing.km;
+    const finalType = type ?? existing.type;
+    const finalDescription = description ?? existing.description;
+    const finalRepeatIntervalKm = repeatIntervalKm ?? (
+      nextDueKm && nextDueKm > finalKm ? Number(nextDueKm) - finalKm : null
+    );
+    const computedNextDueKm = nextDueKm !== undefined
+      ? (nextDueKm ? Number(nextDueKm) : null)
+      : finalRepeatIntervalKm
+      ? finalKm + finalRepeatIntervalKm
+      : existing.nextDueKm;
+    const computedNextDueDate = nextDueDate !== undefined
+      ? (nextDueDate ? createColombiaDate(nextDueDate.split("T")[0]) : null)
+      : existing.nextDueDate;
     const updateData: Parameters<typeof db.maintenanceRecord.update>[0]["data"] = {
-      ...(type !== undefined && { type }),
-      ...(description !== undefined && { description }),
+      ...(type !== undefined && { type: finalType }),
+      ...(description !== undefined && { description: finalDescription }),
       ...(cost !== undefined && { cost: Number(cost) }),
-      ...(km !== undefined && { km: Number(km) }),
+      ...(km !== undefined && { km: finalKm }),
       ...(date != null && { date: createColombiaDate(date.split("T")[0]) }),
-      ...(nextDueKm !== undefined && { nextDueKm: nextDueKm ? Number(nextDueKm) : null }),
-      ...(nextDueDate !== undefined && { nextDueDate: nextDueDate ? createColombiaDate(nextDueDate.split("T")[0]) : null }),
+      ...((nextDueKm !== undefined || repeatIntervalKm !== undefined) && { nextDueKm: computedNextDueKm }),
+      ...(nextDueDate !== undefined && { nextDueDate: computedNextDueDate }),
       ...(reminderEnabled !== undefined && { reminderEnabled }),
     };
 
@@ -57,6 +125,28 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           amount: cost,
           ...(description !== undefined && { description: `Mantenimiento - ${vehicle.name}: ${description}` }),
         },
+      });
+    }
+
+    if (
+      type !== undefined ||
+      description !== undefined ||
+      km !== undefined ||
+      nextDueKm !== undefined ||
+      nextDueDate !== undefined ||
+      repeatIntervalKm !== undefined ||
+      reminderEnabled !== undefined
+    ) {
+      await syncMaintenanceReminder({
+        userId: session.user.id,
+        vehicleId: id,
+        vehicleName: vehicle.name,
+        type: finalType,
+        description: finalDescription,
+        dueKm: computedNextDueKm ?? null,
+        dueDate: computedNextDueDate ?? null,
+        repeatIntervalKm: finalRepeatIntervalKm,
+        enabled: reminderEnabled ?? record.reminderEnabled,
       });
     }
 

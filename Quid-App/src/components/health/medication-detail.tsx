@@ -16,6 +16,8 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
+  Package,
+  AlertTriangle,
 } from "lucide-react";
 import { formatDate } from "@/lib/api";
 import type { Medication } from "@/lib/types";
@@ -52,6 +54,8 @@ export function MedicationDetail({ medication, onBack, onEdit, onDelete }: Medic
       return [];
     }
   })();
+  const hasStock = medication.stockQuantity != null;
+  const isLowStock = hasStock && medication.lowStockThreshold != null && medication.stockQuantity! <= medication.lowStockThreshold;
 
   return (
     <motion.div
@@ -169,6 +173,30 @@ export function MedicationDetail({ medication, onBack, onEdit, onDelete }: Medic
               )}
             </div>
           </div>
+
+          {hasStock && (
+            <div className="flex items-start gap-3">
+              <div className="size-8 rounded-lg bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center shrink-0">
+                <Package className="size-4 text-rose-500" />
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Inventario</span>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {medication.stockQuantity} {medication.stockUnit || "und"}
+                  {medication.doseQuantity ? ` · descuenta ${medication.doseQuantity} por toma` : ""}
+                </p>
+                {medication.lowStockThreshold != null && (
+                  <p className="text-xs text-gray-500">Alerta cuando llegue a {medication.lowStockThreshold}</p>
+                )}
+                {isLowStock && (
+                  <Badge variant="destructive" className="mt-2 text-xs">
+                    <AlertTriangle className="size-3 mr-1" />
+                    Inventario bajo
+                  </Badge>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

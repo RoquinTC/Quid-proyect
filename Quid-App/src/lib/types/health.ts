@@ -14,6 +14,10 @@ export interface Medication {
   isActive: boolean;
   reminderEnabled: boolean;
   reminderTimes?: string | null;
+  stockQuantity?: number | null;
+  stockUnit?: string | null;
+  doseQuantity?: number | null;
+  lowStockThreshold?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -27,6 +31,42 @@ export interface MedicalAppointment {
   notes?: string | null;
   reminderEnabled: boolean;
   status: string;
+  copayAmount?: number | null;
+  accountId?: string | null;
+  subAccountId?: string | null;
+  debtId?: string | null;
+  financeSourceId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MedicalOrderItem {
+  id: string;
+  orderId: string;
+  medicationId?: string | null;
+  name: string;
+  prescribedQty: number;
+  deliveredQty: number;
+  unit: string;
+  monthlyDose?: number | null;
+  pendingQty: number;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MedicalOrder {
+  id: string;
+  userId: string;
+  appointmentId?: string | null;
+  orderNumber?: string | null;
+  title: string;
+  status: string;
+  issueDate: string;
+  nextClaimDate?: string | null;
+  notes?: string | null;
+  items?: MedicalOrderItem[];
+  appointment?: MedicalAppointment | null;
   createdAt?: string;
   updatedAt?: string;
 }

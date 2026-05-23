@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch, formatCurrency } from "@/lib/api";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
@@ -9,7 +9,7 @@ import { SavingsGoalForm } from "./savings-goal-form";
 import { SavingsContributeForm } from "./savings-contribute-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, PiggyBank, Sparkles, Loader2 } from "lucide-react";
+import { Plus, PiggyBank, Sparkles, Loader2, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import {
   AlertDialog,
@@ -22,6 +22,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { SavingsGoal } from "@/lib/types";
+
+type EmergencySuggestion = {
+  existingGoalId: string | null;
+  recommendedTarget: number;
+  currentEmergencyLiquidity: number;
+  averageMonthlyExpenses: number;
+  fixedMonthlyExpenses: number;
+  gap: number;
+  monthlyContribution: number;
+  aiSuggestion: string;
+};
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -43,9 +54,30 @@ export function SavingsView() {
   const [contributeLinkedAccounts, setContributeLinkedAccounts] = useState<any[]>([]);
   const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [emergencySuggestion, setEmergencySuggestion] = useState<EmergencySuggestion | null>(null);
+  const [emergencyLoading, setEmergencyLoading] = useState(false);
+  const [creatingEmergency, setCreatingEmergency] = useState(false);
 
   const totalSaved = goals.reduce((sum, g) => sum + g.currentAmount, 0);
   const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0);
+  const hasEmergencyGoal = goals.some((goal) => goal.type === "emergency_fund");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadEmergencySuggestion() {
+      setEmergencyLoading(true);
+      try {
+        const suggestion = await apiFetch<EmergencySuggestion>("/api/savings/emergency-suggestion");
+        if (!cancelled) setEmergencySuggestion(suggestion);
+      } catch (error) {
+        console.error("Error loading emergency suggestion:", error);
+      } finally {
+        if (!cancelled) setEmergencyLoading(false);
+      }
+    }
+    loadEmergencySuggestion();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleContribute = (goalId: string, goalName: string, linkedAccounts: any[] = []) => {
     setContributeGoalId(goalId);
@@ -94,6 +126,21 @@ export function SavingsView() {
     }
   };
 
+  const handleCreateEmergencyFund = async () => {
+    setCreatingEmergency(true);
+    try {
+      const result = await apiFetch<{ suggestion: EmergencySuggestion }>("/api/savings/emergency-suggestion", {
+        method: "POST",
+      });
+      setEmergencySuggestion(result.suggestion);
+      fetchGoals();
+    } catch (error) {
+      console.error("Error creating emergency fund:", error);
+    } finally {
+      setCreatingEmergency(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-4 space-y-3 pb-safe">
@@ -131,6 +178,43 @@ export function SavingsView() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* AI Suggestion Card */}
+      {emergencySuggestion && !hasEmergencyGoal && (
+        <motion.div variants={itemVariants}>
+          <Card className="rounded-2xl border border-sky-100 bg-gradient-to-r from-sky-50 to-cyan-50 shadow-sm dark:border-sky-900/40 dark:from-sky-950/30 dark:to-cyan-950/20">
+            <CardContent className="p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <ShieldCheck className="size-4 text-sky-600" />
+                <span className="text-sm font-semibold text-sky-800 dark:text-sky-200">
+                  Fondo de emergencia inteligente
+                </span>
+              </div>
+              <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                {emergencySuggestion.aiSuggestion}
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-xl bg-white/70 p-2 dark:bg-gray-900/50">
+                  <p className="text-gray-500">Meta sugerida</p>
+                  <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(emergencySuggestion.recommendedTarget)}</p>
+                </div>
+                <div className="rounded-xl bg-white/70 p-2 dark:bg-gray-900/50">
+                  <p className="text-gray-500">Aporte 6 meses</p>
+                  <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(emergencySuggestion.monthlyContribution)}</p>
+                </div>
+              </div>
+              <Button
+                onClick={handleCreateEmergencyFund}
+                disabled={creatingEmergency || emergencyLoading}
+                className="mt-3 w-full rounded-xl bg-sky-600 hover:bg-sky-700"
+              >
+                {creatingEmergency ? <Loader2 className="mr-2 size-4 animate-spin" /> : <ShieldCheck className="mr-2 size-4" />}
+                Crear fondo sugerido
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       {/* AI Suggestion Card */}
       {goals.some((g) => g.aiSuggestion) && (

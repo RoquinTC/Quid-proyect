@@ -46,6 +46,8 @@ export type {
 export type {
   Medication,
   MedicalAppointment,
+  MedicalOrder,
+  MedicalOrderItem,
   ScheduleItem,
 } from './health';
 

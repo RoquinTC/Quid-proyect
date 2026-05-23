@@ -63,6 +63,10 @@ interface MedicationFormProps {
     isActive: boolean;
     reminderEnabled: boolean;
     reminderTimes?: string | null;
+    stockQuantity?: number | null;
+    stockUnit?: string | null;
+    doseQuantity?: number | null;
+    lowStockThreshold?: number | null;
   } | null;
   onSuccess?: () => void;
 }
@@ -82,6 +86,16 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
   );
   const [isActive, setIsActive] = useState(medication?.isActive ?? true);
   const [reminderEnabled, setReminderEnabled] = useState(medication?.reminderEnabled ?? true);
+  const [stockQuantity, setStockQuantity] = useState(
+    medication?.stockQuantity != null ? String(medication.stockQuantity) : ""
+  );
+  const [stockUnit, setStockUnit] = useState(medication?.stockUnit || "unit");
+  const [doseQuantity, setDoseQuantity] = useState(
+    medication?.doseQuantity != null ? String(medication.doseQuantity) : ""
+  );
+  const [lowStockThreshold, setLowStockThreshold] = useState(
+    medication?.lowStockThreshold != null ? String(medication.lowStockThreshold) : ""
+  );
   const [reminderTimes, setReminderTimes] = useState<string[]>(() => {
     try {
       return medication?.reminderTimes ? JSON.parse(medication.reminderTimes) : [];
@@ -174,6 +188,10 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
         isActive,
         reminderEnabled,
         reminderTimes: reminderTimes.length > 0 ? reminderTimes : null,
+        stockQuantity: stockQuantity ? Number(stockQuantity) : null,
+        stockUnit: stockUnit || "unit",
+        doseQuantity: doseQuantity ? Number(doseQuantity) : null,
+        lowStockThreshold: lowStockThreshold ? Number(lowStockThreshold) : null,
       };
 
       if (isEditing && medication) {
@@ -209,6 +227,10 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
       setEndDate("");
       setIsActive(true);
       setReminderEnabled(true);
+      setStockQuantity("");
+      setStockUnit("unit");
+      setDoseQuantity("");
+      setLowStockThreshold("");
       setReminderTimes([]);
     }
     setAiInfo(null);
@@ -388,6 +410,67 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
                 onChange={(e) => setEndDate(e.target.value)}
                 className="rounded-xl"
               />
+            </div>
+          </div>
+
+          {/* Inventory */}
+          <div className="space-y-3 rounded-xl border border-rose-100 bg-rose-50/50 p-3 dark:border-rose-900/40 dark:bg-rose-950/20">
+            <div>
+              <Label className="text-sm">Inventario</Label>
+              <p className="text-xs text-gray-500">Opcional: ayuda a avisar cuando se está acabando.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="med-stock">Cantidad actual</Label>
+                <Input
+                  id="med-stock"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ej: 30"
+                  value={stockQuantity}
+                  onChange={(e) => setStockQuantity(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="med-unit">Unidad</Label>
+                <Input
+                  id="med-unit"
+                  placeholder="tabletas, ml..."
+                  value={stockUnit}
+                  onChange={(e) => setStockUnit(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="med-dose-qty">Descontar por toma</Label>
+                <Input
+                  id="med-dose-qty"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ej: 1"
+                  value={doseQuantity}
+                  onChange={(e) => setDoseQuantity(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="med-low-stock">Alerta en</Label>
+                <Input
+                  id="med-low-stock"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Ej: 5"
+                  value={lowStockThreshold}
+                  onChange={(e) => setLowStockThreshold(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
             </div>
           </div>
 

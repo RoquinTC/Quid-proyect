@@ -579,6 +579,7 @@ export const maintenanceCreateSchema = z.object({
   cost: z.number().positive("El costo es obligatorio"),
   km: z.number().optional(),
   date: isoDateString.optional(),
+  repeatIntervalKm: z.number().positive().nullable().optional(),
   nextDueKm: z.number().nullable().optional(),
   nextDueDate: isoDateString.nullable().optional(),
   reminderEnabled: z.boolean().optional().default(true),
@@ -604,6 +605,7 @@ export const maintenanceUpdateSchema = z.object({
   cost: z.number().optional(),
   km: z.number().optional(),
   date: isoDateString.optional(),
+  repeatIntervalKm: z.number().positive().nullable().optional(),
   nextDueKm: z.number().nullable().optional(),
   nextDueDate: isoDateString.nullable().optional(),
   reminderEnabled: z.boolean().optional(),
@@ -700,6 +702,10 @@ export const medicationCreateSchema = z.object({
   isActive: z.boolean().optional().default(true),
   reminderEnabled: z.boolean().optional().default(true),
   reminderTimes: z.array(z.string()).nullable().optional(),
+  stockQuantity: z.number().min(0).nullable().optional(),
+  stockUnit: z.string().optional().default("unit"),
+  doseQuantity: z.number().min(0).nullable().optional(),
+  lowStockThreshold: z.number().min(0).nullable().optional(),
 });
 
 export const medicationUpdateSchema = z.object({
@@ -714,6 +720,15 @@ export const medicationUpdateSchema = z.object({
   isActive: z.boolean().optional(),
   reminderEnabled: z.boolean().optional(),
   reminderTimes: z.array(z.string()).nullable().optional(),
+  stockQuantity: z.number().min(0).nullable().optional(),
+  stockUnit: z.string().optional(),
+  doseQuantity: z.number().min(0).nullable().optional(),
+  lowStockThreshold: z.number().min(0).nullable().optional(),
+});
+
+export const medicationTakeSchema = z.object({
+  quantity: z.number().positive().optional().default(1),
+  takenAt: isoDateString.optional(),
 });
 
 // ============================================
@@ -728,6 +743,10 @@ export const appointmentCreateSchema = z.object({
   notes: z.string().nullable().optional(),
   reminderEnabled: z.boolean().optional().default(true),
   status: z.string().optional().default("scheduled"),
+  copayAmount: z.number().min(0).nullable().optional(),
+  accountId: z.string().nullable().optional(),
+  subAccountId: z.string().nullable().optional(),
+  debtId: z.string().nullable().optional(),
 });
 
 export const appointmentUpdateSchema = z.object({
@@ -738,6 +757,41 @@ export const appointmentUpdateSchema = z.object({
   notes: z.string().nullable().optional(),
   reminderEnabled: z.boolean().optional(),
   status: z.string().optional(),
+  copayAmount: z.number().min(0).nullable().optional(),
+  accountId: z.string().nullable().optional(),
+  subAccountId: z.string().nullable().optional(),
+  debtId: z.string().nullable().optional(),
+});
+
+export const medicalOrderItemSchema = z.object({
+  medicationId: z.string().nullable().optional(),
+  name: z.string().min(1),
+  prescribedQty: z.number().positive(),
+  deliveredQty: z.number().min(0).optional().default(0),
+  unit: z.string().optional().default("unit"),
+  monthlyDose: z.number().min(0).nullable().optional(),
+  notes: z.string().nullable().optional(),
+});
+
+export const medicalOrderCreateSchema = z.object({
+  appointmentId: z.string().nullable().optional(),
+  orderNumber: z.string().nullable().optional(),
+  title: z.string().min(1),
+  issueDate: isoDateString.optional(),
+  nextClaimDate: isoDateString.nullable().optional(),
+  notes: z.string().nullable().optional(),
+  items: z.array(medicalOrderItemSchema).min(1).optional(),
+});
+
+export const medicalOrderUpdateSchema = z.object({
+  appointmentId: z.string().nullable().optional(),
+  orderNumber: z.string().nullable().optional(),
+  title: z.string().optional(),
+  status: z.string().optional(),
+  issueDate: isoDateString.optional(),
+  nextClaimDate: isoDateString.nullable().optional(),
+  notes: z.string().nullable().optional(),
+  items: z.array(medicalOrderItemSchema).optional(),
 });
 
 // ============================================

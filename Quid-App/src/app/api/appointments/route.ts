@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { createColombiaDate } from "@/lib/api";
 import { validateBody, appointmentCreateSchema } from "@/lib/validations";
 
 export async function GET() {
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
       if (err instanceof Response) return err;
       return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
-    const { doctorName, specialty, location, date, notes, reminderEnabled, status } = body;
+    const { doctorName, specialty, location, date, notes, reminderEnabled, status, copayAmount, accountId, subAccountId, debtId } = body;
 
     if (!date) {
       return NextResponse.json(
@@ -53,10 +52,14 @@ export async function POST(req: NextRequest) {
         doctorName,
         specialty,
         location,
-        date: createColombiaDate(date.split("T")[0]),
+        date: new Date(date),
         notes,
         reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : true,
         status: status || "scheduled",
+        copayAmount: copayAmount ?? null,
+        accountId: accountId ?? null,
+        subAccountId: subAccountId ?? null,
+        debtId: debtId ?? null,
       },
     });
 

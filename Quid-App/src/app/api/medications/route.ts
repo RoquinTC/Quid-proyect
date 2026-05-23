@@ -50,6 +50,10 @@ export async function POST(req: NextRequest) {
       isActive,
       reminderEnabled,
       reminderTimes,
+      stockQuantity,
+      stockUnit,
+      doseQuantity,
+      lowStockThreshold,
     } = body;
 
     if (!name || !dosage) {
@@ -73,6 +77,10 @@ export async function POST(req: NextRequest) {
         isActive: isActive !== undefined ? isActive : true,
         reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : true,
         reminderTimes: reminderTimes ? JSON.stringify(reminderTimes) : null,
+        stockQuantity: stockQuantity ?? null,
+        stockUnit: stockUnit || "unit",
+        doseQuantity: doseQuantity ?? null,
+        lowStockThreshold: lowStockThreshold ?? null,
       },
     });
 

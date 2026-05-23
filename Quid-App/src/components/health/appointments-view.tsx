@@ -20,6 +20,7 @@ import {
   MapPin,
   Clock,
   FileText,
+  Wallet,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
@@ -423,6 +424,23 @@ function AppointmentDetail({
               <div>
                 <span className="text-xs text-gray-500">Notas</span>
                 <p className="text-sm text-gray-700 dark:text-gray-300">{appointment.notes}</p>
+              </div>
+            </div>
+          )}
+          {appointment.copayAmount != null && Number(appointment.copayAmount) > 0 && (
+            <div className="flex items-center gap-3">
+              <div className="size-8 rounded-lg bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center shrink-0">
+                <Wallet className="size-4 text-violet-500" />
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">Copago</span>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {Number(appointment.copayAmount).toLocaleString("es-CO", {
+                    style: "currency",
+                    currency: "COP",
+                    maximumFractionDigits: 0,
+                  })}
+                </p>
               </div>
             </div>
           )}

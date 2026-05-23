@@ -131,7 +131,7 @@ export function MedicationsView() {
       {/* Today's schedule */}
       {activeCount > 0 && (
         <motion.div variants={itemVariants}>
-          <TodaySchedule medications={medications.filter((m) => m.isActive)} />
+          <TodaySchedule medications={medications.filter((m) => m.isActive)} onTaken={fetchMedications} />
         </motion.div>
       )}
 

@@ -34,6 +34,7 @@ interface AppointmentFormProps {
     notes?: string | null;
     reminderEnabled: boolean;
     status: string;
+    copayAmount?: number | null;
   } | null;
   onSuccess?: () => void;
 }
@@ -68,6 +69,9 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
     return "";
   });
   const [notes, setNotes] = useState(appointment?.notes || "");
+  const [copayAmount, setCopayAmount] = useState(
+    appointment?.copayAmount != null ? String(appointment.copayAmount) : ""
+  );
   const [reminderEnabled, setReminderEnabled] = useState(appointment?.reminderEnabled ?? true);
 
   const isEditing = !!appointment;
@@ -82,6 +86,7 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
         location: location || null,
         date: new Date(dateStr).toISOString(),
         notes: notes || null,
+        copayAmount: copayAmount ? Number(copayAmount) : null,
         reminderEnabled,
       };
 
@@ -114,6 +119,7 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
       setLocation("");
       setDateStr("");
       setNotes("");
+      setCopayAmount("");
       setReminderEnabled(true);
     }
   };
@@ -191,6 +197,23 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
               onChange={(e) => setNotes(e.target.value)}
               className="rounded-xl min-h-[80px] resize-none"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="apt-copay">Copago / gasto asociado</Label>
+            <Input
+              id="apt-copay"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Ej: 12000"
+              value={copayAmount}
+              onChange={(e) => setCopayAmount(e.target.value)}
+              className="rounded-xl"
+            />
+            <p className="text-xs text-gray-500">
+              Por ahora queda registrado en salud; luego lo conectamos al movimiento financiero con confirmación.
+            </p>
           </div>
 
           {/* Reminder */}

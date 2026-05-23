@@ -65,6 +65,7 @@ export function VehicleReminderForm({
   const [dueKm, setDueKm] = useState("");
   const [warningDays, setWarningDays] = useState("7");
   const [warningKm, setWarningKm] = useState("500");
+  const [repeatIntervalKm, setRepeatIntervalKm] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -78,6 +79,7 @@ export function VehicleReminderForm({
     setDueKm(reminder?.dueKm != null ? String(Math.round(reminder.dueKm)) : "");
     setWarningDays(String(reminder?.warningDays ?? 7));
     setWarningKm(String(reminder?.warningKm ?? 500));
+    setRepeatIntervalKm(reminder?.repeatIntervalKm != null ? String(Math.round(reminder.repeatIntervalKm)) : "");
     setIsActive(reminder?.isActive ?? true);
   }, [open, reminder]);
 
@@ -116,6 +118,7 @@ export function VehicleReminderForm({
         dueKm: needsKm ? Number(dueKm) : null,
         warningDays: Number(warningDays || 0),
         warningKm: warningKm ? Number(warningKm) : null,
+        repeatIntervalKm: needsKm && repeatIntervalKm ? Number(repeatIntervalKm) : null,
         isActive,
       };
 
@@ -254,6 +257,23 @@ export function VehicleReminderForm({
               />
             </div>
           </div>
+
+          {needsKm && (
+            <div className="space-y-2">
+              <Label htmlFor="repeat-km">Repetir cada km</Label>
+              <Input
+                id="repeat-km"
+                type="number"
+                min="0"
+                value={repeatIntervalKm}
+                onChange={(event) => setRepeatIntervalKm(event.target.value)}
+                placeholder="Ej: 2500 para cambio de aceite"
+              />
+              <p className="text-xs text-gray-500">
+                Al completarlo, Quid podrá programar el siguiente aviso con este intervalo.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="reminder-description">Notas</Label>

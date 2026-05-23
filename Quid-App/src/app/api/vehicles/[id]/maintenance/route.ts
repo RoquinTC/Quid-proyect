@@ -11,6 +11,68 @@ import {
 } from "@/lib/transport-finance";
 import { MAINTENANCE_TYPES } from "@/lib/types/transport";
 
+function maintenanceReminderTitle(type: string) {
+  const config = MAINTENANCE_TYPES.find((item) => item.value === type);
+  return config?.label || "Mantenimiento";
+}
+
+async function syncMaintenanceReminder({
+  userId,
+  vehicleId,
+  vehicleName,
+  type,
+  description,
+  dueKm,
+  dueDate,
+  repeatIntervalKm,
+  enabled,
+}: {
+  userId: string;
+  vehicleId: string;
+  vehicleName: string;
+  type: string;
+  description: string;
+  dueKm: number | null;
+  dueDate: Date | null;
+  repeatIntervalKm: number | null;
+  enabled: boolean;
+}) {
+  const title = maintenanceReminderTitle(type);
+
+  await db.vehicleReminder.updateMany({
+    where: {
+      userId,
+      vehicleId,
+      category: "maintenance",
+      title,
+      isActive: true,
+    },
+    data: {
+      isActive: false,
+      completedAt: new Date(),
+    },
+  });
+
+  if (!enabled || (!dueKm && !dueDate)) return;
+
+  await db.vehicleReminder.create({
+    data: {
+      userId,
+      vehicleId,
+      title,
+      description: description || `Próximo mantenimiento de ${vehicleName}`,
+      category: "maintenance",
+      triggerMode: dueKm && dueDate ? "hybrid" : dueKm ? "km" : "date",
+      dueKm,
+      dueDate,
+      warningKm: repeatIntervalKm ? Math.min(500, Math.max(100, Math.round(repeatIntervalKm * 0.2))) : 500,
+      warningDays: 15,
+      repeatIntervalKm,
+      isActive: true,
+    },
+  });
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
@@ -51,7 +113,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const body = await validateBody(req, maintenanceCreateSchema);
     const {
-      type, description, cost, km, date, nextDueKm, nextDueDate, reminderEnabled,
+      type, description, cost, km, date, repeatIntervalKm, nextDueKm, nextDueDate, reminderEnabled,
       items, paymentType, accountId, subAccountId, debtId, installmentCount,
     } = body;
 
@@ -70,6 +132,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Auto-suggest nextDueKm if not provided and type has a known interval
     let finalNextDueKm = nextDueKm ?? null;
     let finalNextDueDate = nextDueDate ? createColombiaDate(nextDueDate.split("T")[0]) : null;
+    const finalRepeatIntervalKm = repeatIntervalKm ?? (
+      finalNextDueKm && finalNextDueKm > recordKm ? finalNextDueKm - recordKm : null
+    );
+
+    if (!finalNextDueKm && finalRepeatIntervalKm) {
+      finalNextDueKm = recordKm + finalRepeatIntervalKm;
+    }
 
     if (!finalNextDueKm && !finalNextDueDate && reminderEnabled) {
       const typeConfig = MAINTENANCE_TYPES.find(t => t.value === maintenanceType);
@@ -124,10 +193,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
     }
 
-    // Update any existing reminder for this vehicle+type
-    // If there's a previous maintenance record with the same type and reminder enabled,
-    // the new record's nextDueKm/nextDueDate is already set correctly.
-    // No additional action needed — the new record IS the updated reminder.
+    await syncMaintenanceReminder({
+      userId: session.user.id,
+      vehicleId: id,
+      vehicleName: vehicle.name,
+      type: maintenanceType,
+      description,
+      dueKm: finalNextDueKm,
+      dueDate: finalNextDueDate,
+      repeatIntervalKm: finalRepeatIntervalKm,
+      enabled: reminderEnabled ?? true,
+    });
 
     // Create finance entry with full integration
     const subCategory = getTransportSubCategory("maintenance", maintenanceType);

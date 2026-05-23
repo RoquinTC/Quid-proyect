@@ -68,6 +68,7 @@ export interface MaintenanceRecord {
   cost: number;
   km: number;
   date: string;
+  repeatIntervalKm?: number | null;
   nextDueKm?: number | null;
   nextDueDate?: string | null;
   reminderEnabled: boolean;

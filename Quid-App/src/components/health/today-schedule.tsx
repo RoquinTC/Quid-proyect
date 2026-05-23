@@ -9,6 +9,7 @@ import type { Medication } from "@/lib/types";
 
 interface TodayScheduleProps {
   medications: Medication[];
+  onTaken?: () => void;
 }
 
 interface ScheduleItem {
@@ -19,7 +20,7 @@ interface ScheduleItem {
   taken: boolean;
 }
 
-export function TodaySchedule({ medications }: TodayScheduleProps) {
+export function TodaySchedule({ medications, onTaken }: TodayScheduleProps) {
   const [takenMeds, setTakenMeds] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem("takenMeds");
@@ -52,11 +53,12 @@ export function TodaySchedule({ medications }: TodayScheduleProps) {
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-  const toggleTaken = (medId: string, time: string) => {
+  const toggleTaken = async (medId: string, time: string) => {
     const key = `${medId}-${time}`;
+    const wasTaken = takenMeds.has(key);
     setTakenMeds((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) {
+      if (wasTaken) {
         next.delete(key);
       } else {
         next.add(key);
@@ -66,6 +68,18 @@ export function TodaySchedule({ medications }: TodayScheduleProps) {
       localStorage.setItem("takenMeds", JSON.stringify({ date: today, meds: Array.from(next) }));
       return next;
     });
+
+    if (!wasTaken) {
+      try {
+        await apiFetch(`/api/medications/${medId}/take`, {
+          method: "POST",
+          body: JSON.stringify({ takenAt: new Date().toISOString() }),
+        });
+        onTaken?.();
+      } catch (error) {
+        console.error("Error registering medication dose:", error);
+      }
+    }
   };
 
   const takenCount = schedule.filter((s) => takenMeds.has(`${s.medication.id}-${s.time}`)).length;

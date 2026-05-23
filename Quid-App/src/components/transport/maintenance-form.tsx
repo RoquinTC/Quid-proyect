@@ -84,6 +84,7 @@ export function MaintenanceForm({
     const now = new Date();
     return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   });
+  const [repeatIntervalKm, setRepeatIntervalKm] = useState("");
   const [nextDueKm, setNextDueKm] = useState("");
   const [nextDueDate, setNextDueDate] = useState("");
   const [reminderEnabled, setReminderEnabled] = useState(true);
@@ -157,6 +158,9 @@ export function MaintenanceForm({
       setCost(record.cost?.toString() || "");
       setKm(record.km?.toString() || "");
       setDate(record.date ? record.date.split("T")[0] : getColombiaTodayString());
+      const inferredInterval = record.repeatIntervalKm
+        ?? (record.nextDueKm && record.km ? Math.max(0, record.nextDueKm - record.km) : null);
+      setRepeatIntervalKm(inferredInterval ? inferredInterval.toString() : "");
       setNextDueKm(record.nextDueKm?.toString() || "");
       setNextDueDate(record.nextDueDate ? record.nextDueDate.split("T")[0] : "");
       setReminderEnabled(record.reminderEnabled ?? true);
@@ -213,12 +217,23 @@ export function MaintenanceForm({
 
   // ─── Auto-suggest next due km & date based on primary service type (create mode only) ───
   useEffect(() => {
+    if (isEditing || !km || !repeatIntervalKm) return;
+    const currentKm = parseFloat(km) || 0;
+    const intervalKm = parseFloat(repeatIntervalKm) || 0;
+    if (currentKm > 0 && intervalKm > 0) {
+      setNextDueKm(String(Math.round(currentKm + intervalKm)));
+    }
+  }, [repeatIntervalKm, km, isEditing]);
+
+  // ─── Auto-suggest next due km & date based on primary service type (create mode only) ───
+  useEffect(() => {
     if (!isEditing && primaryType && km) {
       const currentKm = parseFloat(km) || 0;
-      if (primaryType.nextKmInterval > 0) {
+      if (primaryType.nextKmInterval > 0 && !repeatIntervalKm) {
+        setRepeatIntervalKm(primaryType.nextKmInterval.toString());
         setNextDueKm((currentKm + primaryType.nextKmInterval).toString());
       } else {
-        setNextDueKm("");
+        if (!repeatIntervalKm) setNextDueKm("");
       }
 
       if (primaryType.nextMonthInterval > 0) {
@@ -233,7 +248,7 @@ export function MaintenanceForm({
         setNextDueDate("");
       }
     }
-  }, [primaryType, km, isEditing, date]);
+  }, [primaryType, km, isEditing, date, repeatIntervalKm]);
 
   // ─── Service catalog handlers ───
 
@@ -300,6 +315,7 @@ export function MaintenanceForm({
         cost: parseFloat(cost),
         km: km ? parseFloat(km) : undefined,
         date,
+        repeatIntervalKm: repeatIntervalKm ? parseFloat(repeatIntervalKm) : undefined,
         nextDueKm: nextDueKm ? parseFloat(nextDueKm) : undefined,
         nextDueDate: nextDueDate || undefined,
         reminderEnabled,
@@ -364,6 +380,7 @@ export function MaintenanceForm({
         return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
       });
       setNextDueKm("");
+      setRepeatIntervalKm("");
       setNextDueDate("");
       setReminderEnabled(true);
       setWorkshopName("");
@@ -758,7 +775,20 @@ export function MaintenanceForm({
             <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Próximo mantenimiento
             </Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="maint-repeatkm" className="text-xs text-gray-500">
+                  Repetir cada km
+                </Label>
+                <Input
+                  id="maint-repeatkm"
+                  type="number"
+                  placeholder="Ej: 2500"
+                  value={repeatIntervalKm}
+                  onChange={(e) => setRepeatIntervalKm(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
               <div className="space-y-1">
                 <Label htmlFor="maint-nextkm" className="text-xs text-gray-500">
                   KM próx. cambio

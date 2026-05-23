@@ -19,6 +19,9 @@ interface MedicationCardProps {
     isActive: boolean;
     reminderEnabled: boolean;
     reminderTimes?: string | null;
+    stockQuantity?: number | null;
+    stockUnit?: string | null;
+    lowStockThreshold?: number | null;
   };
   onClick?: () => void;
 }
@@ -63,6 +66,8 @@ function getTimeOfDayColor(reminderTimes: string | null | undefined): { bg: stri
 export function MedicationCard({ medication, onClick }: MedicationCardProps) {
   const [expanded, setExpanded] = useState(false);
   const colors = getTimeOfDayColor(medication.reminderTimes);
+  const hasStock = medication.stockQuantity != null;
+  const isLowStock = hasStock && medication.lowStockThreshold != null && medication.stockQuantity! <= medication.lowStockThreshold;
 
   const reminderTimesList = (() => {
     try {
@@ -145,6 +150,14 @@ export function MedicationCard({ medication, onClick }: MedicationCardProps) {
               {howToTakeLabels[medication.howToTake] || medication.howToTake}
             </Badge>
           )}
+          {hasStock && (
+            <Badge
+              variant={isLowStock ? "destructive" : "outline"}
+              className="text-xs"
+            >
+              Stock: {medication.stockQuantity} {medication.stockUnit || "und"}
+            </Badge>
+          )}
         </div>
 
         {/* Next reminder */}
@@ -198,6 +211,12 @@ export function MedicationCard({ medication, onClick }: MedicationCardProps) {
                     Recordatorio {medication.reminderEnabled ? "activado" : "desactivado"}
                   </span>
                 </div>
+
+                {isLowStock && (
+                  <div className="rounded-xl bg-red-50 p-2 text-xs font-medium text-red-700 dark:bg-red-900/20 dark:text-red-300">
+                    Inventario bajo: queda en el umbral configurado.
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

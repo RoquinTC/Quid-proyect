@@ -17,13 +17,37 @@ type AuraAction =
   | "consultar_gastos"
   | "consultar_ingresos"
   | "consultar_transferencias"
+  | "consultar_flujo"
   | "consultar_recurrentes"
   | "consultar_planner"
   | "consultar_metas"
   | "consultar_cdts"
+  | "consultar_deudas"
+  | "consultar_presupuestos"
+  | "consultar_vehiculos"
+  | "consultar_salud"
+  | "consultar_despensa"
   | "registrar_transaccion"
   | "confirmar_recurrente"
   | "chat";
+
+type AuraStructuredAction =
+  | {
+      type: "proposal";
+      tool: "registrar_transaccion" | "registrar_tanqueo";
+      payload: Record<string, unknown>;
+      requiresConfirmation: true;
+    }
+  | {
+      type: "executed";
+      tool: string;
+      payload?: Record<string, unknown>;
+    };
+
+type AuraToolResult = {
+  text: string;
+  action?: AuraStructuredAction;
+};
 
 type AccountChoice = {
   id: string;
@@ -75,6 +99,17 @@ function lastUserText(messages: CoreMessage[]) {
 
 function resolveActionText(messages: CoreMessage[]) {
   const lastText = lastUserText(messages);
+  if (isConfirmationText(lastText)) {
+    const previousUsers = [...messages]
+      .reverse()
+      .filter((message) => message.role === "user" && !isConfirmationText(message.content))
+      .slice(0, 3)
+      .reverse()
+      .map((message) => message.content.trim())
+      .filter(Boolean);
+    if (previousUsers.length > 0) return `${previousUsers.join(". ")}. CONFIRMAR`;
+  }
+
   const lastIndex = messages.map((message) => message.role).lastIndexOf("user");
   if (lastIndex <= 0) return lastText;
 
@@ -95,13 +130,32 @@ function resolveActionText(messages: CoreMessage[]) {
   return lastText;
 }
 
+function isConfirmationText(text: string) {
+  const normalized = normalize(text);
+  return /^(si|sí|confirmo|confirmar|confirma|guardar|guardalo|guárdalo|registralo|regístralo|ok|dale|listo)\b/.test(normalized);
+}
+
+function isCancellationText(text: string) {
+  const normalized = normalize(text);
+  return /^(no|cancelar|cancela|descartar|descartalo|descártalo|olvidalo|olvídalo)\b/.test(normalized);
+}
+
+function hasRecentAuraProposal(messages: CoreMessage[]) {
+  return [...messages]
+    .reverse()
+    .slice(0, 5)
+    .some((message) => message.role === "assistant" && /resumen para confirmar|responde confirmar/i.test(message.content));
+}
+
 function inferAction(text: string): AuraAction {
   const normalized = normalize(text);
   if (/\b(cuanto|cuanta|cuantos|cuantas|cuánto|cuánta|cuántos|cuántas)\b/.test(normalized)) {
+    if (/\b(ingresos?\s+(vs|versus|contra)\s+gastos?|gastos?\s+(vs|versus|contra)\s+ingresos?|balance del mes|flujo)\b/.test(normalized)) return "consultar_flujo";
     if (/\b(gaste|gastado|gastos|egresos)\b/.test(normalized)) return "consultar_gastos";
     if (/\b(ingrese|ingresado|ingresos|recibi|recibido)\b/.test(normalized)) return "consultar_ingresos";
     if (/\b(transferi|transferido|transferencias)\b/.test(normalized)) return "consultar_transferencias";
   }
+  if (/\b(ingresos?\s+(vs|versus|contra)\s+gastos?|gastos?\s+(vs|versus|contra)\s+ingresos?|flujo|balance del mes)\b/.test(normalized)) return "consultar_flujo";
   if (/\b(gaste|compre|pague|registre|registra|anota|anote)\b/.test(normalized)) {
     if (/\b(recurrente|pendiente|programado|programada)\b/.test(normalized)) return "confirmar_recurrente";
     return "registrar_transaccion";
@@ -112,6 +166,11 @@ function inferAction(text: string): AuraAction {
   if (/\b(cuanto tengo|saldo|saldos|balance|dinero disponible|plata)\b/.test(normalized)) return "consultar_saldos";
   if (/\b(cdt|cdts|certificado|certificados)\b/.test(normalized)) return "consultar_cdts";
   if (/\b(meta|metas|ahorro|ahorros|objetivo|objetivos)\b/.test(normalized)) return "consultar_metas";
+  if (/\b(deuda|deudas|tarjeta|tarjetas|credito|crédito|prestamo|préstamo)\b/.test(normalized)) return "consultar_deudas";
+  if (/\b(presupuesto|presupuestos|budget|sobregiro|sobregirado)\b/.test(normalized)) return "consultar_presupuestos";
+  if (/\b(vehiculo|vehículos|vehiculo|vehiculos|moto|carro|transporte|tanqueo|mantenimiento|soat|placa)\b/.test(normalized)) return "consultar_vehiculos";
+  if (/\b(salud|medicamento|medicamentos|cita|citas medicas|médicas|doctor|medico|médico)\b/.test(normalized)) return "consultar_salud";
+  if (/\b(despensa|mercado|nevera|producto|productos|inventario|comida)\b/.test(normalized)) return "consultar_despensa";
   if (/\b(transferencias|transferi|transferido|movimientos entre cuentas)\b/.test(normalized)) return "consultar_transferencias";
   if (/\b(ingresos|ingrese|ingresado|recibi|recibido|nomina|sueldo|salario)\b/.test(normalized)) return "consultar_ingresos";
   if (/\b(gastos|gaste|gastado|egresos|ingresos vs gastos|acumulado)\b/.test(normalized)) return "consultar_gastos";
@@ -503,7 +562,130 @@ async function getCdtSnapshot(userId: string) {
   }));
 }
 
-async function registerFuelFromAura(userId: string, text: string, amount: number) {
+async function getDebtSnapshot(userId: string) {
+  const debts = await db.debt.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    include: {
+      installments: {
+        where: { isPaid: false },
+        orderBy: { nextPaymentDate: "asc" },
+        take: 3,
+      },
+    },
+  });
+
+  return debts.map((debt) => ({
+    name: debt.bank ? `${debt.name} ${debt.bank}` : debt.name,
+    type: debt.type,
+    currentBalance: toNumber(debt.currentBalance),
+    totalAmount: toNumber(debt.totalAmount),
+    paymentDate: debt.paymentDate,
+    installmentsPending: debt.installments.length,
+  }));
+}
+
+async function getBudgetSnapshot(userId: string) {
+  const budgets = await db.budget.findMany({
+    where: { userId },
+    orderBy: [{ type: "asc" }, { category: "asc" }],
+  });
+
+  return budgets.map((budget) => {
+    const amount = toNumber(budget.amount);
+    const spent = toNumber(budget.spent);
+    return {
+      category: budget.subCategory ? `${budget.category} / ${budget.subCategory}` : budget.category,
+      type: budget.type,
+      amount,
+      spent,
+      remaining: amount - spent,
+      usage: amount > 0 ? Math.round((spent / amount) * 100) : 0,
+    };
+  });
+}
+
+async function getVehicleSnapshot(userId: string) {
+  const vehicles = await db.vehicle.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    include: {
+      fuelLogs: { orderBy: { date: "desc" }, take: 1 },
+      maintenanceRecords: {
+        where: { reminderEnabled: true },
+        orderBy: [{ nextDueDate: "asc" }, { nextDueKm: "asc" }],
+        take: 3,
+      },
+      documents: {
+        where: { reminderEnabled: true },
+        orderBy: { expiryDate: "asc" },
+        take: 3,
+      },
+      reminders: {
+        where: { isActive: true },
+        orderBy: [{ dueDate: "asc" }, { dueKm: "asc" }],
+        take: 3,
+      },
+    },
+  });
+
+  return vehicles.map((vehicle) => ({
+    name: vehicle.name,
+    plate: vehicle.plate,
+    currentKm: vehicle.currentKm,
+    lastFuelAmount: vehicle.fuelLogs[0] ? toNumber(vehicle.fuelLogs[0].amount) : null,
+    documents: vehicle.documents.map((doc) => ({
+      type: doc.type,
+      expiryDate: doc.expiryDate,
+      daysUntil: daysUntil(doc.expiryDate),
+    })),
+    maintenance: vehicle.maintenanceRecords.map((record) => ({
+      type: record.type,
+      description: record.description,
+      nextDueKm: record.nextDueKm,
+      nextDueDate: record.nextDueDate,
+    })),
+    reminders: vehicle.reminders.map((reminder) => ({
+      title: reminder.title,
+      dueDate: reminder.dueDate,
+      dueKm: reminder.dueKm,
+    })),
+  }));
+}
+
+async function getHealthSnapshot(userId: string) {
+  const horizon = addDays(startOfToday(), 30);
+  const [appointments, medications] = await Promise.all([
+    db.medicalAppointment.findMany({
+      where: { userId, status: "scheduled", date: { lte: horizon } },
+      orderBy: { date: "asc" },
+      take: 8,
+    }),
+    db.medication.findMany({
+      where: { userId, isActive: true },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    }),
+  ]);
+
+  return { appointments, medications };
+}
+
+async function getPantrySnapshot(userId: string) {
+  const today = startOfToday();
+  const soon = addDays(today, 14);
+  const items = await db.pantryItem.findMany({
+    where: { userId },
+    orderBy: [{ expirationDate: "asc" }, { name: "asc" }],
+    take: 30,
+  });
+
+  const expiring = items.filter((item) => item.expirationDate && item.expirationDate <= soon);
+  const lowStock = items.filter((item) => item.minStock != null && item.quantity <= item.minStock);
+  return { totalItems: items.length, expiring, lowStock };
+}
+
+async function registerFuelFromAura(userId: string, text: string, amount: number, options: { commit?: boolean } = {}): Promise<AuraToolResult> {
   const vehicles = await db.vehicle.findMany({
     where: { userId },
     include: { paymentDefault: true },
@@ -532,7 +714,9 @@ async function registerFuelFromAura(userId: string, text: string, amount: number
     const vehiclesText = vehicles.length > 0 ? `\nVehículos: ${vehicles.map((item) => item.name).join(", ")}` : "";
     const debtsText = debts.length > 0 ? `\nTarjetas/deudas: ${debts.map((item) => item.name).join(", ")}` : "";
     const accountsText = accounts.length > 0 ? `\nCuentas: ${accounts.slice(0, 5).map((item) => item.name).join(", ")}` : "";
-    return `Puedo registrar ese tanqueo, pero me falta: ${missing.join(", ")}. Responde con esos datos y lo guardo.${vehiclesText}${debtsText}${accountsText}`;
+    return {
+      text: `Puedo registrar ese tanqueo, pero me falta: ${missing.join(", ")}. Responde con esos datos y preparo el resumen antes de guardar.${vehiclesText}${debtsText}${accountsText}`,
+    };
   }
 
   const paymentDefault = vehicle!.paymentDefault;
@@ -542,6 +726,39 @@ async function registerFuelFromAura(userId: string, text: string, amount: number
   const debtId = debt?.id ?? paymentDefault?.debtId ?? null;
   const gallons = Math.round((amount / pricePerGallon!) * 100) / 100;
   const recordDate = parseRecordDate(text);
+  const paidWith = debt ? `con ${debt.name}` : account ? `desde ${account.name}` : "con el método predeterminado";
+
+  if (!options.commit) {
+    return {
+      text: [
+        "Resumen para confirmar el tanqueo:",
+        `- Vehículo: ${vehicle!.name}`,
+        `- Valor: ${COP.format(amount)}`,
+        `- Galones: ${gallons}`,
+        `- Precio por galón: ${COP.format(pricePerGallon!)}`,
+        `- Kilometraje: ${km!.toLocaleString("es-CO")} km`,
+        `- Método: ${paidWith}`,
+        "",
+        "Responde CONFIRMAR para guardarlo o CANCELAR para descartarlo.",
+      ].join("\n"),
+      action: {
+        type: "proposal",
+        tool: "registrar_tanqueo",
+        requiresConfirmation: true,
+        payload: {
+          vehicleId: vehicle!.id,
+          amount,
+          gallons,
+          pricePerGallon,
+          km,
+          accountId,
+          subAccountId,
+          debtId,
+          date: recordDate.toISOString(),
+        },
+      },
+    };
+  }
 
   const fuelLog = await db.fuelLog.create({
     data: {
@@ -582,18 +799,24 @@ async function registerFuelFromAura(userId: string, text: string, amount: number
     vehicleName: vehicle!.name,
   });
 
-  const paidWith = debt ? `con ${debt.name}` : account ? `desde ${account.name}` : "con el método predeterminado";
-  return `Listo, registré el tanqueo de ${vehicle!.name}: ${COP.format(amount)}, ${gallons} galones, km ${km!.toLocaleString("es-CO")}, ${paidWith}.`;
+  return {
+    text: `Listo, registré el tanqueo de ${vehicle!.name}: ${COP.format(amount)}, ${gallons} galones, km ${km!.toLocaleString("es-CO")}, ${paidWith}.`,
+    action: {
+      type: "executed",
+      tool: "registrar_tanqueo",
+      payload: { fuelLogId: fuelLog.id, vehicleId: vehicle!.id, amount },
+    },
+  };
 }
 
-async function createTransactionFromAura(userId: string, text: string) {
+async function createTransactionFromAura(userId: string, text: string, options: { commit?: boolean } = {}): Promise<AuraToolResult> {
   const amount = parseAmount(text);
   if (!amount) {
-    return "Claro. ¿Por cuánto valor fue el movimiento? Puedes responder algo como: “25 mil”.";
+    return { text: "Claro. ¿Por cuánto valor fue el movimiento? Puedes responder algo como: “25 mil”." };
   }
 
   if (isFuelIntent(text)) {
-    return registerFuelFromAura(userId, text, amount);
+    return registerFuelFromAura(userId, text, amount, options);
   }
 
   const accounts = await getAccountChoices(userId);
@@ -603,9 +826,28 @@ async function createTransactionFromAura(userId: string, text: string) {
   if (!account) {
     if (debt) {
       const type = inferTransactionType(text);
-      if (type === "income") return "Ese movimiento parece ingreso, pero mencionaste una tarjeta/deuda. ¿Lo registro en una cuenta o es un abono?";
+      if (type === "income") return { text: "Ese movimiento parece ingreso, pero mencionaste una tarjeta/deuda. ¿Lo registro en una cuenta o es un abono?" };
       const category = inferCategory(text, type);
       const date = parseRecordDate(text);
+      if (!options.commit) {
+        return {
+          text: [
+            "Resumen para confirmar la compra:",
+            `- Tarjeta/deuda: ${debt.name}`,
+            `- Valor: ${COP.format(amount)}`,
+            `- Categoría: ${category}`,
+            `- Fecha: ${formatDate(date)}`,
+            "",
+            "Responde CONFIRMAR para guardarla o CANCELAR para descartarla.",
+          ].join("\n"),
+          action: {
+            type: "proposal",
+            tool: "registrar_transaccion",
+            requiresConfirmation: true,
+            payload: { debtId: debt.id, amount, category, date: date.toISOString() },
+          },
+        };
+      }
       await createCreditCardPurchaseFromAura({
         debtId: debt.id,
         amount,
@@ -613,17 +855,47 @@ async function createTransactionFromAura(userId: string, text: string) {
         category,
         date,
       });
-      return `Listo, lo guardé como compra en ${debt.name}: ${COP.format(amount)}, categoría ${category}.`;
+      return {
+        text: `Listo, lo guardé como compra en ${debt.name}: ${COP.format(amount)}, categoría ${category}.`,
+        action: { type: "executed", tool: "registrar_transaccion", payload: { debtId: debt.id, amount, category } },
+      };
     }
-    const options = accounts.slice(0, 6).map((item) => `• ${item.name}: ${COP.format(item.balance)}`).join("\n");
+    const accountOptions = accounts.slice(0, 6).map((item) => `• ${item.name}: ${COP.format(item.balance)}`).join("\n");
     const debtOptions = debts.slice(0, 5).map((item) => `• ${item.name}: saldo ${COP.format(item.currentBalance)}`).join("\n");
-    return `Puedo guardarlo, pero me falta la cuenta o tarjeta. ¿Desde cuál lo registro?\n${options}${debtOptions ? `\n${debtOptions}` : ""}`;
+    return { text: `Puedo guardarlo, pero me falta la cuenta o tarjeta. ¿Desde cuál lo registro?\n${accountOptions}${debtOptions ? `\n${debtOptions}` : ""}` };
   }
 
   const type = inferTransactionType(text);
   const category = inferCategory(text, type);
   const description = transactionDescription(text, category);
   const balanceChange = type === "income" ? amount : -amount;
+
+  if (!options.commit) {
+    return {
+      text: [
+        `Resumen para confirmar el ${type === "income" ? "ingreso" : "gasto"}:`,
+        `- Cuenta: ${account.name}`,
+        `- Valor: ${COP.format(amount)}`,
+        `- Categoría: ${category}`,
+        `- Fecha: ${formatDate(parseRecordDate(text))}`,
+        "",
+        "Responde CONFIRMAR para guardarlo o CANCELAR para descartarlo.",
+      ].join("\n"),
+      action: {
+        type: "proposal",
+        tool: "registrar_transaccion",
+        requiresConfirmation: true,
+        payload: {
+          accountId: account.kind === "account" ? account.id : account.parentAccountId,
+          subAccountId: account.kind === "subAccount" ? account.id : null,
+          type,
+          amount,
+          category,
+          date: parseRecordDate(text).toISOString(),
+        },
+      },
+    };
+  }
 
   const transaction = await db.$transaction(async (tx) => {
     const created = await tx.transaction.create({
@@ -656,7 +928,10 @@ async function createTransactionFromAura(userId: string, text: string) {
   });
 
   const verb = type === "income" ? "ingreso" : "gasto";
-  return `Listo, lo guardé como ${verb}: ${COP.format(amount)} en ${account.name}, categoría ${category}. ID: ${transaction.id}.`;
+  return {
+    text: `Listo, lo guardé como ${verb}: ${COP.format(amount)} en ${account.name}, categoría ${category}. ID: ${transaction.id}.`,
+    action: { type: "executed", tool: "registrar_transaccion", payload: { transactionId: transaction.id, amount, type, category } },
+  };
 }
 
 function findRecurringMatch(text: string, items: PendingRecurring[]) {
@@ -755,6 +1030,16 @@ async function answerWithQuidData(userId: string, action: AuraAction, text: stri
     return `En ${formatDateRange(snapshot.range)} registraste ${COP.format(snapshot.total)} en transferencias (${snapshot.count} movimiento${snapshot.count === 1 ? "" : "s"}).`;
   }
 
+  if (action === "consultar_flujo") {
+    const range = parseDateRange(text);
+    const [income, expenses] = await Promise.all([
+      getMovementSnapshot(userId, "income", range),
+      getMovementSnapshot(userId, "expense", range),
+    ]);
+    const net = income.total - expenses.total;
+    return `En ${formatDateRange(range)} tu flujo va así:\n• Ingresos: ${COP.format(income.total)} (${income.count})\n• Gastos: ${COP.format(expenses.total)} (${expenses.count})\n• Neto: ${COP.format(net)}${net >= 0 ? " a favor" : " por debajo"}.`;
+  }
+
   if (action === "consultar_recurrentes") {
     const recurring = await getPendingRecurring(userId);
     if (recurring.length === 0) return "No tienes recurrentes pendientes en este momento.";
@@ -795,6 +1080,62 @@ async function answerWithQuidData(userId: string, action: AuraAction, text: stri
       .map((cdt) => `• ${cdt.bank}: ${COP.format(cdt.amount)} al ${cdt.effectiveRate}% EA, vence ${formatDate(cdt.endDate)} (${cdt.status})`)
       .join("\n");
     return `Tienes ${COP.format(total)} en CDTs.\n${rows}`;
+  }
+
+  if (action === "consultar_deudas") {
+    const debts = await getDebtSnapshot(userId);
+    if (debts.length === 0) return "No tienes deudas o tarjetas registradas todavía.";
+    const total = debts.reduce((sum, debt) => sum + debt.currentBalance, 0);
+    const rows = debts
+      .slice(0, 8)
+      .map((debt) => `• ${debt.name}: saldo ${COP.format(debt.currentBalance)}${debt.paymentDate ? `, pago día ${debt.paymentDate}` : ""}`)
+      .join("\n");
+    return `Tu saldo total en deudas/tarjetas es ${COP.format(total)}.\n${rows}`;
+  }
+
+  if (action === "consultar_presupuestos") {
+    const budgets = await getBudgetSnapshot(userId);
+    if (budgets.length === 0) return "No tienes presupuestos configurados todavía.";
+    const rows = budgets
+      .slice(0, 10)
+      .map((budget) => `• ${budget.category}: ${COP.format(budget.spent)} de ${COP.format(budget.amount)} (${budget.usage}%)`)
+      .join("\n");
+    return `Así van tus presupuestos:\n${rows}`;
+  }
+
+  if (action === "consultar_vehiculos") {
+    const vehicles = await getVehicleSnapshot(userId);
+    if (vehicles.length === 0) return "No tienes vehículos registrados todavía.";
+    return vehicles
+      .slice(0, 5)
+      .map((vehicle) => {
+        const docs = vehicle.documents.length > 0
+          ? ` Documentos: ${vehicle.documents.map((doc) => `${doc.type.toUpperCase()} ${doc.daysUntil <= 0 ? "vencido/hoy" : `en ${doc.daysUntil}d`}`).join(", ")}.`
+          : "";
+        const reminders = vehicle.reminders.length > 0
+          ? ` Recordatorios: ${vehicle.reminders.map((reminder) => reminder.title).join(", ")}.`
+          : "";
+        return `• ${vehicle.name}${vehicle.plate ? ` (${vehicle.plate})` : ""}: ${Math.round(vehicle.currentKm).toLocaleString("es-CO")} km.${docs}${reminders}`;
+      })
+      .join("\n");
+  }
+
+  if (action === "consultar_salud") {
+    const health = await getHealthSnapshot(userId);
+    const rows = [
+      ...health.appointments.slice(0, 5).map((item) => `• Cita: ${item.specialty || "general"}${item.doctorName ? ` con ${item.doctorName}` : ""} - ${formatDate(item.date)}`),
+      ...health.medications.slice(0, 5).map((item) => `• Medicamento: ${item.name} (${item.dosage})`),
+    ];
+    return rows.length > 0 ? `Esto tengo registrado en salud:\n${rows.join("\n")}` : "No veo citas próximas ni medicamentos activos registrados.";
+  }
+
+  if (action === "consultar_despensa") {
+    const pantry = await getPantrySnapshot(userId);
+    const expiring = pantry.expiring.slice(0, 5).map((item) => `• ${item.name}: vence ${item.expirationDate ? formatDate(item.expirationDate) : "sin fecha"}`);
+    const lowStock = pantry.lowStock.slice(0, 5).map((item) => `• ${item.name}: quedan ${item.quantity} ${item.unit}`);
+    const rows = [...expiring, ...lowStock];
+    if (rows.length === 0) return `Tienes ${pantry.totalItems} producto(s) en despensa y no veo vencimientos cercanos ni bajo stock crítico.`;
+    return `Tienes ${pantry.totalItems} producto(s) en despensa. Atención:\n${rows.join("\n")}`;
   }
 
   return null;
@@ -845,23 +1186,33 @@ No menciones herramientas internas ni detalles técnicos.`;
 export async function askAura(userId: string, messages: CoreMessage[]) {
   const text = resolveActionText(messages);
   const action = inferAction(text);
+  const commitRequested = isConfirmationText(lastUserText(messages)) && hasRecentAuraProposal(messages);
 
   try {
-    let directAnswer: string | null = null;
+    if (isCancellationText(lastUserText(messages)) && hasRecentAuraProposal(messages)) {
+      return {
+        text: "Listo, no guardé nada. Dejé esa propuesta descartada.",
+        action: "chat",
+        responseMessages: [...messages, { role: "assistant" as const, content: "Listo, no guardé nada. Dejé esa propuesta descartada." }],
+      };
+    }
+
+    let directAnswer: AuraToolResult | null = null;
 
     if (action === "registrar_transaccion") {
-      directAnswer = await createTransactionFromAura(userId, text);
+      directAnswer = await createTransactionFromAura(userId, text, { commit: commitRequested });
     } else if (action === "confirmar_recurrente") {
-      directAnswer = await confirmRecurringFromAura(userId, text);
+      directAnswer = { text: await confirmRecurringFromAura(userId, text), action: { type: "executed", tool: "confirmar_recurrente" } };
     } else {
-      directAnswer = await answerWithQuidData(userId, action, text);
+      const answer = await answerWithQuidData(userId, action, text);
+      directAnswer = answer ? { text: answer } : null;
     }
 
     if (directAnswer) {
       return {
-        text: directAnswer,
-        action,
-        responseMessages: [...messages, { role: "assistant" as const, content: directAnswer }],
+        text: directAnswer.text,
+        action: directAnswer.action ?? action,
+        responseMessages: [...messages, { role: "assistant" as const, content: directAnswer.text }],
       };
     }
 

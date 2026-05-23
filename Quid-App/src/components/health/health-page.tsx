@@ -3,15 +3,18 @@
 import { useState, useEffect } from "react";
 import { useAppStore, type HealthSubView, type SidebarAction } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
-import { Pill, Stethoscope } from "lucide-react";
+import { ClipboardList, Pill, Stethoscope } from "lucide-react";
 import { MedicationsView } from "./medications-view";
 import { AppointmentsView } from "./appointments-view";
+import { MedicalOrdersView } from "./medical-orders-view";
 import { MedicationForm } from "./medication-form";
 import { AppointmentForm } from "./appointment-form";
+import { MedicalOrderForm } from "./medical-order-form";
 
 const tabs: { id: HealthSubView; label: string; icon: typeof Pill }[] = [
   { id: "medications", label: "Medicamentos", icon: Pill },
   { id: "appointments", label: "Citas Médicas", icon: Stethoscope },
+  { id: "orders", label: "Órdenes", icon: ClipboardList },
 ];
 
 export function HealthPage() {
@@ -20,6 +23,7 @@ export function HealthPage() {
   // Sidebar quick-action forms
   const [showMedicationForm, setShowMedicationForm] = useState(false);
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
+  const [showMedicalOrderForm, setShowMedicalOrderForm] = useState(false);
 
   // ─── Swipe gesture for tab switching ─────────────────────────
   const [touchStart, setTouchStart] = useState<{ x: number; y: number; time: number } | null>(null);
@@ -63,6 +67,10 @@ export function HealthPage() {
         setHealthSubView("appointments");
         setShowAppointmentForm(true);
       },
+      "create-medical-order": () => {
+        setHealthSubView("orders");
+        setShowMedicalOrderForm(true);
+      },
     };
 
     const handler = actionMap[sidebarAction];
@@ -78,6 +86,8 @@ export function HealthPage() {
         return <MedicationsView />;
       case "appointments":
         return <AppointmentsView />;
+      case "orders":
+        return <MedicalOrdersView />;
       case "profiles":
         return <MedicationsView />;
       default:
@@ -153,6 +163,11 @@ export function HealthPage() {
       <AppointmentForm
         open={showAppointmentForm}
         onOpenChange={setShowAppointmentForm}
+      />
+
+      <MedicalOrderForm
+        open={showMedicalOrderForm}
+        onOpenChange={setShowMedicalOrderForm}
       />
     </div>
   );

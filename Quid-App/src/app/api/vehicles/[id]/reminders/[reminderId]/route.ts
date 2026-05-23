@@ -48,6 +48,43 @@ export async function PUT(
     }
 
     const body = await validateBody(req, vehicleReminderUpdateSchema);
+    if (body.isActive === false && existing.repeatIntervalKm && existing.dueKm) {
+      const completedKm = body.completedKm ?? existing.dueKm;
+      const nextDueKm = completedKm + existing.repeatIntervalKm;
+      const [completed, nextReminder] = await db.$transaction([
+        db.vehicleReminder.update({
+          where: { id: reminderId },
+          data: {
+            isActive: false,
+            completedAt: body.completedAt ? new Date(body.completedAt) : new Date(),
+            completedKm,
+          },
+        }),
+        db.vehicleReminder.create({
+          data: {
+            userId: existing.userId,
+            vehicleId: existing.vehicleId,
+            title: existing.title,
+            description: existing.description,
+            category: existing.category,
+            triggerMode: existing.triggerMode,
+            dueDate: existing.dueDate,
+            dueKm: nextDueKm,
+            warningDays: existing.warningDays,
+            warningKm: existing.warningKm,
+            repeatIntervalDays: existing.repeatIntervalDays,
+            repeatIntervalKm: existing.repeatIntervalKm,
+            isActive: true,
+          },
+        }),
+      ]);
+
+      return NextResponse.json({
+        completed: serializeReminder(completed),
+        next: serializeReminder(nextReminder),
+      });
+    }
+
     const reminder = await db.vehicleReminder.update({
       where: { id: reminderId },
       data: {
