@@ -45,12 +45,21 @@ services:
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:quid@app.com}
       - AURA_API_KEY=${AURA_API_KEY:-AuraSecretKey2026}
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434/api}
+      - OLLAMA_URL=${OLLAMA_URL:-http://quid-ollama:11434/api}
       - AURA_MODEL=${AURA_MODEL:-hermes3:8b}
       - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-false}
       - CRON_SECRET=${CRON_SECRET:-local-cron-secret-change-me}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  quid-ollama:
+    image: ollama/ollama:latest
+    container_name: quid-ollama
+    volumes:
+      - quid-ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
     restart: unless-stopped
 
   quid-cron:
@@ -79,3 +88,4 @@ services:
 
 volumes:
   quid-postgres-data:
+  quid-ollama-data:
