@@ -4,6 +4,13 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { verifyEntityOwnership } from "@/lib/auth-guards";
 import { validateBody, recurringCreateSchema } from "@/lib/validations";
+import type { Prisma } from "@prisma/client";
+
+type DestinationAccount =
+  | Prisma.AccountGetPayload<{
+      select: { id: true; name: true; type: true; color: true; balance: true };
+    }>
+  | null;
 
 export async function GET() {
   try {
@@ -46,8 +53,7 @@ export async function GET() {
     // Manually resolve destination accounts for any transfer-type payments
     const enriched = await Promise.all(
       recurringPayments.map(async (payment) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let destinationAccount: any = null;
+        let destinationAccount: DestinationAccount = null;
         if (payment.destinationAccountId) {
           const acc = await db.account.findUnique({
             where: { id: payment.destinationAccountId },

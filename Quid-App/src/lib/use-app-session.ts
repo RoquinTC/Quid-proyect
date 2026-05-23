@@ -6,8 +6,8 @@
  *
  * Flow:
  *   1. If next-auth session is available → use it (clear offline session)
- *   2. If next-auth returns unauthenticated AND we have an offline session → use offline
- *   3. If neither → return null (show login form)
+ *   2. If the user explicitly unlocked an offline session -> use offline
+ *   3. If neither -> return null (AppShell can show login/offline unlock)
  *
  * This ensures the app ALWAYS has a session when the user has previously
  * logged in, even if the server/tunnel is down.
@@ -17,7 +17,6 @@
 
 import { useSession } from "next-auth/react";
 import { useAppStore } from "@/lib/store";
-import { getCachedSession } from "@/lib/offline-session";
 import { useEffect, useMemo } from "react";
 
 export interface AppSession {
@@ -126,18 +125,10 @@ export function useAppSession(): {
       };
     }
 
-    // 4. No offline session in Zustand — check localStorage cache
-    const cachedSession = getCachedSession();
-    if (cachedSession?.user?.id) {
-      // Auto-restore from localStorage cache (don't wait for Zustand hydration)
-      return {
-        session: cachedSession,
-        status: "authenticated" as const,
-        isOffline: true,
-      };
-    }
-
-    // 5. No session at all
+    // 4. No session at all
+    // Cached localStorage sessions are intentionally handled by AppShell's
+    // OfflineLockScreen. Auto-restoring them here can leave the app showing
+    // connected screens while protected APIs correctly reject the request.
     return {
       session: null,
       status: "unauthenticated" as const,

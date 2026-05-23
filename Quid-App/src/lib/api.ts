@@ -298,27 +298,16 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
   if (isGet) {
     // Ensure IndexedDB is available (lazy load)
     await ensureLocalDB();
+    let response: Response;
     try {
-      const response = await fetch(url, {
+      response = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
           ...options?.headers,
         },
         ...options,
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Cache successful GET response in IndexedDB for offline use
-      cacheGetResponse(url, data).catch(() => { /* non-blocking */ });
-
-      return data as T;
-    } catch (networkError) {
-      // Server unreachable — try IndexedDB
+    } catch {
       const localData = await readFromLocalDB<T>(url);
       if (localData !== null) {
         console.log(`[Offline] Serving ${url} from IndexedDB cache`);
@@ -326,6 +315,26 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
       }
       throw new Error("Error de conexión: no se pudo contactar el servidor");
     }
+
+    if (!response.ok) {
+      if (isOfflineLikeStatus(response.status)) {
+        const localData = await readFromLocalDB<T>(url);
+        if (localData !== null) {
+          console.log(`[Offline] Serving ${url} from IndexedDB cache`);
+          return localData;
+        }
+        throw new Error("Error de conexión: no se pudo contactar el servidor");
+      }
+
+      throw new Error(await readApiError(response));
+    }
+
+    const data = await response.json();
+
+    // Cache successful GET response in IndexedDB for offline use
+    cacheGetResponse(url, data).catch(() => { /* non-blocking */ });
+
+    return data as T;
   }
 
   // For POST/PUT/DELETE: try server, queue only when the server is unreachable.

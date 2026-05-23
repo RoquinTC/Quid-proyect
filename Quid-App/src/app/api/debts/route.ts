@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { createColombiaDate } from "@/lib/api";
 import { validateBody, debtCreateSchema } from "@/lib/validations";
 
+type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -132,8 +134,7 @@ export async function POST(req: NextRequest) {
         const budgetSubCategory = subCategory || null;
 
         // Check if budget already exists for this category
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let existingBudget: any = null;
+        let existingBudget: BudgetRecord = null;
         if (budgetSubCategory) {
           existingBudget = await db.budget.findFirst({
             where: { userId: session.user.id, category: budgetCategory, subCategory: budgetSubCategory, type: "expense" },

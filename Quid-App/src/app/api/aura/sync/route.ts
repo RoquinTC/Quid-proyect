@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { db } from "@/lib/db";
 import { headers } from "next/headers";
 
 /**
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const user = await prisma.user.findUnique({
+    const user = await db.user.findUnique({
       where: { email },
       include: {
         accounts: { include: { subAccounts: true } },
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     }
 
     // Obtener transacciones recientes para análisis
-    const transactions = await prisma.transaction.findMany({
+    const transactions = await db.transaction.findMany({
       where: {
         userId: user.id,
         date: { gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000) },

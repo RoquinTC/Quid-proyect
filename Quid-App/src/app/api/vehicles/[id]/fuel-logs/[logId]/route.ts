@@ -42,8 +42,7 @@ export async function PUT(
     const newPricePerGallon = pricePerGallon !== undefined ? pricePerGallon : Number(existing.pricePerGallon);
     const newGallons = newPricePerGallon > 0 ? Math.round((newAmount / newPricePerGallon) * 100) / 100 : Number(existing.gallons);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const updateData: any = {};
+    const updateData: Parameters<typeof db.fuelLog.update>[0]["data"] = {};
     if (date !== undefined && date) {
       updateData.date = createColombiaDate(date.split("T")[0]);
     }

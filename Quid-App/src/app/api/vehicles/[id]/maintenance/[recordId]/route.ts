@@ -33,20 +33,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const { type, description, cost, km, date, nextDueKm, nextDueDate, reminderEnabled } = body;
+    const updateData: Parameters<typeof db.maintenanceRecord.update>[0]["data"] = {
+      ...(type !== undefined && { type }),
+      ...(description !== undefined && { description }),
+      ...(cost !== undefined && { cost: Number(cost) }),
+      ...(km !== undefined && { km: Number(km) }),
+      ...(date != null && { date: createColombiaDate(date.split("T")[0]) }),
+      ...(nextDueKm !== undefined && { nextDueKm: nextDueKm ? Number(nextDueKm) : null }),
+      ...(nextDueDate !== undefined && { nextDueDate: nextDueDate ? createColombiaDate(nextDueDate.split("T")[0]) : null }),
+      ...(reminderEnabled !== undefined && { reminderEnabled }),
+    };
 
     const record = await db.maintenanceRecord.update({
       where: { id: recordId },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data: {
-        ...(type !== undefined && { type }),
-        ...(description !== undefined && { description }),
-        ...(cost !== undefined && { cost: Number(cost) }),
-        ...(km !== undefined && { km: Number(km) }),
-        ...(date !== undefined && { date: date ? createColombiaDate(date.split("T")[0]) : null }),
-        ...(nextDueKm !== undefined && { nextDueKm: nextDueKm ? Number(nextDueKm) : null }),
-        ...(nextDueDate !== undefined && { nextDueDate: nextDueDate ? createColombiaDate(nextDueDate.split("T")[0]) : null }),
-        ...(reminderEnabled !== undefined && { reminderEnabled }),
-      } as any,
+      data: updateData,
     });
 
     // Update the linked finance transaction if cost changed

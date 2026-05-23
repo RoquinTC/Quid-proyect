@@ -167,7 +167,67 @@
 
 /* Safe area bottom padding for scrollable content (prevents content hidden behind nav on iPhone) */
 .pb-safe {
-  padding-bottom: max(10rem, calc(8rem + env(safe-area-inset-bottom, 0px)));
+  padding-bottom: max(10rem, calc(8rem + env(safe-area-inset-bottom, 0px))) !important;
+}
+
+.scroll-pb-safe {
+  scroll-padding-bottom: max(10rem, calc(8rem + env(safe-area-inset-bottom, 0px)));
+}
+
+/* Mobile density pass: keep Quid readable without oversized cards/numbers on
+   360px-class Android devices while preserving the desktop scale. */
+@media (max-width: 430px) {
+  :root {
+    --radius: 0.625rem;
+  }
+
+  body {
+    font-size: 15px;
+  }
+
+  .p-5 {
+    padding: 1rem;
+  }
+
+  .p-4 {
+    padding: 0.875rem;
+  }
+
+  .gap-4 {
+    gap: 0.875rem;
+  }
+
+  .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0;
+    margin-top: calc(0.875rem * calc(1 - var(--tw-space-y-reverse)));
+    margin-bottom: calc(0.875rem * var(--tw-space-y-reverse));
+  }
+
+  .text-3xl {
+    font-size: 1.55rem;
+    line-height: 1.95rem;
+  }
+
+  .text-2xl {
+    font-size: 1.35rem;
+    line-height: 1.75rem;
+  }
+
+  .text-xl {
+    font-size: 1.125rem;
+    line-height: 1.55rem;
+  }
+
+  .rounded-2xl {
+    border-radius: 0.875rem;
+  }
+
+  .shadow-lg,
+  .shadow-md {
+    --tw-shadow: 0 8px 20px -16px rgb(15 23 42 / 0.45);
+    --tw-shadow-colored: 0 8px 20px -16px var(--tw-shadow-color);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
 }
 
 /* Hide scrollbar utility */

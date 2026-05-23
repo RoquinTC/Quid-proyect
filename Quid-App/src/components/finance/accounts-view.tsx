@@ -1653,8 +1653,8 @@ export function AccountsView() {
 
       {/* Sheet-based customization (secondary option) */}
       <Sheet open={customizeOpen} onOpenChange={setCustomizeOpen}>
-        <SheetContent className="w-[340px] sm:w-[400px]">
-          <SheetHeader>
+        <SheetContent className="flex h-dvh w-[min(360px,92vw)] flex-col gap-0 overflow-hidden sm:w-[400px]">
+          <SheetHeader className="shrink-0 pb-3">
             <SheetTitle className="flex items-center gap-2">
               <Settings2 className="size-5 text-emerald-500" />
               Personalizar Widgets
@@ -1663,7 +1663,7 @@ export function AccountsView() {
               Oculta, muestra y reordena las secciones de tu dashboard
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-4">
+          <div className="min-h-0 flex-1 overflow-y-auto py-3 pr-1">
             <DndContext
               sensors={handleSensors}
               collisionDetection={closestCenter}
@@ -1687,7 +1687,8 @@ export function AccountsView() {
                 </div>
               </SortableContext>
             </DndContext>
-            <div className="mt-4 space-y-2">
+          </div>
+          <div className="shrink-0 space-y-2 border-t border-gray-100 bg-background pt-3 dark:border-gray-800">
               <Button
                 onClick={saveCustomization}
                 className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500"
@@ -1702,7 +1703,6 @@ export function AccountsView() {
                 <RotateCcw className="size-3.5 mr-1.5" />
                 Restablecer
               </Button>
-            </div>
           </div>
         </SheetContent>
       </Sheet>

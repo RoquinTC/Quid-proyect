@@ -6,6 +6,8 @@ import { getColombiaNow } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtAbonoSchema } from "@/lib/validations";
 
+type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
 /**
  * Process an "abono a capital" — an extra payment that reduces the remainingBalance
  * of selected installments WITHOUT marking them as paid.
@@ -212,8 +214,7 @@ export async function POST(
     // ── Update budget using debt's category ──
     const categoryToMatch = debt.category || "Deudas";
     const subCatToMatch = debt.subCategory || null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let budget: any = null;
+    let budget: BudgetRecord = null;
     if (subCatToMatch) {
       budget = await db.budget.findFirst({
         where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },

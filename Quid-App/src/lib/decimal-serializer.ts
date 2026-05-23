@@ -136,8 +136,12 @@ const originalNextResponseJson = NextResponse.json;
 
 // Patch toJSON: Decimal → number in JSON responses
 // Uses toString() to avoid circular call (Number(this) would call valueOf() again)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(Decimal.prototype as any).toJSON = function (this: {
+const decimalPrototype = Decimal.prototype as unknown as {
+  toJSON: (this: { toString: () => string }) => number;
+  valueOf: (this: { toString: () => string }) => number;
+};
+
+decimalPrototype.toJSON = function (this: {
   toString: () => string;
 }): number {
   return Number(this.toString());
@@ -150,8 +154,7 @@ const originalNextResponseJson = NextResponse.json;
 // Uses Number(this.toString()) instead of Number(this) to avoid INFINITE RECURSION:
 //   Number(decimalObj) → calls valueOf() → return Number(this) → calls valueOf() → ...
 //   Number(this.toString()) → toString() returns "100.00" → Number("100.00") = 100 ✓
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(Decimal.prototype as any).valueOf = function (this: {
+decimalPrototype.valueOf = function (this: {
   toString: () => string;
 }): number {
   return Number(this.toString());
@@ -189,4 +192,6 @@ export function toNumber(value: unknown): number {
   return Number.isNaN(num) ? 0 : num;
 }
 
-console.log('[Decimal] NextResponse.json PRE-WALK patch + prototype patches applied (3-layer defense)');
+if (process.env.QUID_DEBUG_DECIMAL === "1") {
+  console.log("[Decimal] NextResponse.json PRE-WALK patch + prototype patches applied (3-layer defense)");
+}

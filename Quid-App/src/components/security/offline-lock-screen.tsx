@@ -18,8 +18,8 @@ interface OfflineLockScreenProps {
 type AuthMethod = "pin" | "password";
 
 /**
- * Offline Lock Screen — shown when the server is unreachable
- * but the user has a previously cached session.
+ * Offline Lock Screen — shown when the online session is unavailable
+ * but the user has a previously cached local session.
  *
  * Allows the user to unlock with their PIN or password (verified locally)
  * to access their data.
@@ -42,7 +42,7 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
   const handleUnlockSuccess = useCallback(() => {
     // Cache the session for the Service Worker
     cacheOfflineSession(cachedSession);
-    toast.success("¡Desbloqueado (sin conexión)!");
+    toast.success("Sesión local desbloqueada");
     onUnlock();
   }, [cachedSession, onUnlock]);
 
@@ -113,13 +113,13 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
           <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
             Quid
           </h1>
-          <p className="text-xs text-gray-400 mt-1">Modo sin conexión</p>
+          <p className="text-xs text-gray-400 mt-1">Sesión local protegida</p>
         </div>
 
         {/* Offline indicator */}
         <div className="flex items-center gap-2 text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-4 py-2 rounded-full">
           <WifiOff className="size-4" />
-          <span className="text-sm font-medium">Sin conexión al servidor</span>
+          <span className="text-sm font-medium">Desbloquea para continuar</span>
         </div>
 
         {/* User info */}
@@ -143,7 +143,7 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
                 onComplete={handlePinComplete}
                 error={pinError || undefined}
                 title="Ingresa tu PIN"
-                subtitle="Para acceder sin conexión"
+                subtitle="Para acceder a tus datos guardados"
               />
             </motion.div>
           )}
@@ -159,7 +159,7 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
               {hasOfflineCredentials ? (
                 <form onSubmit={handlePasswordSubmit} className="space-y-4">
                   <div className="text-center">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Ingresa tu contraseña para acceder sin conexión</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Ingresa tu contraseña para acceder a tus datos guardados</p>
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
@@ -187,10 +187,10 @@ export function OfflineLockScreen({ cachedSession, onUnlock }: OfflineLockScreen
               ) : (
                 <div className="text-center space-y-4">
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Necesitas haber iniciado sesión al menos una vez con conexión para acceder sin conexión.
+                    Necesitas haber iniciado sesión al menos una vez para usar el acceso local.
                   </p>
                   <p className="text-xs text-gray-400">
-                    Conéctate a internet para iniciar sesión y habilitar el acceso offline.
+                    Inicia sesión nuevamente para habilitar el acceso local protegido.
                   </p>
                 </div>
               )}

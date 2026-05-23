@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 
+type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
 /**
  * Reverse the last payment made for a debt's installments.
  *
@@ -263,8 +265,7 @@ export async function POST(
           categoryToMatch = budgetKey;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let budget: any = null;
+        let budget: BudgetRecord = null;
         if (subCatToMatch) {
           budget = await db.budget.findFirst({
             where: {

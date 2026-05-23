@@ -8,6 +8,8 @@ import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, recurringConfirmSchema } from "@/lib/validations";
 import { createColombiaDate, getColombiaTodayString } from "@/lib/api";
 
+type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
 /**
  * Calculate the next scheduled date for a recurring payment.
  * - Monthly with customDays: customDays is a JSON array with one day, e.g. "[15]"
@@ -415,12 +417,11 @@ export async function POST(
       //   once here (direct increment) + once via recalculate (Source B).
       // For loans, budget IS updated because loan installments are NOT counted by recalculate
       // Source B (it only counts CC installments, not loan installments).
-      const isLoan = payment.debt?.type === "loan";
+        const isLoan = payment.debt?.type === "loan";
       if (isLoan) {
         const categoryToMatch = payment.category || "Deudas";
         const subCatToMatch = payment.subCategory || null;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let budget: any = null;
+        let budget: BudgetRecord = null;
         if (subCatToMatch) {
           budget = await db.budget.findFirst({
             where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },
@@ -482,8 +483,7 @@ export async function POST(
       // Update income budget spent if category matches
       const categoryToMatch = payment.category || "Sueldo";
       const subCatToMatch = payment.subCategory || null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let budget: any = null;
+      let budget: BudgetRecord = null;
       if (subCatToMatch) {
         budget = await db.budget.findFirst({
           where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "income" },
@@ -534,8 +534,7 @@ export async function POST(
       // Update budget spent if category matches
       const categoryToMatch = payment.category || "Pagos Recurrentes";
       const subCatToMatch = payment.subCategory || null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let budget: any = null;
+      let budget: BudgetRecord = null;
       if (subCatToMatch) {
         budget = await db.budget.findFirst({
           where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },

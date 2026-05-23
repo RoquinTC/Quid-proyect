@@ -6,6 +6,8 @@ import { getColombiaNow, getColombiaTodayString, createColombiaDate } from "@/li
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtPaySchema } from "@/lib/validations";
 
+type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
 /**
  * Determine which billing cycle an installment CURRENTLY belongs to,
  * based on its nextPaymentDate (not purchaseDate).
@@ -487,8 +489,7 @@ export async function POST(
           categoryToMatch = budgetKey;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let budget: any = null;
+        let budget: BudgetRecord = null;
         if (subCatToMatch) {
           budget = await db.budget.findFirst({
             where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },

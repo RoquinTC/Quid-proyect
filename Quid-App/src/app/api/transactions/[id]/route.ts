@@ -7,6 +7,8 @@ import { verifyEntityOwnership } from "@/lib/auth-guards";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, transactionUpdateSchema } from "@/lib/validations";
 
+type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -290,8 +292,7 @@ export async function DELETE(
       // Reverse budget for counterpart if applicable
       if (counterpart?.category) {
         // Find matching budget (subCategory-specific first, then parent)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let counterpartBudget: any = null;
+        let counterpartBudget: BudgetRecord = null;
         if (counterpart.subCategory) {
           counterpartBudget = await db.budget.findFirst({
             where: { userId: session.user.id, category: counterpart.category, subCategory: counterpart.subCategory, type: "income" },
@@ -348,8 +349,7 @@ export async function DELETE(
     // Reverse budget spent (with subCategory matching)
     if (existing.category) {
       const budgetType = existing.type === "income" ? "income" : "expense";
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let budget: any = null;
+      let budget: BudgetRecord = null;
       // Try subCategory-specific budget first
       if (existing.subCategory) {
         budget = await db.budget.findFirst({

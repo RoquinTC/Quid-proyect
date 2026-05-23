@@ -45,7 +45,7 @@ function ModuleContent() {
     /* Scroll container must be a STATIC div — CSS transforms on a parent
        (from Framer Motion's `y` animation) break `position: sticky`
        in children like the finance tab bar. */
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto scroll-pb-safe">
       <AnimatePresence mode="wait">
         <motion.div
           key={activeModule}
@@ -260,12 +260,20 @@ export function AppShell() {
     if (status === "unauthenticated" && !session) {
       setManuallyUnlocked(false);
       setJustLoggedIn(false);
-      clearOfflineSession();
-      clearOfflineCredentials();
       setOfflineSession(null);
-      // Notify Service Worker to clear cached session
-      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_SESSION' });
+
+      let justLoggedOut = false;
+      try {
+        justLoggedOut = sessionStorage.getItem("quid-just-logged-out") === "true";
+      } catch {}
+
+      if (justLoggedOut) {
+        clearOfflineSession();
+        clearOfflineCredentials();
+        // Notify Service Worker to clear cached session
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_SESSION' });
+        }
       }
     }
   }, [status, session, setOfflineSession]);

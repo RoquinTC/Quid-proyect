@@ -173,14 +173,14 @@ export function AppSidebar() {
 
   return (
     <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-      <SheetContent side="left" className="w-[300px] p-0 gap-0 rounded-r-3xl overflow-hidden border-r border-border bg-white/95 text-gray-900 shadow-2xl backdrop-blur-xl dark:bg-gray-950/95 dark:text-gray-100">
+      <SheetContent side="left" className="flex h-dvh w-[min(300px,92vw)] flex-col gap-0 overflow-hidden rounded-r-2xl border-r border-border bg-white/95 p-0 text-gray-900 shadow-2xl backdrop-blur-xl dark:bg-gray-950/95 dark:text-gray-100">
         {/* User Profile Header */}
-        <div className="border-b border-gray-100 bg-white/80 p-5 pb-5 dark:border-gray-800 dark:bg-gray-950/80">
+        <div className="shrink-0 border-b border-gray-100 bg-white/80 p-4 pb-4 dark:border-gray-800 dark:bg-gray-950/80">
           <SheetHeader className="mb-3 p-0 space-y-0">
             <SheetTitle className="text-left text-lg text-gray-900 dark:text-gray-100">Menú</SheetTitle>
           </SheetHeader>
           <div className="flex items-center gap-3">
-            <Avatar className="size-12 ring-2 ring-primary/25">
+            <Avatar className="size-11 ring-2 ring-primary/25">
               <AvatarImage
                 src={session?.user?.image || ""}
                 alt={session?.user?.name || "Usuario"}
@@ -201,7 +201,7 @@ export function AppSidebar() {
         </div>
 
         {/* Scrollable content */}
-        <div className="overflow-y-auto max-h-[calc(100dvh-14rem)] bg-white/80 dark:bg-gray-950/80">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-white/80 pb-3 dark:bg-gray-950/80">
           {/* Module Navigation with expandable actions */}
           <div className="p-3 space-y-1">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">
@@ -389,7 +389,7 @@ export function AppSidebar() {
         {/* Sign Out - Fixed at bottom */}
         <ShareInvite open={shareOpen} onOpenChange={setShareOpen} />
 
-        <div className="absolute bottom-0 left-0 right-0 bg-white/90 px-6 py-4 safe-area-bottom backdrop-blur dark:bg-gray-950/90">
+        <div className="shrink-0 border-t border-gray-100 bg-white/90 px-4 py-3 safe-area-bottom backdrop-blur dark:border-gray-800 dark:bg-gray-950/90">
           <Button
             variant="ghost"
             className="w-full justify-start text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-xl gap-3 text-sm"

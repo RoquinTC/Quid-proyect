@@ -4,7 +4,7 @@ import { getToken } from "next-auth/jwt";
 import { isSecureCookieEnabled, SESSION_COOKIE_NAME } from "@/lib/auth-cookie";
 
 // ---------------------------------------------------------------------------
-// Rate Limiting — sliding window counter (in-memory, per user/IP)
+// Rate Limiting - sliding window counter (in-memory, per user/IP)
 // ---------------------------------------------------------------------------
 interface RateBucket {
   count: number;
@@ -73,22 +73,22 @@ const PUBLIC_ROUTES = [
 ];
 
 // ---------------------------------------------------------------------------
-// Middleware
+// Proxy
 // ---------------------------------------------------------------------------
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Only process API routes (auth + rate limiting)
-  // Page routes pass through — intl middleware will be activated when
+  // Page routes pass through - intl middleware will be activated when
   // the app is restructured with [locale] route segment in the future.
   if (!pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
   // ---- Aura AI Bypass ----
-  // Permite que el agente autónomo acceda a sus endpoints de sincronización
-  // usando su API Key en lugar de una sesión de usuario.
+  // Permite que el agente autonomo acceda a sus endpoints de sincronizacion
+  // usando su API Key en lugar de una sesion de usuario.
   if (pathname.startsWith("/api/aura/sync") || pathname === "/api/aura/chat") {
     const auraToken = request.headers.get("x-aura-token");
     if (auraToken === process.env.AURA_API_KEY) {
@@ -133,13 +133,13 @@ export async function middleware(request: NextRequest) {
         if (process.env.NODE_ENV === "production") {
           throw new Error("NEXTAUTH_SECRET is required in production.");
         }
-        return "dev-only-secret-" + "middleware" + "-CHANGE-IN-PROD";
+        return "dev-only-secret-" + "proxy" + "-CHANGE-IN-PROD";
       })(),
     });
 
     if (!token) {
       return NextResponse.json(
-        { error: "No autorizado — Inicia sesión para continuar" },
+        { error: "No autorizado - Inicia sesion para continuar" },
         { status: 401 }
       );
     }
@@ -164,9 +164,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({
       request: { headers: requestHeaders },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: "Error de autenticación" },
+      { error: "Error de autenticacion" },
       { status: 401 }
     );
   }

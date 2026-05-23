@@ -6,6 +6,24 @@
 # ============================================================
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: quid-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-quid}
+      POSTGRES_USER: ${POSTGRES_USER:-quid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quid-local-dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - quid-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quid} -d ${POSTGRES_DB:-quid}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   quid-app:
     build:
       context: ./Quid-App
@@ -13,6 +31,9 @@ services:
       args:
         - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
     container_name: quid-app
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
@@ -25,14 +46,12 @@ services:
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:quid@app.com}
       - AURA_API_KEY=${AURA_API_KEY:-AuraSecretKey2026}
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434/api}
-      - AURA_MODEL=${AURA_MODEL:-llama3.2}
+      - AURA_MODEL=${AURA_MODEL:-hermes3:8b}
       - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-false}
-      - CRON_SECRET=${CRON_SECRET}
+      - CRON_SECRET=${CRON_SECRET:-local-cron-secret-change-me}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    volumes:
-      - qapital-db:/data/db
     restart: unless-stopped
 
 volumes:
-  qapital-db:
+  quid-postgres-data:

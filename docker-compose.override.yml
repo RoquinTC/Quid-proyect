@@ -3,5 +3,5 @@ services:
     ports:
       - "5678:3000"
     environment:
-      - CRON_SECRET=${CRON_SECRET}
+      - CRON_SECRET=${CRON_SECRET:-local-cron-secret-change-me}
 

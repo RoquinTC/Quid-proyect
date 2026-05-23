@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtReverseAbonoSchema } from "@/lib/validations";
 
+type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
 /**
  * Reverse a specific "abono a capital" by its Abono ID.
  *
@@ -108,8 +110,7 @@ export async function POST(
     });
     const categoryToMatch = debt?.category || "Deudas";
     const subCatToMatch = debt?.subCategory || null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let budget: any = null;
+    let budget: BudgetRecord = null;
     if (subCatToMatch) {
       budget = await db.budget.findFirst({
         where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },

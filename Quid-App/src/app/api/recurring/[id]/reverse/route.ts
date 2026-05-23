@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
 /**
  * Reverse a confirmed recurring payment.
  * This undoes the effects of confirmation:
@@ -177,8 +179,7 @@ export async function POST(
       const budgetType = payment.type === "expense" ? "expense" : "income";
       const categoryToMatch = payment.category || (payment.type === "expense" ? "Pagos Recurrentes" : "Ingresos");
       const subCatToMatch = payment.subCategory || null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let budget: any = null;
+      let budget: BudgetRecord = null;
       if (subCatToMatch) {
         budget = await db.budget.findFirst({
           where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: budgetType },
@@ -238,9 +239,9 @@ export async function POST(
       success: true,
       message: "Pago reversado exitosamente",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Reverse recurring payment error:", error);
-    const message = error?.message || "Error al reversar pago recurrente";
+    const message = error instanceof Error ? error.message : "Error al reversar pago recurrente";
     return NextResponse.json(
       { error: message },
       { status: 500 }

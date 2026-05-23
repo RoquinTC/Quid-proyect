@@ -12,6 +12,8 @@ interface ScheduleItem {
   amount: number;
 }
 
+type CreatedRecurringPayment = Awaited<ReturnType<typeof db.recurringPayment.create>>;
+
 /**
  * POST /api/payroll
  * Create a payroll group and its initial recurring payments.
@@ -104,8 +106,7 @@ export async function POST(req: NextRequest) {
 
     // Generate recurring payments for the current and next month
     const now = new Date();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const createdPayments: any[] = [];
+    const createdPayments: CreatedRecurringPayment[] = [];
 
     if (frequency === "monthly") {
       // One payment per month

@@ -559,13 +559,19 @@ export function BudgetsView() {
                     <span className="text-xs text-gray-400">/ {formatCurrency(totalAmount)}</span>
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={(e) => { e.stopPropagation(); group.parent && handleEdit(group.parent); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (group.parent) handleEdit(group.parent);
+                        }}
                         className="size-5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center"
                       >
                         <Pencil className="size-2.5 text-gray-400" />
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); group.parent && setDeleteBudgetId(group.parent.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (group.parent) setDeleteBudgetId(group.parent.id);
+                        }}
                         className="size-5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center"
                       >
                         <Trash2 className="size-2.5 text-gray-400 hover:text-red-500" />
