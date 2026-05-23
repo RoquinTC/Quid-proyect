@@ -92,7 +92,6 @@ function getConnectionUrls() {
   const sqliteUrl =
     process.env.SQLITE_DATABASE_URL ||
     appEnv.SQLITE_DATABASE_URL ||
-    appEnv.DATABASE_URL ||
     defaultSqliteUrl();
 
   const postgresUrl =

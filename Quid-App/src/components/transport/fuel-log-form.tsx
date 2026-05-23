@@ -282,12 +282,12 @@ export function FuelLogForm({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
-        <SheetHeader>
+      <SheetContent side="bottom" className="max-h-[85vh] overflow-x-hidden overflow-y-auto rounded-t-3xl p-0">
+        <SheetHeader className="px-4 pt-4 sm:px-6">
           <SheetTitle>{isEditing ? "Editar Recarga" : "Registrar Recarga"}</SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-4 mt-4 pb-6">
+        <div className="mt-4 space-y-4 px-4 pb-6 sm:px-6">
           {/* ─── Current Fuel Estimation (NEW log only) ──────────── */}
           {!isEditing && fuelProjection && fuelProjection.currentLvl > 0 && (
             <div className="rounded-xl bg-gradient-to-br from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 border border-cyan-100 dark:border-cyan-900/30 p-3">
@@ -553,7 +553,7 @@ export function FuelLogForm({
           </div>
 
           {/* Submit */}
-          <div className="sticky bottom-0 bg-white dark:bg-gray-900 pt-2 pb-1 -mx-6 px-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white px-4 pb-1 pt-2 dark:border-gray-700 dark:bg-gray-900 sm:-mx-6 sm:px-6">
             <Button
               onClick={handleSubmit}
               disabled={loading || !vehicleId || !amount || !pricePerGallon}

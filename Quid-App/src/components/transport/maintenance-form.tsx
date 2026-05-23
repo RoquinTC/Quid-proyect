@@ -399,15 +399,15 @@ export function MaintenanceForm({
   if (step === "catalog") {
     return (
       <Sheet open={open} onOpenChange={(v) => { if (!v) { setStep("main"); onOpenChange(false); } }}>
-        <SheetContent side="bottom" className="rounded-t-3xl max-h-[90vh] overflow-y-auto">
-          <SheetHeader>
+        <SheetContent side="bottom" className="max-h-[90vh] overflow-x-hidden overflow-y-auto rounded-t-3xl p-0">
+          <SheetHeader className="px-4 pt-4 sm:px-6">
             <SheetTitle className="flex items-center gap-2">
               <ShoppingCart className="size-5 text-cyan-600" />
               Seleccionar Servicios
             </SheetTitle>
           </SheetHeader>
 
-          <div className="space-y-3 mt-4 pb-6">
+          <div className="mt-4 space-y-3 px-4 pb-6 sm:px-6">
             {/* Search filter */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
@@ -551,15 +551,15 @@ export function MaintenanceForm({
   // ─── RENDER: Main Form Screen ───
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) { setStep("main"); onOpenChange(false); } }}>
-      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
-        <SheetHeader>
+      <SheetContent side="bottom" className="max-h-[85vh] overflow-x-hidden overflow-y-auto rounded-t-3xl p-0">
+        <SheetHeader className="px-4 pt-4 sm:px-6">
           <SheetTitle className="flex items-center gap-2">
             <Wrench className="size-5 text-cyan-600" />
             {isEditing ? "Editar Mantenimiento" : "Registrar Mantenimiento"}
           </SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-4 mt-4 pb-6">
+        <div className="mt-4 space-y-4 px-4 pb-6 sm:px-6">
           {/* ─── 1. Vehicle Selector ─── */}
           <div className="space-y-2">
             <Label>Vehículo</Label>
@@ -813,7 +813,7 @@ export function MaintenanceForm({
           />
 
           {/* ─── 9. Submit Button (sticky) ─── */}
-          <div className="sticky bottom-0 bg-white dark:bg-gray-900 pt-2 pb-1 -mx-6 px-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white px-4 pb-1 pt-2 dark:border-gray-700 dark:bg-gray-900 sm:-mx-6 sm:px-6">
             <Button
               onClick={handleSubmit}
               disabled={loading || !vehicleId || !cost || (selectedServices.length > 0 && selectedServices.some(s => !s.price || parseFloat(s.price) <= 0))}

@@ -317,16 +317,16 @@ export function VehicleDocumentForm({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="rounded-t-3xl max-h-[85vh] overflow-y-auto"
+        className="max-h-[85vh] overflow-x-hidden overflow-y-auto rounded-t-3xl p-0"
       >
-        <SheetHeader>
+        <SheetHeader className="px-4 pt-4 sm:px-6">
           <SheetTitle className="flex items-center gap-2">
             {currentDocIcon}
             {isEditing ? "Editar Documento" : "Registrar Documento"}
           </SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-4 mt-4 pb-6">
+        <div className="mt-4 space-y-4 px-4 pb-6 sm:px-6">
           {/* ─── Document Type Badge ─── */}
           {docType && (
             <div
@@ -599,7 +599,7 @@ export function VehicleDocumentForm({
           </div>
 
           {/* ─── Submit ─── */}
-          <div className="sticky bottom-0 bg-white dark:bg-gray-900 pt-2 pb-1 -mx-6 px-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white px-4 pb-1 pt-2 dark:border-gray-700 dark:bg-gray-900 sm:-mx-6 sm:px-6">
             <Button
               onClick={handleSubmit}
               disabled={
