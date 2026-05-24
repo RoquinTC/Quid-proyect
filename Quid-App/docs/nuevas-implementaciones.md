@@ -255,7 +255,7 @@ Se han implementado transacciones financieras ACID cruzadas y robustas que conec
 ---
 
 ## 3. Aura Inteligente Integrada
-**Estado:** `40% - Parcial Crítico` (Área de desarrollo prioritaria)
+**Estado:** `75% - En estabilización e interacciones por botones` (La carga dinámica de categorías y subcategorías personalizadas en los botones de Telegram se encuentra en revisión y ajuste de autorizaciones).
 
 ### ¡Al 100% de lo propuesto!
 *   **Canal Telegram & Conector local:** Enlace por token seguro utilizando `AURA_API_KEY` y `telegramId` del usuario. Integrado con Ollama utilizando el modelo de inferencia `hermes3:8b`.
