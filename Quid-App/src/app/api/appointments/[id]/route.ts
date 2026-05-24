@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateBody, appointmentUpdateSchema } from "@/lib/validations";
+import { createHealthFinanceEntry, reverseHealthFinanceEntry } from "@/lib/health-finance";
 
 export async function PUT(
   req: NextRequest,
@@ -31,7 +32,7 @@ export async function PUT(
       return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
     }
 
-    const updateData: Record<string, unknown> = {};
+    const updateData: Record<string, any> = {};
     if (body.doctorName !== undefined) updateData.doctorName = body.doctorName;
     if (body.specialty !== undefined) updateData.specialty = body.specialty;
     if (body.location !== undefined) updateData.location = body.location;
@@ -43,6 +44,56 @@ export async function PUT(
     if (body.accountId !== undefined) updateData.accountId = body.accountId;
     if (body.subAccountId !== undefined) updateData.subAccountId = body.subAccountId;
     if (body.debtId !== undefined) updateData.debtId = body.debtId;
+
+    // Lógica de Integración Financiera para Copagos
+    const status = body.status !== undefined ? body.status : existing.status;
+    const copayAmount = body.copayAmount !== undefined ? body.copayAmount : (existing.copayAmount ? Number(existing.copayAmount) : null);
+    const accountId = body.accountId !== undefined ? body.accountId : existing.accountId;
+    const subAccountId = body.subAccountId !== undefined ? body.subAccountId : existing.subAccountId;
+    const debtId = body.debtId !== undefined ? body.debtId : existing.debtId;
+
+    const isCompleted = status === "completed";
+    const wasCompleted = existing.status === "completed";
+
+    const financialFieldChanged =
+      body.copayAmount !== undefined ||
+      body.accountId !== undefined ||
+      body.subAccountId !== undefined ||
+      body.debtId !== undefined ||
+      body.date !== undefined ||
+      body.specialty !== undefined ||
+      body.doctorName !== undefined;
+
+    if (wasCompleted && (!isCompleted || financialFieldChanged)) {
+      // Revertir la transacción anterior antes de recrearla o si ya no está completada
+      await reverseHealthFinanceEntry(id, session.user.id);
+      updateData.financeSourceId = null;
+    }
+
+    if (isCompleted && (wasCompleted ? financialFieldChanged : true)) {
+      // Crear nueva entrada financiera si es válida
+      if (copayAmount && copayAmount > 0 && (accountId || debtId)) {
+        const specialty = body.specialty !== undefined ? body.specialty : existing.specialty;
+        const doctorName = body.doctorName !== undefined ? body.doctorName : existing.doctorName;
+        const appointmentDate = body.date !== undefined ? new Date(body.date) : existing.date;
+        const desc = `Copago Cita Médica: ${specialty || "General"}${doctorName ? ` (Dr. ${doctorName})` : ""}`;
+
+        const financeRes = await createHealthFinanceEntry({
+          userId: session.user.id,
+          appointmentId: id,
+          amount: copayAmount,
+          description: desc,
+          date: appointmentDate,
+          accountId,
+          subAccountId,
+          debtId,
+        });
+
+        if (financeRes) {
+          updateData.financeSourceId = financeRes.id;
+        }
+      }
+    }
 
     const appointment = await db.medicalAppointment.update({
       where: { id },
@@ -75,6 +126,9 @@ export async function DELETE(
     if (!existing) {
       return NextResponse.json({ error: "Cita no encontrada" }, { status: 404 });
     }
+
+    // Revertir y borrar cualquier copago o registro financiero antes de eliminar
+    await reverseHealthFinanceEntry(id, session.user.id);
 
     await db.medicalAppointment.delete({ where: { id } });
 

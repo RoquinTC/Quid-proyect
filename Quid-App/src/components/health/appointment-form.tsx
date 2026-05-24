@@ -126,7 +126,7 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md rounded-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? "Editar Cita Médica" : "Nueva Cita Médica"}

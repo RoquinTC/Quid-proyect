@@ -128,7 +128,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg rounded-2xl max-h-[88dvh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:w-full sm:max-w-lg rounded-2xl max-h-[90vh] sm:max-h-[88dvh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Editar Orden Médica" : "Nueva Orden Médica"}</DialogTitle>
         </DialogHeader>
@@ -145,7 +145,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="order-number">Número</Label>
               <Input
@@ -203,7 +203,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
                     </Button>
                   )}
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <Input
                     type="number"
                     min="0"

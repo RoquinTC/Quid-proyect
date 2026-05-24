@@ -76,26 +76,20 @@ export function MaintenanceForm({
   const [loading, setLoading] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleId, setVehicleId] = useState(preselectedVehicleId || "");
-  const [description, setDescription] = useState("");
   const [cost, setCost] = useState("");
   const [km, setKm] = useState("");
   const [date, setDate] = useState(getColombiaTodayString());
-  const [time, setTime] = useState(() => {
-    const now = new Date();
-    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  });
-  const [repeatIntervalKm, setRepeatIntervalKm] = useState("");
-  const [nextDueKm, setNextDueKm] = useState("");
-  const [nextDueDate, setNextDueDate] = useState("");
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [workshopName, setWorkshopName] = useState("");
 
   // ─── Selected services (catalog-based) ───
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
-  // ─── Custom service dialog ───
+  // ─── Custom service dialog & Persistence ───
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customServiceName, setCustomServiceName] = useState("");
+  const [customServicePrice, setCustomServicePrice] = useState("");
+  const [customMasterItems, setCustomMasterItems] = useState<{value: string, label: string, nextKmInterval: number, nextMonthInterval: number}[]>([]);
 
   // ─── Payment method state ───
   const [paymentData, setPaymentData] = useState<{
@@ -136,33 +130,44 @@ export function MaintenanceForm({
     return MAINTENANCE_TYPES.find(t => t.value === firstKey) || null;
   }, [selectedServices]);
 
-  // ─── Fetch vehicles ───
-  const fetchVehicles = useCallback(async () => {
+  // ─── Fetch vehicles & custom items ───
+  const fetchVehiclesAndCustomItems = useCallback(async () => {
     try {
-      const data = await apiFetch<Vehicle[]>("/api/vehicles");
-      setVehicles(data);
+      const [vehiclesData, customItemsData] = await Promise.all([
+        apiFetch<Vehicle[]>("/api/vehicles"),
+        apiFetch<string[]>("/api/vehicles/maintenance/custom-items").catch(() => [] as string[])
+      ]);
+      setVehicles(vehiclesData);
+      
+      const existingLabels = MAINTENANCE_TYPES.map(t => t.label.toLowerCase());
+      const newCustomItems = (customItemsData || [])
+        .filter(n => !existingLabels.includes(n.toLowerCase()))
+        .map(n => ({
+          value: `custom-${n.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z_]/g, "")}`,
+          label: n,
+          nextKmInterval: 0,
+          nextMonthInterval: 0
+        }));
+      setCustomMasterItems(newCustomItems);
     } catch (error) {
-      console.error("Error fetching vehicles:", error);
+      console.error("Error fetching vehicles or custom items:", error);
     }
   }, []);
 
   useEffect(() => {
-    if (open) fetchVehicles();
-  }, [open, fetchVehicles]);
+    if (open) fetchVehiclesAndCustomItems();
+  }, [open, fetchVehiclesAndCustomItems]);
 
   // ─── Pre-fill form when editing ───
   useEffect(() => {
     if (open && record) {
       setVehicleId(preselectedVehicleId || "");
-      setDescription(record.description || "");
       setCost(record.cost?.toString() || "");
       setKm(record.km?.toString() || "");
       setDate(record.date ? record.date.split("T")[0] : getColombiaTodayString());
       const inferredInterval = record.repeatIntervalKm
         ?? (record.nextDueKm && record.km ? Math.max(0, record.nextDueKm - record.km) : null);
-      setRepeatIntervalKm(inferredInterval ? inferredInterval.toString() : "");
-      setNextDueKm(record.nextDueKm?.toString() || "");
-      setNextDueDate(record.nextDueDate ? record.nextDueDate.split("T")[0] : "");
+      
       setReminderEnabled(record.reminderEnabled ?? true);
 
       // Pre-fill items from existing record as selected services
@@ -215,40 +220,7 @@ export function MaintenanceForm({
     }
   }, [vehicleId, vehicles, preselectedVehicleId, isEditing]);
 
-  // ─── Auto-suggest next due km & date based on primary service type (create mode only) ───
-  useEffect(() => {
-    if (isEditing || !km || !repeatIntervalKm) return;
-    const currentKm = parseFloat(km) || 0;
-    const intervalKm = parseFloat(repeatIntervalKm) || 0;
-    if (currentKm > 0 && intervalKm > 0) {
-      setNextDueKm(String(Math.round(currentKm + intervalKm)));
-    }
-  }, [repeatIntervalKm, km, isEditing]);
-
-  // ─── Auto-suggest next due km & date based on primary service type (create mode only) ───
-  useEffect(() => {
-    if (!isEditing && primaryType && km) {
-      const currentKm = parseFloat(km) || 0;
-      if (primaryType.nextKmInterval > 0 && !repeatIntervalKm) {
-        setRepeatIntervalKm(primaryType.nextKmInterval.toString());
-        setNextDueKm((currentKm + primaryType.nextKmInterval).toString());
-      } else {
-        if (!repeatIntervalKm) setNextDueKm("");
-      }
-
-      if (primaryType.nextMonthInterval > 0) {
-        const baseDate = date ? new Date(date + "T12:00:00") : new Date();
-        const dueDate = new Date(baseDate);
-        dueDate.setMonth(dueDate.getMonth() + primaryType.nextMonthInterval);
-        const yyyy = dueDate.getFullYear();
-        const mm = String(dueDate.getMonth() + 1).padStart(2, "0");
-        const dd = String(dueDate.getDate()).padStart(2, "0");
-        setNextDueDate(`${yyyy}-${mm}-${dd}`);
-      } else {
-        setNextDueDate("");
-      }
-    }
-  }, [primaryType, km, isEditing, date, repeatIntervalKm]);
+  
 
   // ─── Service catalog handlers ───
 
@@ -273,15 +245,34 @@ export function MaintenanceForm({
   }, []);
 
   const addCustomService = useCallback(() => {
-    if (!customServiceName.trim()) return;
+    if (!customServiceName.trim()) {
+      toast.error("Ingresa el nombre del servicio");
+      return;
+    }
+    if (!customServicePrice || parseFloat(customServicePrice) <= 0) {
+      toast.error("Ingresa un valor válido para el servicio");
+      return;
+    }
     const key = `custom-${customServiceName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z_]/g, "")}`;
+    const label = customServiceName.trim();
+    const price = customServicePrice;
+    
     setSelectedServices(prev => {
-      if (prev.find(s => s.typeKey === key)) return prev;
-      return [...prev, { id: createId(), typeKey: key, label: customServiceName.trim(), price: "", isCustom: true }];
+      if (prev.find(s => s.typeKey === key)) {
+        return prev.map(s => s.typeKey === key ? { ...s, price } : s);
+      }
+      return [...prev, { id: createId(), typeKey: key, label, price, isCustom: true }];
     });
+    
+    setCustomMasterItems(prev => {
+      if (prev.find(i => i.value === key)) return prev;
+      return [...prev, { value: key, label, nextKmInterval: 0, nextMonthInterval: 0 }];
+    });
+    
     setCustomServiceName("");
-    setShowCustomInput(false);
-  }, [customServiceName]);
+    setCustomServicePrice("");
+    toast.success("Ítem agregado al carrito");
+  }, [customServiceName, customServicePrice]);
 
   // ─── Submit handler ───
 
@@ -311,13 +302,11 @@ export function MaintenanceForm({
 
       const payload: Record<string, unknown> = {
         type: maintType,
-        description: description || selectedServices.map(s => s.label).join(", "),
+        description: selectedServices.map(s => s.label).join(", "),
         cost: parseFloat(cost),
         km: km ? parseFloat(km) : undefined,
         date,
-        repeatIntervalKm: repeatIntervalKm ? parseFloat(repeatIntervalKm) : undefined,
-        nextDueKm: nextDueKm ? parseFloat(nextDueKm) : undefined,
-        nextDueDate: nextDueDate || undefined,
+        
         reminderEnabled,
         // ── Itemized list ──
         ...(itemsPayload.length > 0 ? { items: itemsPayload } : {}),
@@ -371,23 +360,17 @@ export function MaintenanceForm({
   const resetForm = () => {
     if (!isEditing) {
       setVehicleId(preselectedVehicleId || "");
-      setDescription("");
       setCost("");
       setKm("");
       setDate(getColombiaTodayString());
-      setTime(() => {
-        const now = new Date();
-        return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-      });
-      setNextDueKm("");
-      setRepeatIntervalKm("");
-      setNextDueDate("");
+      
       setReminderEnabled(true);
       setWorkshopName("");
       setSelectedServices([]);
       setStep("main");
       setShowCustomInput(false);
       setCustomServiceName("");
+      setCustomServicePrice("");
       setPaymentData({
         paymentType: "account",
         accountId: null,
@@ -404,13 +387,15 @@ export function MaintenanceForm({
   // ─── Catalog search filter ───
   const [catalogSearch, setCatalogSearch] = useState("");
 
+  const allTypes = useMemo(() => [...MAINTENANCE_TYPES, ...customMasterItems], [customMasterItems]);
+
   const filteredTypes = useMemo(() => {
-    if (!catalogSearch.trim()) return MAINTENANCE_TYPES;
+    if (!catalogSearch.trim()) return allTypes;
     const q = catalogSearch.toLowerCase();
-    return MAINTENANCE_TYPES.filter(t =>
+    return allTypes.filter(t =>
       t.label.toLowerCase().includes(q) || t.value.toLowerCase().includes(q)
     );
-  }, [catalogSearch]);
+  }, [catalogSearch, allTypes]);
 
   // ─── RENDER: Service Catalog Screen ───
   if (step === "catalog") {
@@ -497,42 +482,47 @@ export function MaintenanceForm({
             </div>
 
             {/* Add custom service */}
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
               {!showCustomInput ? (
                 <button
                   type="button"
                   onClick={() => setShowCustomInput(true)}
-                  className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 hover:text-cyan-600 hover:border-cyan-400 dark:hover:border-cyan-600 transition-colors text-xs font-medium"
+                  className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl border-2 border-dashed border-cyan-300 dark:border-cyan-700/50 bg-cyan-50/50 dark:bg-cyan-900/10 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 transition-all text-sm font-medium"
                 >
-                  <Plus className="size-3.5" />
-                  Añadir servicio personalizado
+                  <Plus className="size-4" />
+                  Crear ítem nuevo (fuera del catálogo)
                 </button>
               ) : (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-3 p-3 rounded-xl border-2 border-cyan-200 dark:border-cyan-800 bg-cyan-50/30 dark:bg-cyan-900/10">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-cyan-800 dark:text-cyan-300 uppercase tracking-wider">Nuevo Ítem</Label>
+                    <button onClick={() => { setShowCustomInput(false); setCustomServiceName(""); setCustomServicePrice(""); }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                      <X className="size-4" />
+                    </button>
+                  </div>
                   <Input
-                    placeholder="Nombre del servicio"
+                    placeholder="Ej. Cambio de bujías"
                     value={customServiceName}
                     onChange={(e) => setCustomServiceName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addCustomService()}
-                    className="rounded-xl h-9 text-sm flex-1"
+                    className="rounded-lg text-sm bg-white dark:bg-gray-900"
                     autoFocus
                   />
-                  <Button
-                    size="sm"
-                    onClick={addCustomService}
-                    disabled={!customServiceName.trim()}
-                    className="rounded-lg bg-cyan-600 hover:bg-cyan-700 h-9"
-                  >
-                    <Plus className="size-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => { setShowCustomInput(false); setCustomServiceName(""); }}
-                    className="rounded-lg h-9"
-                  >
-                    <X className="size-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <CurrencyInput
+                      showPrefix
+                      placeholder="Valor del ítem"
+                      value={customServicePrice}
+                      onChange={setCustomServicePrice}
+                      className="rounded-lg flex-1 bg-white dark:bg-gray-900"
+                    />
+                    <Button
+                      onClick={addCustomService}
+                      disabled={!customServiceName.trim() || !customServicePrice}
+                      className="rounded-lg bg-cyan-600 hover:bg-cyan-700"
+                    >
+                      <Plus className="size-4 mr-1.5" /> Agregar
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -609,7 +599,7 @@ export function MaintenanceForm({
           </div>
 
           {/* ─── 2. Date, Time, KM ─── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <Calendar className="size-3 text-gray-400" />
@@ -622,18 +612,7 @@ export function MaintenanceForm({
                 className="rounded-xl"
               />
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-1.5">
-                <Clock className="size-3 text-gray-400" />
-                Hora
-              </Label>
-              <Input
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="rounded-xl"
-              />
-            </div>
+            
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
                 <Gauge className="size-3 text-gray-400" />
@@ -760,78 +739,6 @@ export function MaintenanceForm({
           </div>
 
           {/* ─── 6. Description (optional) ─── */}
-          <div className="space-y-2">
-            <Label>Descripción <span className="text-gray-400 font-normal text-xs">(opcional)</span></Label>
-            <Input
-              placeholder="Ej: Cambio de aceite sintético 10W-40"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
-
-          {/* ─── 7. Next Due (KM + Date) + Reminder Toggle ─── */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Próximo mantenimiento
-            </Label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="maint-repeatkm" className="text-xs text-gray-500">
-                  Repetir cada km
-                </Label>
-                <Input
-                  id="maint-repeatkm"
-                  type="number"
-                  placeholder="Ej: 2500"
-                  value={repeatIntervalKm}
-                  onChange={(e) => setRepeatIntervalKm(e.target.value)}
-                  className="rounded-xl"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="maint-nextkm" className="text-xs text-gray-500">
-                  KM próx. cambio
-                </Label>
-                <Input
-                  id="maint-nextkm"
-                  type="number"
-                  placeholder="Ej: 20000"
-                  value={nextDueKm}
-                  onChange={(e) => setNextDueKm(e.target.value)}
-                  className="rounded-xl"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="maint-nextdate" className="text-xs text-gray-500">
-                  Fecha próx. cambio
-                </Label>
-                <Input
-                  id="maint-nextdate"
-                  type="date"
-                  value={sanitizeDateForInput(nextDueDate)}
-                  onChange={(e) => setNextDueDate(e.target.value)}
-                  className="rounded-xl"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Reminder Switch */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-            <div>
-              <Label className="text-sm">Recordatorio</Label>
-              <p className="text-xs text-gray-400">
-                Recibir aviso del próximo mantenimiento
-              </p>
-            </div>
-            <Switch
-              checked={reminderEnabled}
-              onCheckedChange={setReminderEnabled}
-            />
-          </div>
-
-          {/* ─── 8. Payment Method Selector ─── */}
           <PaymentMethodSelector
             vehicleId={vehicleId}
             defaultPaymentType={record?.debtId ? "credit_card" : "account"}

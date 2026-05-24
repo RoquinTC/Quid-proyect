@@ -6,7 +6,7 @@ export type ModuleType = "dashboard" | "finance" | "transport" | "health" | "pan
 
 export type FinanceSubView = "overview" | "accounts" | "transactions" | "budgets" | "debts" | "savings" | "cdts" | "recurring" | "account-detail" | "debt-detail" | "savings-detail" | "simulator" | "credit-simulator" | "debt-simulator";
 export type TransportSubView = "vehicles" | "fuel" | "maintenance";
-export type HealthSubView = "medications" | "appointments" | "orders" | "profiles";
+export type HealthSubView = "medications" | "appointments" | "orders" | "profiles" | "inventory";
 export type PantrySubView = "items" | "shopping-lists";
 
 // Sidebar quick-action identifiers — each module page listens for its actions

@@ -3,18 +3,22 @@
 import { useState, useEffect } from "react";
 import { useAppStore, type HealthSubView, type SidebarAction } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
-import { ClipboardList, Pill, Stethoscope } from "lucide-react";
+import { ClipboardList, Pill, Stethoscope, Sparkles, Package } from "lucide-react";
 import { MedicationsView } from "./medications-view";
 import { AppointmentsView } from "./appointments-view";
 import { MedicalOrdersView } from "./medical-orders-view";
+import { RecommendationsView } from "./recommendations-view";
+import { InventoryView } from "./inventory-view";
 import { MedicationForm } from "./medication-form";
 import { AppointmentForm } from "./appointment-form";
 import { MedicalOrderForm } from "./medical-order-form";
 
-const tabs: { id: HealthSubView; label: string; icon: typeof Pill }[] = [
+const tabs: { id: HealthSubView; label: string; icon: any }[] = [
   { id: "medications", label: "Medicamentos", icon: Pill },
-  { id: "appointments", label: "Citas Médicas", icon: Stethoscope },
+  { id: "appointments", label: "Citas", icon: Stethoscope },
   { id: "orders", label: "Órdenes", icon: ClipboardList },
+  { id: "profiles", label: "Recomendaciones", icon: Sparkles },
+  { id: "inventory", label: "Inventario", icon: Package },
 ];
 
 export function HealthPage() {
@@ -89,7 +93,9 @@ export function HealthPage() {
       case "orders":
         return <MedicalOrdersView />;
       case "profiles":
-        return <MedicationsView />;
+        return <RecommendationsView />;
+      case "inventory":
+        return <InventoryView />;
       default:
         return <MedicationsView />;
     }
@@ -99,7 +105,7 @@ export function HealthPage() {
     <div className="flex flex-col h-full">
       {/* Sub-tab navigation */}
       <div className="px-4 pt-3 pb-1">
-        <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl">
+        <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-x-auto scrollbar-none flex-nowrap max-w-full">
           {tabs.map((tab) => {
             const isActive = healthSubView === tab.id;
             const Icon = tab.icon;
@@ -107,7 +113,7 @@ export function HealthPage() {
               <button
                 key={tab.id}
                 onClick={() => setHealthSubView(tab.id)}
-                className="relative flex items-center justify-center gap-1.5 flex-1 py-2.5 px-2 rounded-xl text-sm font-medium transition-colors duration-200"
+                className="relative flex items-center justify-center gap-1.5 flex-1 md:flex-initial py-2.5 px-3 rounded-xl text-sm font-medium transition-colors duration-200 flex-shrink-0 whitespace-nowrap cursor-pointer"
               >
                 {isActive && (
                   <motion.div

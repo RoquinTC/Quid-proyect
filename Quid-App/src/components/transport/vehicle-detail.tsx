@@ -703,7 +703,7 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-medium text-gray-900 dark:text-white">
-                            {maintTypeLabels[record.type] || record.type}
+                            Mantenimiento
                           </span>
                           <div className="flex items-center gap-1">
                             <span className="text-xs font-bold text-gray-900 dark:text-white">

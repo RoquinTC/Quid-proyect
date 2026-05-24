@@ -20,57 +20,86 @@ async function syncMaintenanceReminder({
   userId,
   vehicleId,
   vehicleName,
-  type,
+  itemNames,
   description,
-  dueKm,
-  dueDate,
-  repeatIntervalKm,
+  recordKm,
+  recordDate,
   enabled,
 }: {
   userId: string;
   vehicleId: string;
   vehicleName: string;
-  type: string;
+  itemNames: string[];
   description: string;
-  dueKm: number | null;
-  dueDate: Date | null;
-  repeatIntervalKm: number | null;
+  recordKm: number;
+  recordDate: Date;
   enabled: boolean;
 }) {
-  const title = maintenanceReminderTitle(type);
+  if (!enabled || itemNames.length === 0) return;
 
-  await db.vehicleReminder.updateMany({
-    where: {
-      userId,
-      vehicleId,
-      category: "maintenance",
-      title,
-      isActive: true,
-    },
-    data: {
-      isActive: false,
-      completedAt: new Date(),
-    },
-  });
+  for (const itemName of itemNames) {
+    // Find existing active reminder to carry over custom intervals
+    const existingReminder = await db.vehicleReminder.findFirst({
+      where: {
+        userId,
+        vehicleId,
+        category: "maintenance",
+        title: itemName,
+        isActive: true,
+      },
+    });
 
-  if (!enabled || (!dueKm && !dueDate)) return;
+    if (existingReminder) {
+      await db.vehicleReminder.update({
+        where: { id: existingReminder.id },
+        data: {
+          isActive: false,
+          completedAt: new Date(),
+          completedKm: recordKm,
+        },
+      });
+    }
 
-  await db.vehicleReminder.create({
-    data: {
-      userId,
-      vehicleId,
-      title,
-      description: description || `Próximo mantenimiento de ${vehicleName}`,
-      category: "maintenance",
-      triggerMode: dueKm && dueDate ? "hybrid" : dueKm ? "km" : "date",
-      dueKm,
-      dueDate,
-      warningKm: repeatIntervalKm ? Math.min(500, Math.max(100, Math.round(repeatIntervalKm * 0.2))) : 500,
-      warningDays: 15,
-      repeatIntervalKm,
-      isActive: true,
-    },
-  });
+    // Determine intervals. Preference: existing reminder -> catalog defaults -> 0
+    let intervalKm = existingReminder?.repeatIntervalKm || 0;
+    let intervalDays = existingReminder?.repeatIntervalDays || 0;
+
+    if (!intervalKm && !intervalDays) {
+      const typeConfig = MAINTENANCE_TYPES.find(t => t.label.toLowerCase() === itemName.toLowerCase() || t.value === itemName);
+      if (typeConfig) {
+        intervalKm = typeConfig.nextKmInterval;
+        intervalDays = typeConfig.nextMonthInterval * 30; // Approximation for defaults
+      }
+    }
+
+    if (!intervalKm && !intervalDays) continue; // No rule to generate next reminder for this specific item
+
+    let nextDueKm = intervalKm > 0 ? recordKm + intervalKm : null;
+    let nextDueDate: Date | null = null;
+    
+    if (intervalDays > 0) {
+      nextDueDate = new Date(recordDate);
+      nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
+    }
+
+    await db.vehicleReminder.create({
+      data: {
+        userId,
+        vehicleId,
+        title: itemName,
+        description: description || `Próximo: ${itemName} de ${vehicleName}`,
+        category: "maintenance",
+        triggerMode: nextDueKm && nextDueDate ? "hybrid" : nextDueKm ? "km" : "date",
+        dueKm: nextDueKm,
+        dueDate: nextDueDate,
+        warningKm: intervalKm ? Math.min(500, Math.max(100, Math.round(intervalKm * 0.2))) : 500,
+        warningDays: 15,
+        repeatIntervalKm: intervalKm > 0 ? intervalKm : null,
+        repeatIntervalDays: intervalDays > 0 ? intervalDays : null,
+        isActive: true,
+      },
+    });
+  }
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -129,27 +158,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const recordKm = km ?? vehicle.currentKm;
     const maintenanceType = type || "general";
 
-    // Auto-suggest nextDueKm if not provided and type has a known interval
-    let finalNextDueKm = nextDueKm ?? null;
-    let finalNextDueDate = nextDueDate ? createColombiaDate(nextDueDate.split("T")[0]) : null;
-    const finalRepeatIntervalKm = repeatIntervalKm ?? (
-      finalNextDueKm && finalNextDueKm > recordKm ? finalNextDueKm - recordKm : null
-    );
+    // Calculate next due info for the record itself (if we want to store it on the record)
+    let finalNextDueKm: number | null = null;
+    let finalNextDueDate: Date | null = null;
 
-    if (!finalNextDueKm && finalRepeatIntervalKm) {
-      finalNextDueKm = recordKm + finalRepeatIntervalKm;
+    const existingReminder = await db.vehicleReminder.findFirst({
+      where: { userId: session.user.id, vehicleId: id, category: "maintenance", title: maintenanceReminderTitle(maintenanceType), isActive: true },
+    });
+
+    let intervalKm = existingReminder?.repeatIntervalKm || 0;
+    let intervalDays = existingReminder?.repeatIntervalDays || 0;
+
+    if (!intervalKm && !intervalDays) {
+      const typeConfig = MAINTENANCE_TYPES.find(t => t.value === maintenanceType);
+      if (typeConfig) {
+        intervalKm = typeConfig.nextKmInterval;
+        intervalDays = typeConfig.nextMonthInterval * 30;
+      }
     }
 
-    if (!finalNextDueKm && !finalNextDueDate && reminderEnabled) {
-      const typeConfig = MAINTENANCE_TYPES.find(t => t.value === maintenanceType);
-      if (typeConfig && typeConfig.nextKmInterval > 0) {
-        finalNextDueKm = recordKm + typeConfig.nextKmInterval;
-      }
-      if (typeConfig && typeConfig.nextMonthInterval > 0) {
-        const dueDate = new Date(recordDate);
-        dueDate.setMonth(dueDate.getMonth() + typeConfig.nextMonthInterval);
-        finalNextDueDate = dueDate;
-      }
+    if (intervalKm > 0) finalNextDueKm = recordKm + intervalKm;
+    if (intervalDays > 0) {
+      finalNextDueDate = new Date(recordDate);
+      finalNextDueDate.setDate(finalNextDueDate.getDate() + intervalDays);
     }
 
     // Create maintenance record with finance integration fields
@@ -193,16 +224,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
     }
 
+    const itemNamesToSync = items && items.length > 0 
+      ? items.map((i: any) => i.name) 
+      : [maintenanceReminderTitle(maintenanceType)];
+
     await syncMaintenanceReminder({
       userId: session.user.id,
       vehicleId: id,
       vehicleName: vehicle.name,
-      type: maintenanceType,
+      itemNames: itemNamesToSync,
       description,
-      dueKm: finalNextDueKm,
-      dueDate: finalNextDueDate,
-      repeatIntervalKm: finalRepeatIntervalKm,
-      enabled: reminderEnabled ?? true,
+      recordKm,
+      recordDate,
+      enabled: true, // Auto-enable reminders based on the new logic
     });
 
     // Create finance entry with full integration

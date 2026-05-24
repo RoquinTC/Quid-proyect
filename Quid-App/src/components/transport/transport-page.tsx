@@ -430,7 +430,7 @@ export function TransportPage() {
       alerts.push({
         id: `maintenance-${record.id}`,
         kind: "maintenance",
-        title: maintTypeLabels[record.type] || record.description || "Mantenimiento",
+        title: "Mantenimiento",
         detail: [
           daysUntil != null ? (daysUntil <= 0 ? "Vence hoy" : `En ${daysUntil} día${daysUntil === 1 ? "" : "s"}`) : null,
           kmRemaining != null ? (kmRemaining <= 0 ? "límite alcanzado" : `faltan ${Math.round(kmRemaining).toLocaleString("es-CO")} km`) : null,
@@ -1427,7 +1427,7 @@ export function TransportPage() {
                   {latestMaintenanceRecord ? (
                     <>
                       <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                        {maintTypeLabels[latestMaintenanceRecord.type] || latestMaintenanceRecord.description}
+                        Mantenimiento
                       </p>
                       <p className="text-[11px] text-gray-500">
                         {formatCurrency(latestMaintenanceRecord.cost)} · {latestMaintenanceRecord.km.toLocaleString("es-CO")} km
@@ -1606,7 +1606,7 @@ export function TransportPage() {
                             } as VehicleDocument);
                             setShowDocumentForm(true);
                           } else {
-                            setEditMaintenance({
+                            setEditMaintenance(vehicles.find(veh => veh.id === entry.vehicleId)?.maintenanceRecords?.find(r => r.id === entry.id) as MaintenanceRecord || {
                               id: entry.id,
                               type: entry.maintType || "general",
                               description: entry.maintDescription || "",
@@ -1630,7 +1630,7 @@ export function TransportPage() {
                           id: entry.id,
                           vehicleId: entry.vehicleId,
                           cost: entry.cost,
-                          description: entry.type === "fuel" ? "Recarga" : entry.type === "document" ? (docTypeLabels[entry.docType || ""] || "Documento") : (maintTypeLabels[entry.maintType || ""] || "Mantenimiento"),
+                          description: entry.type === "fuel" ? "Recarga" : entry.type === "document" ? (docTypeLabels[entry.docType || ""] || "Documento") : "Mantenimiento",
                         })}
                       />
                     ))}
@@ -1890,7 +1890,7 @@ function TimelineCard({
               </div>
             )}
             <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-              {isFuel ? "Recarga" : isDoc ? (docTypeLabels[entry.docType || ""] || entry.docType || "Documento") : (maintTypeLabels[entry.maintType || ""] || entry.maintType || "Mantenimiento")}
+              {isFuel ? "Recarga" : isDoc ? (docTypeLabels[entry.docType || ""] || entry.docType || "Documento") : "Mantenimiento"}
             </span>
             {isFuel && entry.isFullTank && (
               <Badge variant="secondary" className="text-[11px] h-4 px-1.5 bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-300">
@@ -2519,7 +2519,7 @@ function VehicleDetailView({
                         } as VehicleDocument);
                         setShowDocumentForm(true);
                       } else {
-                        onEditMaintenance({
+                        onEditMaintenance(vehicle.maintenanceRecords?.find(r => r.id === entry.id) as MaintenanceRecord || {
                           id: entry.id,
                           type: entry.maintType || "general",
                           description: entry.maintDescription || "",
