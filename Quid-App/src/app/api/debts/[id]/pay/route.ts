@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getColombiaNow, getColombiaTodayString, createColombiaDate } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtPaySchema } from "@/lib/validations";
+import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 
 type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
 
@@ -285,7 +286,7 @@ export async function POST(
       const previousBalance = toNumber(paidInst.remainingBalance ?? paidInst.totalAmount);
       const newRemainingBalance = previousBalance - capitalUsed;
 
-      await db.installment.create({
+      const nextInstallment = await db.installment.create({
         data: {
           debtId: paidInst.debtId,
           description: paidInst.description,
@@ -303,7 +304,18 @@ export async function POST(
           category: paidInst.category,
           subCategory: paidInst.subCategory,
           recurringPaymentId: paidInst.recurringPaymentId,
+          sourceModule: paidInst.sourceModule,
+          sourceId: paidInst.sourceId,
         },
+      });
+
+      await applyCreditInstallmentBudgetImpact({
+        userId: session.user.id,
+        debtType: debt.type,
+        category: nextInstallment.category,
+        subCategory: nextInstallment.subCategory,
+        installmentAmount: Number(nextInstallment.installmentAmount),
+        nextPaymentDate: nextInstallment.nextPaymentDate,
       });
     }
 

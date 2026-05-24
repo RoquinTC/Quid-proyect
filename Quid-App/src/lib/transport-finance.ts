@@ -9,6 +9,7 @@
 
 import { db } from "@/lib/db";
 import { MAINTENANCE_SUBCATEGORY_MAP, DOCUMENT_SUBCATEGORY_MAP } from "@/lib/types/transport";
+import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 
 // ─── Types ───
 
@@ -40,27 +41,6 @@ export interface FinanceIntegrationResult {
   debtUpdated: boolean;
   updatedBalances?: Array<{ id: string; name: string; balance: number; isSubAccount: boolean }>;
   updatedDebts?: Array<{ id: string; currentBalance: number }>;
-}
-
-// ─── Budget matching (mirrors the pattern in /api/transactions) ───
-
-async function findMatchingBudget(
-  userId: string,
-  category: string,
-  subCategory: string | null,
-  type: "income" | "expense"
-) {
-  // 1. Try exact match with subCategory
-  if (subCategory) {
-    const specific = await db.budget.findFirst({
-      where: { userId, category, subCategory, type },
-    });
-    if (specific) return specific;
-  }
-  // 2. Fall back to parent budget (no subCategory)
-  return db.budget.findFirst({
-    where: { userId, category, subCategory: null, type },
-  });
 }
 
 // ─── Main integration function ───
@@ -166,14 +146,13 @@ export async function createFinanceEntry(
     result.balanceUpdated = true;
 
     // 3. Update budget spent
-    const budget = await findMatchingBudget(userId, category, subCategory, "expense");
-    if (budget) {
-      await db.budget.update({
-        where: { id: budget.id },
-        data: { spent: { increment: amount } },
-      });
-      result.budgetUpdated = true;
-    }
+    result.budgetUpdated = await adjustBudgetSpent({
+      userId,
+      category,
+      subCategory,
+      type: "expense",
+      amount,
+    });
 
   } else if (paymentType === "credit_card" && debtId) {
     // ── ESCENARIO B: Pago con Tarjeta de Crédito ──
@@ -224,6 +203,8 @@ export async function createFinanceEntry(
         subAccountId: subAccountId || null,
         category,
         subCategory,
+        sourceModule,
+        sourceId,
       },
     });
     result.installmentId = installment.id;
@@ -245,8 +226,14 @@ export async function createFinanceEntry(
     }
     result.debtUpdated = true;
 
-    // 4. For CC purchases, budget is updated when the CC payment is made,
-    //    NOT at purchase time (this matches the existing finance module behavior)
+    result.budgetUpdated = await applyCreditInstallmentBudgetImpact({
+      userId,
+      debtType: debt?.type,
+      category,
+      subCategory,
+      installmentAmount,
+      nextPaymentDate,
+    });
 
   } else {
     // ── ESCENARIO C: Sin método de pago (importación histórica, datos sin cuenta) ──
@@ -280,7 +267,9 @@ export async function createFinanceEntry(
 export async function reverseFinanceEntry(
   sourceId: string,
   userId: string
-): Promise<void> {
+): Promise<number> {
+  let reversedInstallments = 0;
+
   // Find the linked finance transaction
   const transaction = await db.transaction.findFirst({
     where: {
@@ -308,19 +297,13 @@ export async function reverseFinanceEntry(
 
       // Reverse budget spent
       if (!transaction.excludeFromBudget && transaction.category) {
-        const budget = await findMatchingBudget(
+        await adjustBudgetSpent({
           userId,
-          transaction.category,
-          transaction.subCategory,
-          transaction.type as "income" | "expense"
-        );
-        if (budget) {
-          const spentChange = transaction.type === "expense" ? -transaction.amount : -transaction.amount;
-          await db.budget.update({
-            where: { id: budget.id },
-            data: { spent: { increment: spentChange } },
-          });
-        }
+          category: transaction.category,
+          subCategory: transaction.subCategory,
+          type: transaction.type as "income" | "expense",
+          amount: -Number(transaction.amount),
+        });
       }
     }
 
@@ -328,11 +311,76 @@ export async function reverseFinanceEntry(
     await db.transaction.delete({ where: { id: transaction.id } });
   }
 
-  // Find and delete any linked installments (CC purchases)
-  // Installments are linked via the sourceId stored in description or a custom field
-  // Since we can't easily reverse installments that already have payments,
-  // we'll look for unpaid installments with matching descriptions
-  // This is a best-effort approach — for fully paid CC items, manual reversal is needed
+  const installments = await db.installment.findMany({
+    where: {
+      sourceModule: "transport",
+      sourceId,
+      isPaid: false,
+      debt: { userId },
+    },
+    include: { debt: true },
+  });
+
+  for (const installment of installments) {
+    await applyCreditInstallmentBudgetImpact({
+      userId,
+      debtType: installment.debt.type,
+      category: installment.category,
+      subCategory: installment.subCategory,
+      installmentAmount: Number(installment.installmentAmount),
+      nextPaymentDate: installment.nextPaymentDate,
+      direction: -1,
+    });
+
+    await db.debt.update({
+      where: { id: installment.debtId },
+      data: { currentBalance: { decrement: installment.totalAmount } },
+    });
+
+    await db.installment.delete({ where: { id: installment.id } });
+    reversedInstallments += 1;
+  }
+
+  return reversedInstallments;
+}
+
+export async function reverseUnpaidCreditInstallmentByAmount(params: {
+  userId: string;
+  debtId: string;
+  totalAmount: number;
+}): Promise<boolean> {
+  const installment = await db.installment.findFirst({
+    where: {
+      debtId: params.debtId,
+      isPaid: false,
+      debt: { userId: params.userId },
+    },
+    include: { debt: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!installment || Number(installment.totalAmount) !== params.totalAmount) {
+    return false;
+  }
+
+  await applyCreditInstallmentBudgetImpact({
+    userId: params.userId,
+    debtType: installment.debt.type,
+    category: installment.category,
+    subCategory: installment.subCategory,
+    installmentAmount: Number(installment.installmentAmount),
+    nextPaymentDate: installment.nextPaymentDate,
+    direction: -1,
+  });
+
+  await db.debt.update({
+    where: { id: installment.debtId },
+    data: { currentBalance: { decrement: installment.totalAmount } },
+  });
+
+  await db.installment.delete({ where: { id: installment.id } });
+
+  return true;
 }
 
 // ─── Helper: Get auto-description for transport entries ───

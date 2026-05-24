@@ -1,6 +1,17 @@
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { createFinanceEntry, getTransportDescription } from "@/lib/transport-finance";
+import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import {
+  parsePreviousProposal,
+  updateTransactionProposal,
+  executeTransactionProposal,
+} from "./tools/registrar_transaccion";
+import {
+  parsePreviousFuelProposal,
+  updateFuelProposal,
+  executeFuelProposal,
+} from "./tools/registrar_tanqueo";
 
 export type CoreMessage = { role: "user" | "assistant" | "system" | "data"; content: string };
 
@@ -388,7 +399,8 @@ async function getDebtChoices(userId: string): Promise<DebtChoice[]> {
   }));
 }
 
-async function createCreditCardPurchaseFromAura(params: {
+export async function createCreditCardPurchaseFromAura(params: {
+  userId: string;
   debtId: string;
   amount: number;
   description: string;
@@ -398,7 +410,7 @@ async function createCreditCardPurchaseFromAura(params: {
 }) {
   const debt = await db.debt.findUnique({
     where: { id: params.debtId },
-    select: { id: true, paymentDate: true },
+    select: { id: true, paymentDate: true, type: true },
   });
 
   if (!debt) throw new Error("No encontré la tarjeta o deuda indicada.");
@@ -410,8 +422,8 @@ async function createCreditCardPurchaseFromAura(params: {
     nextPaymentDate.setDate(Math.min(debt.paymentDate, lastDay));
   }
 
-  await db.$transaction(async (tx) => {
-    await tx.installment.create({
+  const installment = await db.$transaction(async (tx) => {
+    const createdInstallment = await tx.installment.create({
       data: {
         debtId: debt.id,
         description: params.description,
@@ -424,6 +436,8 @@ async function createCreditCardPurchaseFromAura(params: {
         nextPaymentDate,
         category: params.category,
         subCategory: params.subCategory ?? null,
+        sourceModule: "aura",
+        sourceId: debt.id,
       },
     });
 
@@ -431,6 +445,17 @@ async function createCreditCardPurchaseFromAura(params: {
       where: { id: debt.id },
       data: { currentBalance: { increment: params.amount } },
     });
+
+    return createdInstallment;
+  });
+
+  await applyCreditInstallmentBudgetImpact({
+    userId: params.userId,
+    debtType: debt.type,
+    category: installment.category,
+    subCategory: installment.subCategory,
+    installmentAmount: Number(installment.installmentAmount),
+    nextPaymentDate: installment.nextPaymentDate,
   });
 }
 
@@ -849,6 +874,7 @@ async function createTransactionFromAura(userId: string, text: string, options: 
         };
       }
       await createCreditCardPurchaseFromAura({
+        userId,
         debtId: debt.id,
         amount,
         description: transactionDescription(text, category),
@@ -1184,12 +1210,14 @@ No menciones herramientas internas ni detalles técnicos.`;
 }
 
 export async function askAura(userId: string, messages: CoreMessage[]) {
-  const text = resolveActionText(messages);
-  const action = inferAction(text);
-  const commitRequested = isConfirmationText(lastUserText(messages)) && hasRecentAuraProposal(messages);
+  const lastUserMsg = lastUserText(messages);
+  const hasProposal = hasRecentAuraProposal(messages);
+  const isCancel = isCancellationText(lastUserMsg) && hasProposal;
+  const isConfirm = isConfirmationText(lastUserMsg) && hasProposal;
 
   try {
-    if (isCancellationText(lastUserText(messages)) && hasRecentAuraProposal(messages)) {
+    // 1. Manejar Cancelación
+    if (isCancel) {
       return {
         text: "Listo, no guardé nada. Dejé esa propuesta descartada.",
         action: "chat",
@@ -1197,10 +1225,75 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
       };
     }
 
+    // 2. Manejar Interceptación de Propuestas Activas (Confirmar o Corregir)
+    if (hasProposal) {
+      const lastAssistantProposalMsg = [...messages]
+        .reverse()
+        .find((message) => message.role === "assistant" && /resumen para confirmar|responde confirmar/i.test(message.content));
+
+      if (lastAssistantProposalMsg) {
+        const isFuel = lastAssistantProposalMsg.content.includes("confirmar el tanqueo");
+        const isTx =
+          lastAssistantProposalMsg.content.includes("confirmar el ingreso") ||
+          lastAssistantProposalMsg.content.includes("confirmar el gasto") ||
+          lastAssistantProposalMsg.content.includes("confirmar la compra");
+
+        if (isFuel || isTx) {
+          const accounts = await getAccountChoices(userId);
+          const debts = await getDebtChoices(userId);
+
+          // A. Ejecutar Confirmación
+          if (isConfirm) {
+            if (isFuel) {
+              const vehicles = await db.vehicle.findMany({ where: { userId }, include: { paymentDefault: true } });
+              const parsed = parsePreviousFuelProposal(lastAssistantProposalMsg.content);
+              const result = await executeFuelProposal(userId, parsed, vehicles, accounts, debts);
+              return {
+                text: result.text,
+                action: result.action,
+                responseMessages: [...messages, { role: "assistant" as const, content: result.text }],
+              };
+            } else {
+              const parsed = parsePreviousProposal(lastAssistantProposalMsg.content);
+              const result = await executeTransactionProposal(userId, parsed, accounts, debts);
+              return {
+                text: result.text,
+                action: result.action,
+                responseMessages: [...messages, { role: "assistant" as const, content: result.text }],
+              };
+            }
+          }
+
+          // B. Procesar Corrección / Override en Caliente
+          if (isFuel) {
+            const vehicles = await db.vehicle.findMany({ where: { userId }, include: { paymentDefault: true } });
+            const parsed = parsePreviousFuelProposal(lastAssistantProposalMsg.content);
+            const result = await updateFuelProposal(userId, parsed, lastUserMsg, vehicles, accounts, debts);
+            return {
+              text: result.text,
+              action: result.action,
+              responseMessages: [...messages, { role: "assistant" as const, content: result.text }],
+            };
+          } else {
+            const parsed = parsePreviousProposal(lastAssistantProposalMsg.content);
+            const result = await updateTransactionProposal(userId, parsed, lastUserMsg, accounts, debts);
+            return {
+              text: result.text,
+              action: result.action,
+              responseMessages: [...messages, { role: "assistant" as const, content: result.text }],
+            };
+          }
+        }
+      }
+    }
+
+    // 3. Flujo Normal sin Propuestas Activas
+    const text = resolveActionText(messages);
+    const action = inferAction(text);
     let directAnswer: AuraToolResult | null = null;
 
     if (action === "registrar_transaccion") {
-      directAnswer = await createTransactionFromAura(userId, text, { commit: commitRequested });
+      directAnswer = await createTransactionFromAura(userId, text, { commit: false });
     } else if (action === "confirmar_recurrente") {
       directAnswer = { text: await confirmRecurringFromAura(userId, text), action: { type: "executed", tool: "confirmar_recurrente" } };
     } else {
@@ -1234,6 +1327,6 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
       error instanceof Error && error.message.toLowerCase().includes("fetch")
         ? "No pude contactar a Ollama. Verifica que Ollama esté abierto y que el modelo de Aura esté disponible."
         : "Tuve un problema procesando eso. Intenta de nuevo o revisa si Quid y Ollama están activos.";
-    return { text, action, error: error instanceof Error ? error.message : String(error) };
+    return { text, action: "chat" as const, error: error instanceof Error ? error.message : String(error) };
   }
 }

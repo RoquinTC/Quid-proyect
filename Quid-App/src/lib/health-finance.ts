@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 
 export type PaymentType = "account" | "credit_card";
 
@@ -73,6 +74,8 @@ export async function createHealthFinanceEntry(params: {
         subAccountId: subAccountId || null,
         category,
         subCategory,
+        sourceModule: "health",
+        sourceId: appointmentId,
       },
     });
 
@@ -85,6 +88,15 @@ export async function createHealthFinanceEntry(params: {
     await db.medicalAppointment.update({
       where: { id: appointmentId },
       data: { financeSourceId: installment.id },
+    });
+
+    await applyCreditInstallmentBudgetImpact({
+      userId,
+      debtType: debt?.type,
+      category,
+      subCategory,
+      installmentAmount: amount,
+      nextPaymentDate,
     });
 
     return { type: "credit_card", id: installment.id };
@@ -122,15 +134,7 @@ export async function createHealthFinanceEntry(params: {
     }
 
     // Actualizar presupuesto
-    const budget = await db.budget.findFirst({
-      where: { userId, category, subCategory: null, type: "expense" },
-    });
-    if (budget) {
-      await db.budget.update({
-        where: { id: budget.id },
-        data: { spent: { increment: amount } },
-      });
-    }
+    await adjustBudgetSpent({ userId, category, subCategory, type: "expense", amount });
 
     // Vincular la fuente al appointment
     await db.medicalAppointment.update({
@@ -177,15 +181,13 @@ export async function reverseHealthFinanceEntry(appointmentId: string, userId: s
 
       // Revertir presupuesto gastado
       if (transaction.category) {
-        const budget = await db.budget.findFirst({
-          where: { userId, category: transaction.category, subCategory: null, type: "expense" },
+        await adjustBudgetSpent({
+          userId,
+          category: transaction.category,
+          subCategory: transaction.subCategory,
+          type: "expense",
+          amount: -Number(transaction.amount),
         });
-        if (budget) {
-          await db.budget.update({
-            where: { id: budget.id },
-            data: { spent: { increment: -Number(transaction.amount) } },
-          });
-        }
       }
     }
 
@@ -195,6 +197,7 @@ export async function reverseHealthFinanceEntry(appointmentId: string, userId: s
     // 2. Buscar si es una cuota de TC
     const installment = await db.installment.findFirst({
       where: { id: sourceId, debt: { userId } },
+      include: { debt: true },
     });
 
     if (installment) {
@@ -202,6 +205,16 @@ export async function reverseHealthFinanceEntry(appointmentId: string, userId: s
       await db.debt.update({
         where: { id: installment.debtId },
         data: { currentBalance: { increment: -Number(installment.totalAmount) } },
+      });
+
+      await applyCreditInstallmentBudgetImpact({
+        userId,
+        debtType: installment.debt.type,
+        category: installment.category,
+        subCategory: installment.subCategory,
+        installmentAmount: Number(installment.installmentAmount),
+        nextPaymentDate: installment.nextPaymentDate,
+        direction: -1,
       });
 
       // Eliminar cuota

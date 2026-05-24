@@ -3,12 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { syncSavingsBudget } from "@/lib/savings-budget-sync";
+import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { verifyEntityOwnership } from "@/lib/auth-guards";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, recurringConfirmSchema } from "@/lib/validations";
 import { createColombiaDate, getColombiaTodayString } from "@/lib/api";
-
-type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
 
 /**
  * Calculate the next scheduled date for a recurring payment.
@@ -390,7 +389,7 @@ export async function POST(
         nextPayment.setMonth(nextPayment.getMonth() + 1);
       }
 
-      await db.installment.create({
+      const installment = await db.installment.create({
         data: {
           debtId: payment.debtId,
           description: `${payment.description}${payment.isRecurring ? ` (Recurrente - ${payment.frequency})` : ""}`,
@@ -407,6 +406,8 @@ export async function POST(
           category: payment.category || null,
           subCategory: payment.subCategory || null,
           recurringPaymentId: payment.id,
+          sourceModule: "finance",
+          sourceId: payment.id,
         },
       });
 
@@ -421,26 +422,23 @@ export async function POST(
       if (isLoan) {
         const categoryToMatch = payment.category || "Deudas";
         const subCatToMatch = payment.subCategory || null;
-        let budget: BudgetRecord = null;
-        if (subCatToMatch) {
-          budget = await db.budget.findFirst({
-            where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },
-          });
-        }
-        if (!budget) {
-          budget = await db.budget.findFirst({
-            where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: "expense" },
-          });
-        }
-        if (budget) {
-          await db.budget.update({
-            where: { id: budget.id },
-            data: { spent: { increment: confirmedAmount } },
-          });
-        }
+        await adjustBudgetSpent({
+          userId: session.user.id,
+          category: categoryToMatch,
+          subCategory: subCatToMatch,
+          type: "expense",
+          amount: confirmedAmount,
+        });
+      } else {
+        await applyCreditInstallmentBudgetImpact({
+          userId: session.user.id,
+          debtType: payment.debt?.type,
+          category: installment.category,
+          subCategory: installment.subCategory,
+          installmentAmount: Number(installment.installmentAmount),
+          nextPaymentDate: installment.nextPaymentDate,
+        });
       }
-      // For CC: NO budget update — budget was already updated when the purchase was made
-      // (recalculate Source B counts CC installments)
     } else if (payment.type === "income") {
       // ============================================
       // INCOME TYPE — (Payroll / Nómina)
@@ -483,23 +481,13 @@ export async function POST(
       // Update income budget spent if category matches
       const categoryToMatch = payment.category || "Sueldo";
       const subCatToMatch = payment.subCategory || null;
-      let budget: BudgetRecord = null;
-      if (subCatToMatch) {
-        budget = await db.budget.findFirst({
-          where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "income" },
-        });
-      }
-      if (!budget) {
-        budget = await db.budget.findFirst({
-          where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: "income" },
-        });
-      }
-      if (budget) {
-        await db.budget.update({
-          where: { id: budget.id },
-          data: { spent: { increment: confirmedAmount } },
-        });
-      }
+      await adjustBudgetSpent({
+        userId: session.user.id,
+        category: categoryToMatch,
+        subCategory: subCatToMatch,
+        type: "income",
+        amount: confirmedAmount,
+      });
     } else {
       // ============================================
       // EXPENSE TYPE — NORMAL (from account, no debt)
@@ -534,23 +522,13 @@ export async function POST(
       // Update budget spent if category matches
       const categoryToMatch = payment.category || "Pagos Recurrentes";
       const subCatToMatch = payment.subCategory || null;
-      let budget: BudgetRecord = null;
-      if (subCatToMatch) {
-        budget = await db.budget.findFirst({
-          where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },
-        });
-      }
-      if (!budget) {
-        budget = await db.budget.findFirst({
-          where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: "expense" },
-        });
-      }
-      if (budget) {
-        await db.budget.update({
-          where: { id: budget.id },
-          data: { spent: { increment: confirmedAmount } },
-        });
-      }
+      await adjustBudgetSpent({
+        userId: session.user.id,
+        category: categoryToMatch,
+        subCategory: subCatToMatch,
+        type: "expense",
+        amount: confirmedAmount,
+      });
     }
 
     // 5. For recurring payments (isRecurring=true), auto-generate next scheduled date

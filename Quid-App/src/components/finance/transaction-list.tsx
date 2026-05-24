@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -263,6 +264,7 @@ export function TransactionList({ accountId }: TransactionListProps) {
   const [editSubCategory, setEditSubCategory] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editExcludeFromBudget, setEditExcludeFromBudget] = useState(false);
 
   // Categories from API
   const [categories, setCategories] = useState<CategoryData[]>([]);
@@ -380,6 +382,7 @@ export function TransactionList({ accountId }: TransactionListProps) {
       setEditSubCategory(tx.subCategory || "");
       setEditDate(tx.date ? toColombiaDateString(tx.date) : "");
       setEditNotes(tx.notes || "");
+      setEditExcludeFromBudget(Boolean(tx.excludeFromBudget));
     }
   };
 
@@ -400,6 +403,7 @@ export function TransactionList({ accountId }: TransactionListProps) {
       setEditSubCategory(tx.subCategory || "");
       setEditDate(tx.date ? toColombiaDateString(tx.date) : "");
       setEditNotes(tx.notes || "");
+      setEditExcludeFromBudget(Boolean(tx.excludeFromBudget));
     }
   };
 
@@ -419,6 +423,7 @@ export function TransactionList({ accountId }: TransactionListProps) {
           subCategory: editType !== "transfer" ? (editSubCategory || null) : null,
           date: editDate,
           notes: editNotes || null,
+          excludeFromBudget: editType !== "transfer" ? editExcludeFromBudget : false,
         }),
       });
       toast.success("Transacción actualizada");
@@ -1152,6 +1157,22 @@ export function TransactionList({ accountId }: TransactionListProps) {
                                           className="rounded-lg h-9 text-sm"
                                         />
                                       </div>
+
+                                      {/* Exclude from Budget */}
+                                      {editType !== "transfer" && (
+                                        <div className="flex items-center justify-between rounded-xl border border-gray-100 dark:border-gray-700/60 bg-gray-50/70 dark:bg-gray-800/40 px-3 py-2">
+                                          <div>
+                                            <Label className="text-xs">Excluir del presupuesto</Label>
+                                            <p className="text-[11px] text-gray-400">
+                                              Este movimiento no suma al corte presupuestal.
+                                            </p>
+                                          </div>
+                                          <Switch
+                                            checked={editExcludeFromBudget}
+                                            onCheckedChange={setEditExcludeFromBudget}
+                                          />
+                                        </div>
+                                      )}
 
                                       {/* Save / Cancel */}
                                       <div className="flex gap-2 pt-1">

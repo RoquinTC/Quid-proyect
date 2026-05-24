@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
       orderBy: { date: "desc" },
     });
 
-    // ── Source 2: CC Installments (expense budgets only) ──
+    // ── Source 2: CC Installments due in this budget period ──
     let installments: Array<{
       id: string;
       source: "installment";
@@ -122,7 +122,7 @@ export async function GET(req: NextRequest) {
 
     if (type === "expense") {
       const instWhere: Record<string, unknown> = {
-        purchaseDate: { gte: periodStart, lte: periodEnd },
+        nextPaymentDate: { gte: periodStart, lt: periodEndPlus },
         debt: { type: { not: "loan" }, userId },
       };
 
@@ -146,6 +146,7 @@ export async function GET(req: NextRequest) {
           category: true,
           subCategory: true,
           purchaseDate: true,
+          nextPaymentDate: true,
           isPaid: true,
           currentInstallment: true,
           totalInstallments: true,
@@ -162,7 +163,7 @@ export async function GET(req: NextRequest) {
         description: inst.description,
         category: inst.category,
         subCategory: inst.subCategory,
-        date: inst.purchaseDate,
+        date: inst.nextPaymentDate,
         debtId: inst.debt.id,
         debtName: inst.debt.name,
         debtColor: inst.debt.color,

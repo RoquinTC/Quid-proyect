@@ -8,6 +8,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -23,9 +32,11 @@ import {
   ClipboardCheck,
   Trash2,
   Loader2,
+  Wallet,
+  CreditCard,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import type { ShoppingListItem, ShoppingList, HealthProfile } from "@/lib/types";
+import type { Account, Debt, ShoppingListItem, ShoppingList, HealthProfile } from "@/lib/types";
 
 const unitLabels: Record<string, string> = {
   unit: "Unidad",
@@ -50,8 +61,17 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   const [loading, setLoading] = useState(true);
   const [showItemForm, setShowItemForm] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [healthProfiles, setHealthProfiles] = useState<HealthProfile[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [paymentType, setPaymentType] = useState<"account" | "credit_card">("account");
+  const [paymentAccountId, setPaymentAccountId] = useState("");
+  const [paymentSubAccountId, setPaymentSubAccountId] = useState("");
+  const [paymentDebtId, setPaymentDebtId] = useState("");
+  const [installmentCount, setInstallmentCount] = useState("1");
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const fetchList = useCallback(async () => {
     try {
@@ -73,10 +93,29 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
     }
   }, []);
 
+  const fetchFinanceOptions = useCallback(async () => {
+    try {
+      const [accountsData, debtsData] = await Promise.all([
+        apiFetch<Account[]>("/api/accounts"),
+        apiFetch<Debt[]>("/api/debts"),
+      ]);
+      setAccounts(accountsData);
+      setDebts(debtsData.filter((debt) => debt.type !== "loan"));
+      if (!paymentAccountId && accountsData.length > 0) setPaymentAccountId(accountsData[0].id);
+      if (!paymentDebtId) {
+        const firstCreditCard = debtsData.find((debt) => debt.type !== "loan");
+        if (firstCreditCard) setPaymentDebtId(firstCreditCard.id);
+      }
+    } catch (error) {
+      console.error("Error fetching finance options:", error);
+    }
+  }, [paymentAccountId, paymentDebtId]);
+
   useEffect(() => {
     fetchList();
     fetchProfiles();
-  }, [fetchList, fetchProfiles]);
+    fetchFinanceOptions();
+  }, [fetchList, fetchProfiles, fetchFinanceOptions]);
 
   const handleToggleChecked = async (itemId: string, checked: boolean) => {
     try {
@@ -141,14 +180,33 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   };
 
   const handleConfirm = async () => {
+    setConfirmError(null);
+    if (paymentType === "account" && !paymentAccountId) {
+      setConfirmError("Selecciona la cuenta con la que pagaste.");
+      return;
+    }
+    if (paymentType === "credit_card" && !paymentDebtId) {
+      setConfirmError("Selecciona la tarjeta de crédito.");
+      return;
+    }
+
     setConfirming(true);
     try {
       await apiFetch(`/api/shopping-lists/${listId}/confirm`, {
         method: "POST",
+        body: JSON.stringify({
+          paymentType,
+          accountId: paymentType === "account" ? paymentAccountId : null,
+          subAccountId: paymentType === "account" ? paymentSubAccountId || null : null,
+          debtId: paymentType === "credit_card" ? paymentDebtId : null,
+          installmentCount: paymentType === "credit_card" ? Number(installmentCount) || 1 : null,
+        }),
       });
+      setConfirmDialogOpen(false);
       await fetchList();
     } catch (error) {
       console.error("Error confirming list:", error);
+      setConfirmError(error instanceof Error ? error.message : "No se pudo confirmar la compra.");
     } finally {
       setConfirming(false);
     }
@@ -187,6 +245,8 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
     0
   );
   const purchasedCount = list.items.filter((i) => i.isPurchased).length;
+  const selectedAccount = accounts.find((account) => account.id === paymentAccountId);
+  const availableSubAccounts = selectedAccount?.subAccounts || [];
 
   const statusLabel: Record<string, string> = {
     draft: "Borrador",
@@ -455,7 +515,10 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
 
         {list.status === "verified" && (
           <Button
-            onClick={handleConfirm}
+            onClick={() => {
+              setConfirmError(null);
+              setConfirmDialogOpen(true);
+            }}
             disabled={confirming}
             className="w-full rounded-xl bg-gradient-to-r from-green-600 to-emerald-500"
           >
@@ -468,6 +531,153 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
           </Button>
         )}
       </div>
+
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent className="rounded-2xl sm:max-w-md max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Confirmar compra de mercado</DialogTitle>
+            <DialogDescription>
+              Registra el gasto en Finanzas y actualiza la despensa con los productos comprados.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 p-3">
+              <p className="text-xs text-amber-700 dark:text-amber-300">Total real</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(totalActual)}</p>
+              <p className="text-xs text-gray-500 mt-1">Categoría: Alimentación / Mercado</p>
+            </div>
+
+            <RadioGroup
+              value={paymentType}
+              onValueChange={(value) => {
+                setPaymentType(value as "account" | "credit_card");
+                setConfirmError(null);
+              }}
+              className="grid grid-cols-2 gap-2"
+            >
+              <Label
+                htmlFor="pantry-pay-account"
+                className={`flex items-center gap-2 rounded-xl border p-3 cursor-pointer ${
+                  paymentType === "account"
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20"
+                    : "border-gray-200 dark:border-gray-700"
+                }`}
+              >
+                <RadioGroupItem id="pantry-pay-account" value="account" />
+                <Wallet className="size-4" />
+                <span className="text-sm font-medium">Cuenta</span>
+              </Label>
+              <Label
+                htmlFor="pantry-pay-card"
+                className={`flex items-center gap-2 rounded-xl border p-3 cursor-pointer ${
+                  paymentType === "credit_card"
+                    ? "border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-900/20"
+                    : "border-gray-200 dark:border-gray-700"
+                }`}
+              >
+                <RadioGroupItem id="pantry-pay-card" value="credit_card" />
+                <CreditCard className="size-4" />
+                <span className="text-sm font-medium">Tarjeta</span>
+              </Label>
+            </RadioGroup>
+
+            {paymentType === "account" ? (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Cuenta de pago</Label>
+                  <Select
+                    value={paymentAccountId}
+                    onValueChange={(value) => {
+                      setPaymentAccountId(value);
+                      setPaymentSubAccountId("");
+                    }}
+                  >
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Selecciona una cuenta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.name} · {formatCurrency(account.balance)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {availableSubAccounts.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Bolsillo</Label>
+                    <Select value={paymentSubAccountId || "none"} onValueChange={(value) => setPaymentSubAccountId(value === "none" ? "" : value)}>
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder="Cuenta principal" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Cuenta principal</SelectItem>
+                        {availableSubAccounts.map((subAccount) => (
+                          <SelectItem key={subAccount.id} value={subAccount.id}>
+                            {subAccount.name} · {formatCurrency(subAccount.balance)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Tarjeta de crédito</Label>
+                  <Select value={paymentDebtId} onValueChange={setPaymentDebtId}>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue placeholder="Selecciona una tarjeta" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {debts.map((debt) => (
+                        <SelectItem key={debt.id} value={debt.id}>
+                          {debt.name} · saldo {formatCurrency(debt.currentBalance)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Cuotas</Label>
+                  <Select value={installmentCount} onValueChange={setInstallmentCount}>
+                    <SelectTrigger className="rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[1, 2, 3, 4, 6, 12].map((count) => (
+                        <SelectItem key={count} value={String(count)}>
+                          {count === 1 ? "Una cuota" : `${count} cuotas`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {confirmError && (
+              <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
+                {confirmError}
+              </p>
+            )}
+
+            <Button
+              onClick={handleConfirm}
+              disabled={confirming}
+              className="w-full rounded-xl bg-gradient-to-r from-green-600 to-emerald-500"
+            >
+              {confirming ? <Loader2 className="size-4 animate-spin mr-2" /> : <CheckCircle2 className="size-4 mr-2" />}
+              Registrar compra
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Item Form */}
       <ShoppingItemForm

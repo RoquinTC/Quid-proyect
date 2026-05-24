@@ -97,8 +97,9 @@ export async function PUT(
 
     // Determine new excludeFromBudget value
     const newExcludeFromBudget = body.excludeFromBudget !== undefined ? body.excludeFromBudget : existing.excludeFromBudget;
+    const excludeChangedForBudget = body.excludeFromBudget !== undefined && body.excludeFromBudget !== existing.excludeFromBudget;
 
-    if ((categoryChanged || amountChangedForBudget) && (oldType === "income" || oldType === "expense" || (body.type && body.type !== "transfer"))) {
+    if ((categoryChanged || amountChangedForBudget || excludeChangedForBudget) && (oldType === "income" || oldType === "expense" || (body.type && body.type !== "transfer"))) {
       const effectiveNewType = newType === "transfer" ? null : newType;
       const effectiveOldType = oldType === "transfer" ? null : oldType;
 
@@ -290,7 +291,7 @@ export async function DELETE(
       }
 
       // Reverse budget for counterpart if applicable
-      if (counterpart?.category) {
+      if (counterpart?.category && !counterpart.excludeFromBudget) {
         // Find matching budget (subCategory-specific first, then parent)
         let counterpartBudget: BudgetRecord = null;
         if (counterpart.subCategory) {
@@ -347,7 +348,7 @@ export async function DELETE(
     }
 
     // Reverse budget spent (with subCategory matching)
-    if (existing.category) {
+    if (existing.category && !existing.excludeFromBudget) {
       const budgetType = existing.type === "income" ? "income" : "expense";
       let budget: BudgetRecord = null;
       // Try subCategory-specific budget first

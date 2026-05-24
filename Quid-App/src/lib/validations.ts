@@ -859,6 +859,14 @@ export const shoppingGenerateSchema = z.object({
   profileId: z.string().nullable().optional(),
 });
 
+export const shoppingListConfirmSchema = z.object({
+  paymentType: z.enum(["account", "credit_card"]),
+  accountId: z.string().nullable().optional(),
+  subAccountId: z.string().nullable().optional(),
+  debtId: z.string().nullable().optional(),
+  installmentCount: z.number().int().min(1).nullable().optional(),
+});
+
 // ============================================
 // HEALTH PROFILES
 // ============================================
@@ -965,6 +973,14 @@ export const categoryCreateSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio"),
   icon: z.string().nullable().optional(),
   color: z.string().nullable().optional(),
+});
+
+export const categoryRuleUpdateSchema = z.object({
+  type: z.enum(["income", "expense"]),
+  category: z.string().min(1, "La categoría es obligatoria"),
+  subCategory: z.string().nullable().optional(),
+  countsForEmergencyIncome: z.boolean().optional(),
+  isFixedExpense: z.boolean().optional(),
 });
 
 // ============================================

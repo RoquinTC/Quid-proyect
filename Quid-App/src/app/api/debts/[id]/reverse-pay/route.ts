@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
+import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 
 type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
 
@@ -187,6 +188,16 @@ export async function POST(
           },
         });
         if (nextInstallment) {
+          await applyCreditInstallmentBudgetImpact({
+            userId: session.user.id,
+            debtType: debt.type,
+            category: nextInstallment.category,
+            subCategory: nextInstallment.subCategory,
+            installmentAmount: Number(nextInstallment.installmentAmount),
+            nextPaymentDate: nextInstallment.nextPaymentDate,
+            direction: -1,
+          });
+
           await db.installment.delete({ where: { id: nextInstallment.id } });
         }
       }

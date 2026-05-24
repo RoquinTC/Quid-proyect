@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, installmentUpdateSchema } from "@/lib/validations";
+import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 
 export async function PUT(
   req: NextRequest,
@@ -96,9 +97,28 @@ export async function PUT(
       }
     }
 
+    await applyCreditInstallmentBudgetImpact({
+      userId: session.user.id,
+      debtType: existing.debt.type,
+      category: existing.category,
+      subCategory: existing.subCategory,
+      installmentAmount: toNumber(existing.installmentAmount),
+      nextPaymentDate: existing.nextPaymentDate,
+      direction: -1,
+    });
+
     const updated = await db.installment.update({
       where: { id },
       data: updateData,
+    });
+
+    await applyCreditInstallmentBudgetImpact({
+      userId: session.user.id,
+      debtType: existing.debt.type,
+      category: updated.category,
+      subCategory: updated.subCategory,
+      installmentAmount: toNumber(updated.installmentAmount),
+      nextPaymentDate: updated.nextPaymentDate,
     });
 
     return NextResponse.json(updated);
@@ -140,6 +160,16 @@ export async function DELETE(
 
     // Delete the installment
     await db.installment.delete({ where: { id } });
+
+    await applyCreditInstallmentBudgetImpact({
+      userId: session.user.id,
+      debtType: existing.debt.type,
+      category: existing.category,
+      subCategory: existing.subCategory,
+      installmentAmount: toNumber(existing.installmentAmount),
+      nextPaymentDate: existing.nextPaymentDate,
+      direction: -1,
+    });
 
     // Reverse the remaining balance from the debt
     if (remainingAmount > 0) {

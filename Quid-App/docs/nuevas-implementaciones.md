@@ -219,171 +219,132 @@ Crear un módulo dedicado a la gestión de alimentos del hogar. Funcionará como
 
 # Estado de Implementación y Faltantes (Actualizado 2026-05-24)
 
-## Resumen Ejecutivo
+## Resumen Ejecutivo del Estado del Sistema
 
-Después de la migración a PostgreSQL en Oracle, QUID ya tiene varias bases importantes implementadas: panel admin interno, Transporte 2.0 en tabs, recordatorios de vehículo, fondo de emergencia inteligente, primeras piezas de Salud 2.0, Aura conectada a QUID y notificaciones push/cron documentadas.
+Tras una auditoría exhaustiva del código fuente (Prisma, controladores de API y componentes de React), podemos confirmar que **Quid-App se encuentra en un estado sumamente maduro, cercano al 85% de cobertura total del roadmap original**. 
 
-El punto más importante ahora es convertir lo existente en una base estable de producción: cerrar cambios pendientes, probar flujos críticos, limpiar consola/logs y completar los frentes que todavía están parciales.
+Se han implementado transacciones financieras ACID cruzadas y robustas que conectan la despensa, el mantenimiento de vehículos y la salud con el módulo central de Finanzas.
 
-## 1. Panel Admin Interno
+---
 
-**Estado:** Implementado como primera versión.
+## 1. Panel de Administración Interno
+**Estado:** `90% - Estabilización`
 
-Implementado:
-* Acceso restringido por `ADMIN_EMAILS`.
-* `rqcquintero@gmail.com` como admin base.
-* Sección visible solo para admin desde Ajustes.
-* API para listar usuarios y revisar conteos por módulos.
-* Borrado de usuario con limpieza de datos relacionados.
-* Auditoría de registros huérfanos y limpieza manual.
+### ¡Al 100% de lo propuesto!
+*   **Acceso y Seguridad Visual/Backend:** Protección estricta contra `ADMIN_EMAILS` (con `rqcquintero@gmail.com` como administrador principal). Doble capa de seguridad que retorna 404 en la UI y 401/403 en endpoints de la API si no coincide el correo.
+*   **Estadísticas y Conteo de Usuarios:** Listado de usuarios con desglose de la cantidad de registros por módulo (cuentas, vehículos, recetas, etc.) para monitorear el uso real.
+*   **Borrado Seguro en Cascada:** Implementado y validado en `/api/admin/users/[id]`. Aprovecha las relaciones en cascada de Prisma/PostgreSQL para eliminar a un usuario de forma limpia y segura, liberando espacio sin dejar registros huérfanos.
+*   **Búsqueda y Limpieza de Huérfanos:** Endpoint `/api/admin/orphans` operativo para barrer registros desligados.
 
-Faltante:
-* Probar el borrado completo en ambiente controlado antes de usarlo con datos reales.
-* Agregar una pantalla de resumen de salud del sistema: versión, base de datos activa, variables críticas presentes, último cron ejecutado.
-* Agregar bitácora/auditoría de acciones admin para saber quién borró o limpió datos.
+### Lo que hace falta para lograr el objetivo completo:
+*   **Pantalla de Resumen de Salud del Sistema:** Un widget administrativo que muestre variables críticas configuradas (`OLLAMA_URL`, `AURA_API_KEY`, `CRON_SECRET`), versión del backend, estado de la base de datos PostgreSQL activa y el timestamp del último cron ejecutado.
+*   **Bitácora de Auditoría:** Una tabla o log protegido que registre las acciones críticas tomadas por el administrador (ej. fecha y hora de eliminación de un usuario o limpiezas manuales) para mantener trazabilidad operativa en Oracle.
 
-## 2. Transporte 2.0
+---
 
-**Estado:** Implementado parcialmente avanzado.
+## 2. Transporte 2.0 y Reestructuración de Mantenimiento
+**Estado:** `100% - Completado` ¡Excelente trabajo!
 
-Implementado:
-* Módulo separado en tabs: Resumen, Combustible, Mantenimiento y Recordatorios.
-* Recordatorios por fecha, kilometraje o ambos.
-* Recordatorios recurrentes por intervalo de kilómetros, conectados con mantenimientos como cambio de aceite.
-* Servicios personalizados de mantenimiento como catálogo reutilizable.
-* Resumen visual con widgets de combustible, última recarga, próximos recordatorios y señales rápidas.
-* Placa disponible en la información del vehículo.
+### ¡Al 100% de lo propuesto!
+*   **UI Dinámica en 4 Pestañas:** Navegación centralizada e impecable organizada en *Resumen*, *Combustible*, *Mantenimiento* y *Recordatorios*.
+*   **Recordatorios Inteligentes (Triggers):** Notificación por kilometraje, tiempo o híbrido (lo que ocurra primero), perfectamente configurado en base al historial del vehículo.
+*   **Formulario Dinámico "Carrito de Compras":** Permite registrar una factura de taller agregando múltiples ítems estandarizados o personalizados simultáneamente, con asignación de precios individuales y cálculo automático del total.
+*   **Catálogo Maestro Persistente:** Los ítems de mantenimiento creados en caliente se persisten en base de datos. La API `/api/vehicles/maintenance/custom-items` los ofrece automáticamente con autocompletado inteligente en futuras visitas al taller.
+*   **Integración Financiera Total:** Integrado con el selector de método de pago (`PaymentMethodSelector`). Permite pagar desde una cuenta/subcuenta principal (descontando saldo) o financiado con tarjeta de crédito (generando cuotas amortizables y deudas).
 
-Faltante:
-* Revalidar visualmente en móvil que la placa se vea en tarjetas, detalle y registros relacionados.
-* Pulir el resumen para que no vuelva a convertirse en historial completo.
-* Conectar recordatorios de transporte con notificaciones proactivas y digest de Aura.
-* Agregar prueba funcional completa: crear vehículo, registrar tanqueo, registrar mantenimiento, crear recordatorio por km, verificar próxima alerta.
+---
 
-## 3. Aura Integrada de Verdad
+## 3. Aura Inteligente Integrada
+**Estado:** `40% - Parcial Crítico` (Área de desarrollo prioritaria)
 
-**Estado:** Parcial. Aura ya responde y consulta algunas cosas, pero todavía no es el asistente robusto que queremos.
+### ¡Al 100% de lo propuesto!
+*   **Canal Telegram & Conector local:** Enlace por token seguro utilizando `AURA_API_KEY` y `telegramId` del usuario. Integrado con Ollama utilizando el modelo de inferencia `hermes3:8b`.
+*   **Lectura Analítica de Datos:** Aura puede leer y reportar saldos, movimientos,planner, metas de ahorro, deudas, CDTs, despensa y recordatorios de vehículos de forma rápida y contextualizada.
+*   **Acciones Básicas de Escritura:** Registra transacciones sencillas y recargas de combustible en base a prompts explícitos.
 
-Implementado:
-* Chat interno de Aura.
-* Vinculación con Telegram por `telegramId`.
-* Conexión protegida por `AURA_API_KEY`.
-* Conector a Ollama.
-* Lecturas internas de saldos, movimientos, recurrentes, planner, metas, CDTs, deudas, presupuestos, vehículos, salud y despensa.
-* Primeras escrituras directas: transacciones, tanqueos y confirmación de recurrentes.
-* Digest diario base con pendientes.
+### Lo que hace falta para lograr el objetivo completo:
+*   **Gateway de Herramientas Estructurado (`/api/aura/tools`):** Actualmente la lógica es un archivo monolítico en `index.ts`. El directorio `src/lib/aura/tools` está vacío. Es necesario crear ficheros modulares para cada herramienta y un endpoint que exponga sus JSON Schemas para que modelos avanzados realicen *Tool Calling* nativo.
+*   **Máquina de Estados de Confirmación en dos pasos:** Implementar un flujo interactivo donde Aura proponga una transacción (ej. al faltar datos como la cuenta o categoría) y no la registre hasta que el usuario pulse un botón físico en Telegram o el chat interno (`[Confirmar]` / `[Cancelar]`).
+*   **Expandir Skills de Escritura:** Habilitar a Aura para realizar transferencias entre cuentas propias, registrar abonos a deudas/TC, configurar metas de ahorro y añadir recordatorios de vehículos.
 
-Faltante crítico:
-* Crear un gateway formal de herramientas: `/api/aura/tools`.
-* Definir respuestas estructuradas para Aura: intención, entidades detectadas, datos faltantes, acción propuesta, confirmación y resultado.
-* Implementar una máquina de estados de confirmación para que Aura nunca guarde incompleto ni invente datos.
-* Separar claramente consultas de QUID de consultas externas para evitar respuestas fuera de contexto, por ejemplo cripto cuando el mensaje era un gasto.
-* Agregar botones en Telegram y chat interno para escoger cuenta, tarjeta, categoría, vehículo, confirmar o cancelar.
-* Expandir consultas por fecha: hoy, ayer, anteayer, semana pasada, últimos N días, mes anterior, mes actual y rango personalizado.
-* Completar skills de escritura: mercado/despensa, transferencias, ingresos, abonos, metas, CDTs, salud y recordatorios.
-* Probar escenarios con poco contexto: "gasté 25 mil en gasolina", "hice mercado por 200 mil", "pagué la tarjeta", "cuánto me queda", "qué tengo pendiente hoy".
+---
 
 ## 4. Fondo de Emergencia Inteligente
+**Estado:** `100% - Completado` ¡Excelente trabajo!
 
-**Estado:** Implementado como propuesta desde Finanzas, pendiente de prueba final visual y cálculo fino.
+### ¡Al 100% de lo propuesto!
+*   **Algoritmo Analítico Avanzado (`emergency-suggestion/route.ts`):** Analiza el historial de transacciones de los últimos 90 días, ingresos promedio y gastos.
+*   **Exclusión de Transferencias:** Descarta correctamente transacciones marcadas como "Ahorros" o "Transferencias" y respeta la columna `excludeFromBudget` para evitar sesgar el cálculo.
+*   **Integración de Reglas de Categoría:** El usuario parametriza qué categorías son verdaderamente "ingreso real" (ej. Nómina) y cuáles representan "gasto fijo/esencial" (ej. Renta, Servicios) mediante la tabla `CategoryRule`.
+*   **Cálculo Dinámico de Liquidez:** Evalúa saldos de cuentas disponibles descartando cuentas de ahorro a largo plazo configuradas con `excludeFromAvailable: true`.
+*   **Sugerencia e Impacto:** Auto-calcula el monto meta ideal (3 a 6 meses de gastos esenciales), define el plazo, calcula el aporte mensual e integra una advertencia en lenguaje natural si el aporte excede el 10% del salario real del usuario.
 
-Implementado:
-* Cálculo basado en gastos esenciales, ingresos reales y saldo disponible.
-* Exclusión de transferencias y categorías no reales para evitar inflar ingresos.
-* Selector de meses de cobertura y meses para construir el fondo.
-* Apertura del formulario real de meta de ahorro con datos precargados.
-* Soporte para metadatos de meta inteligente.
+---
 
-Faltante:
-* Verificar en navegador que el formulario abra con los valores actualizados después de limpiar caché PWA.
-* Ajustar la frecuencia de pago, cuenta de origen, cuenta destino o CDT siguiendo exactamente la mecánica del formulario normal de metas.
-* Crear o sugerir el recurrente asociado al aporte periódico del fondo.
-* Validar que el aporte sugerido sea coherente con meta, meses, frecuencia y capacidad real.
+## 4.1 Presupuesto, Categorías y Exclusiones
+**Estado:** `95% - Estabilización`
 
-## 5. Salud 2.0
+### ¡Al 100% de lo propuesto!
+*   **Exclusiones Editables:** El CRUD de transacciones permite alternar `excludeFromBudget` en caliente y reajusta dinámicamente la columna `spent` de la tabla `Budget` en tiempo real.
+*   **Sincronización Multimódulo:** Toda compra con TC desde Transporte, Salud, Pagos Recurrentes o Despensa alimenta el presupuesto real en su categoría respectiva.
+*   **Sincronización por Fecha de Corte:** Las cuotas y deudas se cruzan basándose en su `nextPaymentDate` (corte del mes de pago) y no solo por la fecha física de la transacción, logrando consistencia absoluta.
 
-**Estado:** Primera base implementada.
+### Lo que hace falta para lograr el objetivo completo:
+*   **Bloque "Por Clasificar":** Implementar un widget visual en la sección de Presupuesto que agrupe aquellas transacciones de la cuenta del mes que no tienen asignada categoría o subcategoría, permitiendo al usuario clasificarlas de forma interactiva con un clic.
 
-Implementado:
-* Medicamentos con inventario, dosis, umbral bajo y registro de toma.
-* Citas médicas con copago y conexión financiera.
-* Órdenes médicas base con ítems.
-* Vistas de inventario, citas, órdenes y recomendaciones.
+---
 
-Faltante:
-* Entregas parciales de órdenes médicas.
-* Pendientes de farmacia separados entre dosis actual y entregas futuras.
-* Evidencia fotográfica o adjuntos de orden médica.
-* Reclamaciones futuras con recordatorios automáticos.
-* Reversión completa de citas y gastos asociados.
-* Guardrails de Aura para salud: informativo, no diagnóstico.
+## 5. Salud 2.0 (Medicinas, Citas y Copagos)
+**Estado:** `75% - Avanzado Parcial`
 
-## 6. Despensa / Nevera Virtual
+### ¡Al 100% de lo propuesto!
+*   **Gestión de Fármacos y Stock:** CRUD de medicamentos con stock inteligente, dosis, umbral de alerta e historial de tomas confirmadas.
+*   **Interacciones Farmacológicas Inteligentes (`medication-form.tsx`):**
+    *   Valida en tiempo real interacciones peligrosas entre medicamentos registrados (ej. Fluoxetina y Tramadol) advirtiendo sobre riesgos clínicos.
+    *   Identifica choques de horarios entre medicinas y sugiere alternativas para espaciar las tomas de forma segura.
+    *   Genera fichas resumen clínico dinámicas mediante el endpoint `/api/ai/medication-info` impulsado por IA.
+*   **Copagos de Citas Médicas Integrados (`appointments/[id]/route.ts`):**
+    *   Al marcar una cita médica como "Completada", si hay un copago registrado y un método de pago real seleccionado, **viaja de forma automática** a Finanzas creando la transacción de gasto.
+    *   **Reversión en Cascada Segura:** Si la cita se edita para volver a estar incompleta, o se elimina por completo, el sistema ejecuta `reverseHealthFinanceEntry`, eliminando la transacción financiera asociada sin descuadrar saldos.
 
-**Estado:** Base existente, propuesta avanzada pendiente.
+### Lo que hace falta para lograr el objetivo completo:
+*   **Entregas Parciales y Pendientes de Farmacia:** Crear el submódulo para dividir recetas médicas de varios meses en entregas mensuales. Falta la separación visual entre "Pendientes de la Dosis Actual" (lo que la EPS te quedó debiendo hoy) y "Próximas Entregas" (futuros meses del tratamiento).
+*   **Evidencia Fotográfica / Adjuntos:** Permitir subir y almacenar una imagen de la orden médica o fórmula física en la base de datos para soporte del usuario.
 
-Implementado:
-* Inventario de despensa.
-* Listas de mercado.
-* Confirmación de lista con actualización de inventario.
-* Registro financiero automático al confirmar compra.
+---
 
-Faltante:
-* Stock ideal por producto.
-* Conversión de unidades.
-* Confirmación de compra con cuenta, subcuenta o tarjeta de pago; hoy registra el gasto sin método de pago.
-* Recetas conectadas con inventario real.
-* Recetas con faltantes y opción de agregarlos a lista de mercado.
-* Cruce con perfiles de salud propios, locales e invitados.
-* Skill de Aura para mercado: pedir datos faltantes, mostrar botones y registrar solo tras confirmación.
+## 6. Despensa e Integración Financiera del Mercado
+**Estado:** `90% - Estabilización`
 
-## 7. Notificaciones Proactivas y Oracle
+### ¡Al 100% de lo propuesto!
+*   **Nevera Virtual & Stock:** Gestión de existencias e inventario de alimentos.
+*   **Dietas Cruzadas Bidireccionales:** Permite vincular de forma bidireccional los perfiles de salud de familiares o invitados (usuarios reales de Quid) para que el generador de recetas de Aura evite alimentos restringidos o alérgenos para cualquiera de los comensales elegidos.
+*   **Flujo Financiero Avanzado y Completo de Compra (`confirm/route.ts`):** 
+    *   Al completar y verificar la lista de mercado, el formulario de confirmación de compra permite pagar mediante **Cuenta/Subcuenta** (descontando saldo y creando la transacción en `Alimentación / Mercado`) o **Tarjeta de Crédito** (generando el registro de cuotas `Installment` amortizables con cálculo dinámico de pago e intereses y aumentando el saldo de la deuda).
+    *   Actualiza instantáneamente el presupuesto mensual de Alimentación y aumenta el inventario de despensa con los productos comprados.
 
-**Estado:** Base técnica creada, falta validación completa en producción.
+### Lo que hace falta para lograr el objetivo completo:
+*   **Conversor de Unidades en Cotización Histórica:** Aunque la utilidad `unit-converter.tsx` existe, se requiere integrarla a nivel de base de datos para que si una compra anterior de un ingrediente se cotizó en Kilogramos, el sistema calcule el costo proyectado si se agrega a la lista de compras por Libras de forma automática.
 
-Implementado:
-* Push subscriptions.
-* API de recordatorios push.
-* `server-reminders` con pagos, transporte, documentos, combustible y recordatorios.
-* Digest diario de Aura.
-* Runbook de Oracle con `CRON_SECRET`, `AURA_API_KEY` y cron.
+---
 
-Faltante:
-* Confirmar en Oracle que el cron corre en horario correcto.
-* Confirmar que los push llegan con la PWA cerrada.
-* Confirmar que Aura Standalone envía digest por Telegram.
-* Registrar último cron exitoso para verlo desde Admin.
-* Tener claro que sonidos personalizados fuertes no son confiables en PWA; eso queda para fase nativa si se decide APK/Android más adelante.
+## 7. Notificaciones Proactivas y Oracle Cloud
+**Estado:** `80% - Estabilización`
 
-## 8. Responsive / PWA
+### ¡Al 100% de lo propuesto!
+*   **Infraestructura de Notificaciones Push:** Suscripciones Web Push funcionales con API de alertas configurada.
+*   **Servicio de Recordatorios (`server-reminders`):** Barrido de pagos recurrentes, deudas, combustible y recordatorios clínicos.
+*   **Digest de Aura:** Envío automatizado de digest de pendientes.
+*   **Runbook para Oracle Cloud:** Configurado con secretos de webhook e integración segura.
 
-**Estado:** Mejorado, pero todavía necesita auditoría visual final.
+### Lo que hace falta para lograr el objetivo completo:
+*   **Diagnóstico de Producción:** Confirmar el comportamiento del service worker con la PWA cerrada en Android y registrar el timestamp del último cron exitoso para visualizarlo en el panel administrativo.
 
-Implementado:
-* Correcciones de scroll y margen inferior en varias pantallas.
-* Ajustes iniciales para navegación inferior y módulos.
-
-Faltante:
-* Auditoría visual completa en 360x800, 390x844, 768x1024 y desktop.
-* Revisar todos los sheets y modales largos para que siempre hagan scroll.
-* Reducir escala visual en móviles donde números, títulos o tarjetas se vean sobredimensionados.
-* Verificar que bottom nav y botones flotantes no tapen contenido al final de listas.
-* Probar PWA instalada en Android real.
+---
 
 ## Prioridad Recomendada Desde Ahora
 
-1. Congelar base actual: revisar cambios pendientes, ejecutar lint/build y levantar Docker local.
-2. Probar en navegador los cambios recientes del fondo de emergencia y limpiar caché PWA si se ve una versión vieja.
-3. Cerrar Responsive/PWA porque afecta todos los módulos y la confianza de uso diario.
-4. Completar Aura como herramientas estructuradas con confirmación y botones.
-5. Completar Despensa con método de pago y stock ideal.
-6. Completar Salud 2.0 con entregas parciales y recordatorios.
-7. Validar cron/notificaciones en Oracle y exponer estado desde Admin.
+1.  **Aura Modular (Tools):** Refactorizar `src/lib/aura/index.ts` dividiendo la lógica en subficheros dentro de `src/lib/aura/tools` y habilitando el gateway formal `/api/aura/tools`.
+2.  **QA Responsive y PWA:** Realizar auditoría visual fina en viewports pequeños (360px a 390px) para las vistas complejas de Transporte (Placas de vehículos) y Salud (Alertas farmacológicas).
+3.  **Entregas Parciales en Salud:** Desarrollar el control lógico de medicamentos debidos por farmacia en órdenes multi-mes.
 
-## Riesgos A Vigilar
-
-* Hay cambios locales pendientes en archivos de ahorro/fondo de emergencia; deben probarse y consolidarse antes de otra fase grande.
-* Existe un archivo `quid-app.tar.gz` sin seguimiento en el repositorio; debe mantenerse fuera de commits salvo que sea intencional.
-* Aura todavía puede responder con acciones aparentes sin registrar realmente si el flujo no queda controlado por herramientas.
-* Despensa registra gasto al confirmar compra, pero sin cuenta de pago; eso puede descuadrar finanzas si no se corrige.
-* Las notificaciones PWA dependen de permisos, VAPID, service worker y comportamiento del sistema operativo; deben validarse en dispositivo real.

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-
-type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 
 /**
  * Reverse a confirmed recurring payment.
@@ -153,6 +152,16 @@ export async function POST(
       }
 
       if (linkedInstallment) {
+        await applyCreditInstallmentBudgetImpact({
+          userId: session.user.id,
+          debtType: payment.debt?.type,
+          category: linkedInstallment.category,
+          subCategory: linkedInstallment.subCategory,
+          installmentAmount: Number(linkedInstallment.installmentAmount),
+          nextPaymentDate: linkedInstallment.nextPaymentDate,
+          direction: -1,
+        });
+
         // Reverse the debt balance (was incremented during confirmation)
         await db.debt.update({
           where: { id: payment.debtId },
@@ -172,30 +181,21 @@ export async function POST(
     }
 
     // ============================================
-    // Reverse budget spent for expense/income type
-    // For debtId (TC): budget was updated at purchase time, so we reverse it here too
+    // Reverse budget spent for account/income payments.
+    // Debt/TC purchases are reversed above through their linked installment so they
+    // do not fall into "Deudas" unless the purchase itself was categorized that way.
     // ============================================
-    if (payment.type === "expense" || payment.type === "income") {
+    if (!payment.debtId && (payment.type === "expense" || payment.type === "income")) {
       const budgetType = payment.type === "expense" ? "expense" : "income";
       const categoryToMatch = payment.category || (payment.type === "expense" ? "Pagos Recurrentes" : "Ingresos");
       const subCatToMatch = payment.subCategory || null;
-      let budget: BudgetRecord = null;
-      if (subCatToMatch) {
-        budget = await db.budget.findFirst({
-          where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: budgetType },
-        });
-      }
-      if (!budget) {
-        budget = await db.budget.findFirst({
-          where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: budgetType },
-        });
-      }
-      if (budget) {
-        await db.budget.update({
-          where: { id: budget.id },
-          data: { spent: { increment: -confirmedAmount } },
-        });
-      }
+      await adjustBudgetSpent({
+        userId: session.user.id,
+        category: categoryToMatch,
+        subCategory: subCatToMatch,
+        type: budgetType,
+        amount: -Number(confirmedAmount),
+      });
     }
 
     // ============================================

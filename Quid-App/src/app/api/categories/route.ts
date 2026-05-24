@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { validateBody, categoryUpdateSchema, categoryDeleteSchema, categoryCreateSchema } from "@/lib/validations";
+import {
+  validateBody,
+  categoryUpdateSchema,
+  categoryDeleteSchema,
+  categoryCreateSchema,
+  categoryRuleUpdateSchema,
+} from "@/lib/validations";
 
 // Default categories that always appear
 const defaultIncomeCategories = ["Salario", "Freelance", "Inversiones", "Ventas", "Otros"];
@@ -52,13 +58,21 @@ export async function GET(req: NextRequest) {
       distinct: ["category", "subCategory"],
     });
 
-    // Get custom categories (including hidden flags for defaults)
-    const customCategories = await db.category.findMany({
-      where: {
-        userId: session.user.id,
-        ...(type ? { type } : {}),
-      },
-    });
+    // Get custom categories (including hidden flags for defaults) and category rules
+    const [customCategories, categoryRules] = await Promise.all([
+      db.category.findMany({
+        where: {
+          userId: session.user.id,
+          ...(type ? { type } : {}),
+        },
+      }),
+      db.categoryRule.findMany({
+        where: {
+          userId: session.user.id,
+          ...(type ? { type } : {}),
+        },
+      }),
+    ]);
 
     // Build a set of hidden default category names for this user
     const hiddenDefaults = new Set(
@@ -106,13 +120,66 @@ export async function GET(req: NextRequest) {
       if (tx.subCategory) categoryMap[t][tx.category].add(tx.subCategory);
     }
 
+    const getRule = (ruleType: string, category: string, subCategory: string | null = null) =>
+      categoryRules.find(
+        (rule) =>
+          rule.type === ruleType &&
+          rule.category === category &&
+          (rule.subCategory ?? null) === subCategory
+      );
+
     // Convert Sets to sorted arrays
-    const result: Record<string, Array<{ name: string; subcategories: string[] }>> = {
+    const result: Record<string, Array<{
+      name: string;
+      subcategories: string[];
+      countsForEmergencyIncome: boolean;
+      isFixedExpense: boolean;
+      subcategoryMeta: Record<string, {
+        countsForEmergencyIncome: boolean;
+        isFixedExpense: boolean;
+      }>;
+    }>> = {
       income: Object.entries(categoryMap.income)
-        .map(([name, subs]) => ({ name, subcategories: Array.from(subs).sort() }))
+        .map(([name, subs]) => {
+          const categoryRule = getRule("income", name);
+          const subcategories = Array.from(subs).sort();
+          return {
+            name,
+            subcategories,
+            countsForEmergencyIncome: categoryRule?.countsForEmergencyIncome ?? false,
+            isFixedExpense: categoryRule?.isFixedExpense ?? false,
+            subcategoryMeta: Object.fromEntries(
+              subcategories.map((sub) => {
+                const subRule = getRule("income", name, sub);
+                return [sub, {
+                  countsForEmergencyIncome: subRule?.countsForEmergencyIncome ?? false,
+                  isFixedExpense: subRule?.isFixedExpense ?? false,
+                }];
+              })
+            ),
+          };
+        })
         .sort((a, b) => a.name.localeCompare(b.name)),
       expense: Object.entries(categoryMap.expense)
-        .map(([name, subs]) => ({ name, subcategories: Array.from(subs).sort() }))
+        .map(([name, subs]) => {
+          const categoryRule = getRule("expense", name);
+          const subcategories = Array.from(subs).sort();
+          return {
+            name,
+            subcategories,
+            countsForEmergencyIncome: categoryRule?.countsForEmergencyIncome ?? false,
+            isFixedExpense: categoryRule?.isFixedExpense ?? false,
+            subcategoryMeta: Object.fromEntries(
+              subcategories.map((sub) => {
+                const subRule = getRule("expense", name, sub);
+                return [sub, {
+                  countsForEmergencyIncome: subRule?.countsForEmergencyIncome ?? false,
+                  isFixedExpense: subRule?.isFixedExpense ?? false,
+                }];
+              })
+            ),
+          };
+        })
         .sort((a, b) => a.name.localeCompare(b.name)),
     };
 
@@ -270,6 +337,28 @@ export async function PUT(req: NextRequest) {
       },
     });
 
+    // Keep emergency/budget rules aligned with the rename.
+    const ruleWhere: Record<string, unknown> = {
+      userId: session.user.id,
+      type,
+      category: oldCategory,
+    };
+    if (oldSubCategory !== undefined && oldSubCategory !== null) {
+      ruleWhere.subCategory = oldSubCategory;
+    }
+
+    const ruleUpdateData: Record<string, unknown> = {
+      category: newCategory,
+    };
+    if (newSubCategory !== undefined) {
+      ruleUpdateData.subCategory = newSubCategory || null;
+    }
+
+    await db.categoryRule.updateMany({
+      where: ruleWhere,
+      data: ruleUpdateData,
+    });
+
     return NextResponse.json({
       updatedTransactions,
       updatedBudgets,
@@ -278,6 +367,67 @@ export async function PUT(req: NextRequest) {
   } catch (error) {
     console.error("Update categories error:", error);
     return NextResponse.json({ error: "Error al actualizar categorías" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const body = await validateBody(req, categoryRuleUpdateSchema);
+    const { type, category, subCategory, countsForEmergencyIncome, isFixedExpense } = body;
+    const normalizedSubCategory = subCategory || null;
+
+    const existing = await db.categoryRule.findFirst({
+      where: {
+        userId: session.user.id,
+        type,
+        category,
+        subCategory: normalizedSubCategory,
+      },
+    });
+
+    const data = {
+      countsForEmergencyIncome:
+        type === "income" ? countsForEmergencyIncome ?? false : false,
+      isFixedExpense:
+        type === "expense" ? isFixedExpense ?? false : false,
+    };
+
+    if (!data.countsForEmergencyIncome && !data.isFixedExpense) {
+      if (existing) {
+        await db.categoryRule.delete({ where: { id: existing.id } });
+      }
+      return NextResponse.json({
+        type,
+        category,
+        subCategory: normalizedSubCategory,
+        ...data,
+      });
+    }
+
+    const rule = existing
+      ? await db.categoryRule.update({
+          where: { id: existing.id },
+          data,
+        })
+      : await db.categoryRule.create({
+          data: {
+            userId: session.user.id,
+            type,
+            category,
+            subCategory: normalizedSubCategory,
+            ...data,
+          },
+        });
+
+    return NextResponse.json(rule);
+  } catch (error) {
+    console.error("Update category rule error:", error);
+    return NextResponse.json({ error: "Error al actualizar regla de categoría" }, { status: 500 });
   }
 }
 
@@ -364,6 +514,17 @@ export async function DELETE(req: NextRequest) {
         },
       }).then((r) => r.count);
     }
+
+    // Remove related emergency/budget rules
+    const ruleWhere: Record<string, unknown> = {
+      userId: session.user.id,
+      type,
+      category,
+    };
+    if (subCategory) {
+      ruleWhere.subCategory = subCategory;
+    }
+    await db.categoryRule.deleteMany({ where: ruleWhere });
 
     // Also handle default category deletion: mark as hidden instead of deleting
     const defaultNames = new Set([...defaultIncomeCategories, ...defaultExpenseCategories]);

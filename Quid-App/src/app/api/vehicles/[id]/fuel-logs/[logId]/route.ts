@@ -4,7 +4,12 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createColombiaDate } from "@/lib/api";
 import { validateBody, fuelLogUpdateSchema } from "@/lib/validations";
-import { reverseFinanceEntry } from "@/lib/transport-finance";
+import {
+  createFinanceEntry,
+  getTransportDescription,
+  reverseFinanceEntry,
+  reverseUnpaidCreditInstallmentByAmount,
+} from "@/lib/transport-finance";
 
 export async function PUT(
   req: NextRequest,
@@ -35,7 +40,10 @@ export async function PUT(
       return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
     }
 
-    const { date, km, amount, pricePerGallon, isFullTank, notes } = body;
+    const {
+      date, km, amount, pricePerGallon, isFullTank, station, notes,
+      paymentType, accountId, subAccountId, debtId, installmentCount,
+    } = body;
 
     // Calculate new gallons if amount or price changed
     const newAmount = amount !== undefined ? amount : Number(existing.amount);
@@ -51,6 +59,11 @@ export async function PUT(
     if (pricePerGallon !== undefined) updateData.pricePerGallon = Number(pricePerGallon);
     if (amount !== undefined || pricePerGallon !== undefined) updateData.gallons = newGallons;
     if (isFullTank !== undefined) updateData.isFullTank = isFullTank;
+    if (station !== undefined) updateData.station = station;
+    if (accountId !== undefined) updateData.accountId = accountId || null;
+    if (subAccountId !== undefined) updateData.subAccountId = subAccountId || null;
+    if (debtId !== undefined) updateData.debtId = debtId || null;
+    if (installmentCount !== undefined) updateData.installmentCount = installmentCount || null;
     if (notes !== undefined) updateData.notes = notes;
 
     const log = await db.fuelLog.update({
@@ -66,13 +79,35 @@ export async function PUT(
       });
     }
 
-    // Update the linked finance transaction if amount changed
-    if (amount !== undefined) {
-      await db.transaction.updateMany({
-        where: { sourceModule: "transport", sourceId: logId },
-        data: {
-          amount: Number(amount),
-        },
+    const financeChanged =
+      amount !== undefined ||
+      date !== undefined ||
+      paymentType !== undefined ||
+      accountId !== undefined ||
+      subAccountId !== undefined ||
+      debtId !== undefined ||
+      installmentCount !== undefined ||
+      station !== undefined ||
+      notes !== undefined;
+
+    if (financeChanged) {
+      await reverseFinanceEntry(logId, session.user.id);
+      await createFinanceEntry({
+        userId: session.user.id,
+        amount: Number(log.amount),
+        description: getTransportDescription("fuel", vehicle.name),
+        category: "Transporte",
+        subCategory: "Combustible",
+        date: log.date,
+        sourceModule: "transport",
+        sourceId: log.id,
+        paymentType: paymentType || (log.debtId ? "credit_card" : "account"),
+        accountId: log.accountId,
+        subAccountId: log.subAccountId,
+        debtId: log.debtId,
+        installmentCount: log.installmentCount,
+        notes: log.station ? `Gasolinera: ${log.station}` : log.notes,
+        vehicleName: vehicle.name,
       });
     }
 
@@ -120,32 +155,15 @@ export async function DELETE(
 
     // ── Step 1: Reverse account-based finance entry ──
     // This restores account balance, budget spent, and deletes the transaction
-    await reverseFinanceEntry(logId, session.user.id);
+    const reversedLinkedInstallments = await reverseFinanceEntry(logId, session.user.id);
 
     // ── Step 2: Reverse CC installment if applicable ──
-    if (fuelLogFinance?.debtId) {
-      // Find unpaid installments linked to this fuel log via sourceModule+sourceId in description
-      const installments = await db.installment.findMany({
-        where: {
-          debtId: fuelLogFinance.debtId,
-          isPaid: false,
-        },
+    if (fuelLogFinance?.debtId && reversedLinkedInstallments === 0) {
+      await reverseUnpaidCreditInstallmentByAmount({
+        userId: session.user.id,
+        debtId: fuelLogFinance.debtId,
+        totalAmount: Number(fuelLogFinance.amount),
       });
-
-      // Find the installment that was created for this specific fuel log
-      // Match by totalAmount and recent purchaseDate
-      const logAmount = Number(fuelLogFinance.amount);
-      for (const inst of installments) {
-        if (Number(inst.totalAmount) === logAmount) {
-          // Decrease CC currentBalance by the installment totalAmount
-          await db.debt.update({
-            where: { id: inst.debtId },
-            data: { currentBalance: { decrement: inst.totalAmount } },
-          });
-          await db.installment.delete({ where: { id: inst.id } });
-          break; // Only reverse the first matching installment
-        }
-      }
     }
 
     // ── Step 3: Delete the fuel log record itself ──

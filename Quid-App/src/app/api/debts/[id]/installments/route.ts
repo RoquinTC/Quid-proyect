@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createColombiaDate, getColombiaNow } from "@/lib/api";
 import { validateBody, debtInstallmentCreateSchema } from "@/lib/validations";
+import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 
 export async function GET(
   _req: NextRequest,
@@ -160,6 +161,8 @@ export async function POST(
         subAccountId: subAccountId || null,
         category: category || null,
         subCategory: subCategory || null,
+        sourceModule: "finance",
+        sourceId: debt.id,
       },
     });
 
@@ -167,6 +170,15 @@ export async function POST(
     await db.debt.update({
       where: { id },
       data: { currentBalance: { increment: totalAmount } },
+    });
+
+    await applyCreditInstallmentBudgetImpact({
+      userId: session.user.id,
+      debtType: debt.type,
+      category: installment.category,
+      subCategory: installment.subCategory,
+      installmentAmount,
+      nextPaymentDate: installment.nextPaymentDate,
     });
 
     return NextResponse.json(installment, { status: 201 });

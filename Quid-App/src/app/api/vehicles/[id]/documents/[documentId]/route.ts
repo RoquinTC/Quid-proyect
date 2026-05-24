@@ -6,6 +6,7 @@ import { createColombiaDate } from "@/lib/api";
 import { validateBody, vehicleDocumentUpdateSchema } from "@/lib/validations";
 import {
   reverseFinanceEntry,
+  reverseUnpaidCreditInstallmentByAmount,
   createFinanceEntry,
   getTransportDescription,
   getTransportSubCategory,
@@ -76,17 +77,42 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       data: updateData,
     });
 
-    // Update the linked finance transaction if cost changed
-    if (cost !== undefined && Number(cost) !== Number(existing.cost) && !skipFinanceEntry) {
-      const docTypeLabel = DOCUMENT_TYPES.find(d => d.value === (type || existing.type))?.label || (type || existing.type);
+    const financeChanged =
+      skipFinanceEntry ||
+      cost !== undefined ||
+      issueDate !== undefined ||
+      type !== undefined ||
+      paymentType !== undefined ||
+      accountId !== undefined ||
+      subAccountId !== undefined ||
+      debtId !== undefined ||
+      installmentCount !== undefined ||
+      documentNumber !== undefined ||
+      notes !== undefined;
 
-      await db.transaction.updateMany({
-        where: { sourceModule: "transport", sourceId: documentId },
-        data: {
-          amount: Number(cost),
+    if (financeChanged) {
+      await reverseFinanceEntry(documentId, session.user.id);
+
+      if (!skipFinanceEntry && Number(document.cost) > 0) {
+        const docTypeLabel = DOCUMENT_TYPES.find(d => d.value === document.type)?.label || document.type;
+        await createFinanceEntry({
+          userId: session.user.id,
+          amount: Number(document.cost),
           description: getTransportDescription("document", vehicle.name, vehicle.type, docTypeLabel),
-        },
-      });
+          category: "Transporte",
+          subCategory: getTransportSubCategory("document", document.type),
+          date: document.issueDate,
+          sourceModule: "transport",
+          sourceId: document.id,
+          paymentType: paymentType || (document.debtId ? "credit_card" : "account"),
+          accountId: document.accountId,
+          subAccountId: document.subAccountId,
+          debtId: document.debtId,
+          installmentCount: document.installmentCount,
+          notes: document.documentNumber ? `Documento #: ${document.documentNumber}` : document.notes,
+          vehicleName: vehicle.name,
+        });
+      }
     }
 
     return NextResponse.json(document);
@@ -131,9 +157,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     });
 
     // Step 1: Reverse account-based finance entry if one exists
+    let reversedLinkedInstallments = 0;
     if (Number(existing.cost) > 0 && (existing.accountId || existing.debtId)) {
       try {
-        await reverseFinanceEntry(documentId, session.user.id);
+        reversedLinkedInstallments = await reverseFinanceEntry(documentId, session.user.id);
       } catch (reverseError) {
         console.error("Error reversing finance entry for document:", reverseError);
         // Continue with deletion even if reverse fails
@@ -141,26 +168,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     // Step 2: Reverse CC installment if applicable
-    if (docFinance?.debtId) {
-      const installments = await db.installment.findMany({
-        where: {
-          debtId: docFinance.debtId,
-          isPaid: false,
-        },
+    if (docFinance?.debtId && reversedLinkedInstallments === 0) {
+      await reverseUnpaidCreditInstallmentByAmount({
+        userId: session.user.id,
+        debtId: docFinance.debtId,
+        totalAmount: Number(docFinance.cost),
       });
-
-      const docCost = Number(docFinance.cost);
-      for (const inst of installments) {
-        if (Number(inst.totalAmount) === docCost) {
-          // Decrease CC currentBalance by the installment totalAmount
-          await db.debt.update({
-            where: { id: inst.debtId },
-            data: { currentBalance: { decrement: inst.totalAmount } },
-          });
-          await db.installment.delete({ where: { id: inst.id } });
-          break; // Only reverse the first matching installment
-        }
-      }
     }
 
     // Step 3: Delete the document record itself

@@ -47,6 +47,7 @@ model User {
   payrollGroups       PayrollGroup[]
   fuelPrices          FuelPrice[]
   categories          Category[]
+  categoryRules       CategoryRule[]
   settings            UserSettings?
   sentInvitations     AccountInvitation[]  @relation("SentInvitations")
   receivedInvitations AccountInvitation[]  @relation("ReceivedInvitations")
@@ -318,6 +319,8 @@ model Installment {
   category            String?   // Categoria de presupuesto
   subCategory         String?   // Subcategoria de presupuesto
   recurringPaymentId  String?   // ID del pago recurrente que origino esta compra
+  sourceModule        String?   // finance, transport, pantry, health, aura
+  sourceId            String?   // ID of related record in another module
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -917,6 +920,24 @@ model Category {
 
   @@unique([userId, type, name])
   @@map("custom_categories")
+}
+
+model CategoryRule {
+  id                       String   @id @default(cuid())
+  userId                   String
+  type                     String   // income, expense
+  category                 String
+  subCategory              String?
+  countsForEmergencyIncome Boolean  @default(false)
+  isFixedExpense           Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  user                     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, category, subCategory])
+  @@index([userId, type])
+  @@map("category_rules")
 }
 
 // ============================================

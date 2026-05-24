@@ -4,7 +4,13 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createColombiaDate } from "@/lib/api";
 import { validateBody, maintenanceUpdateSchema } from "@/lib/validations";
-import { reverseFinanceEntry } from "@/lib/transport-finance";
+import {
+  createFinanceEntry,
+  getTransportDescription,
+  getTransportSubCategory,
+  reverseFinanceEntry,
+  reverseUnpaidCreditInstallmentByAmount,
+} from "@/lib/transport-finance";
 import { MAINTENANCE_TYPES } from "@/lib/types/transport";
 
 function maintenanceReminderTitle(type: string) {
@@ -86,7 +92,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Registro no encontrado" }, { status: 404 });
     }
 
-    const { type, description, cost, km, date, repeatIntervalKm, nextDueKm, nextDueDate, reminderEnabled } = body;
+    const {
+      type, description, cost, km, date, repeatIntervalKm, nextDueKm, nextDueDate, reminderEnabled,
+      paymentType, accountId, subAccountId, debtId, installmentCount,
+    } = body;
     const finalKm = km !== undefined ? Number(km) : existing.km;
     const finalType = type ?? existing.type;
     const finalDescription = description ?? existing.description;
@@ -110,23 +119,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       ...((nextDueKm !== undefined || repeatIntervalKm !== undefined) && { nextDueKm: computedNextDueKm }),
       ...(nextDueDate !== undefined && { nextDueDate: computedNextDueDate }),
       ...(reminderEnabled !== undefined && { reminderEnabled }),
+      ...(accountId !== undefined && { accountId: accountId || null }),
+      ...(subAccountId !== undefined && { subAccountId: subAccountId || null }),
+      ...(debtId !== undefined && { debtId: debtId || null }),
+      ...(installmentCount !== undefined && { installmentCount: installmentCount || null }),
     };
 
     const record = await db.maintenanceRecord.update({
       where: { id: recordId },
       data: updateData,
     });
-
-    // Update the linked finance transaction if cost changed
-    if (cost !== undefined) {
-      await db.transaction.updateMany({
-        where: { sourceModule: "transport", sourceId: recordId },
-        data: {
-          amount: cost,
-          ...(description !== undefined && { description: `Mantenimiento - ${vehicle.name}: ${description}` }),
-        },
-      });
-    }
 
     if (
       type !== undefined ||
@@ -147,6 +149,38 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         dueDate: computedNextDueDate ?? null,
         repeatIntervalKm: finalRepeatIntervalKm,
         enabled: reminderEnabled ?? record.reminderEnabled,
+      });
+    }
+
+    const financeChanged =
+      cost !== undefined ||
+      date !== undefined ||
+      type !== undefined ||
+      description !== undefined ||
+      paymentType !== undefined ||
+      accountId !== undefined ||
+      subAccountId !== undefined ||
+      debtId !== undefined ||
+      installmentCount !== undefined;
+
+    if (financeChanged) {
+      await reverseFinanceEntry(recordId, session.user.id);
+      await createFinanceEntry({
+        userId: session.user.id,
+        amount: Number(record.cost),
+        description: getTransportDescription("maintenance", vehicle.name, vehicle.type),
+        category: "Transporte",
+        subCategory: getTransportSubCategory("maintenance", record.type),
+        date: record.date,
+        sourceModule: "transport",
+        sourceId: record.id,
+        paymentType: paymentType || (record.debtId ? "credit_card" : "account"),
+        accountId: record.accountId,
+        subAccountId: record.subAccountId,
+        debtId: record.debtId,
+        installmentCount: record.installmentCount,
+        notes: finalDescription,
+        vehicleName: vehicle.name,
       });
     }
 
@@ -191,28 +225,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     // ── Step 1: Reverse account-based finance entry ──
     // This restores account balance, budget spent, and deletes the transaction
-    await reverseFinanceEntry(recordId, session.user.id);
+    const reversedLinkedInstallments = await reverseFinanceEntry(recordId, session.user.id);
 
     // ── Step 2: Reverse CC installment if applicable ──
-    if (maintFinance?.debtId) {
-      const installments = await db.installment.findMany({
-        where: {
-          debtId: maintFinance.debtId,
-          isPaid: false,
-        },
+    if (maintFinance?.debtId && reversedLinkedInstallments === 0) {
+      await reverseUnpaidCreditInstallmentByAmount({
+        userId: session.user.id,
+        debtId: maintFinance.debtId,
+        totalAmount: Number(maintFinance.cost),
       });
-
-      const recordCost = Number(maintFinance.cost);
-      for (const inst of installments) {
-        if (Number(inst.totalAmount) === recordCost) {
-          await db.debt.update({
-            where: { id: inst.debtId },
-            data: { currentBalance: { decrement: inst.totalAmount } },
-          });
-          await db.installment.delete({ where: { id: inst.id } });
-          break;
-        }
-      }
     }
 
     // ── Step 3: Delete the maintenance record itself (cascades items) ──

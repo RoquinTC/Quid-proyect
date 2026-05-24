@@ -39,6 +39,8 @@ type EmergencySuggestion = {
   gapMonthlyContribution: number;
   gap: number;
   monthlyContribution: number;
+  configuredRealIncomeRules?: number;
+  configuredFixedExpenseRules?: number;
   recommendedDeadline: string;
   aiSuggestion: string;
 };
@@ -269,7 +271,9 @@ export function SavingsView() {
                 </div>
               </div>
               <p className="mt-2 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                El aporte divide la meta pendiente entre los meses elegidos. El 10% del ingreso real se muestra como referencia de capacidad, excluyendo transferencias internas.
+                El aporte divide la meta pendiente entre los meses elegidos. {emergencySuggestion.configuredRealIncomeRules || emergencySuggestion.configuredFixedExpenseRules
+                  ? "El cálculo ya está usando las categorías marcadas para fondo de emergencia."
+                  : "Marca ingresos reales y gastos fijos en Presupuesto para afinar el cálculo."}
               </p>
               <Button
                 onClick={handleCreateEmergencyFund}

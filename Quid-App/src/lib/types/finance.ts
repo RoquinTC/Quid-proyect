@@ -364,6 +364,12 @@ export interface YieldRecord {
 export interface CategoryData {
   name: string;
   subcategories: string[];
+  countsForEmergencyIncome?: boolean;
+  isFixedExpense?: boolean;
+  subcategoryMeta?: Record<string, {
+    countsForEmergencyIncome?: boolean;
+    isFixedExpense?: boolean;
+  }>;
 }
 
 export interface CategoriesByType {

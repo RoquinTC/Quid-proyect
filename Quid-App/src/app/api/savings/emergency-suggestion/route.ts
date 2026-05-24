@@ -28,6 +28,19 @@ type EmergencySuggestionOptions = {
   contributionRate?: unknown;
 };
 
+type CategoryRuleMatch = {
+  category: string;
+  subCategory: string | null;
+};
+
+function matchesRule(item: { category: string | null; subCategory: string | null }, rules: CategoryRuleMatch[]) {
+  return rules.some((rule) => {
+    if (item.category !== rule.category) return false;
+    if (!rule.subCategory) return true;
+    return item.subCategory === rule.subCategory;
+  });
+}
+
 async function buildEmergencySuggestion(userId: string, options: EmergencySuggestionOptions = {}) {
   const now = new Date();
   const since = new Date(now);
@@ -36,7 +49,7 @@ async function buildEmergencySuggestion(userId: string, options: EmergencySugges
   const monthsToBuild = clampInteger(options.monthsToBuild, 6, 1, 36);
   const contributionRate = clampNumber(options.contributionRate, 10, 1, 50);
 
-  const [expenseTransactions, incomeTransactions, recurring, existingGoal, accounts] = await Promise.all([
+  const [expenseTransactions, incomeTransactions, recurring, existingGoal, accounts, categoryRules] = await Promise.all([
     db.transaction.findMany({
       where: {
         userId,
@@ -45,7 +58,7 @@ async function buildEmergencySuggestion(userId: string, options: EmergencySugges
         category: { notIn: ["Ahorros", "Transferencias"] },
         OR: [{ excludeFromBudget: false }, { excludeFromBudget: { equals: null } }],
       },
-      select: { amount: true },
+      select: { amount: true, category: true, subCategory: true },
     }),
     db.transaction.findMany({
       where: {
@@ -55,7 +68,7 @@ async function buildEmergencySuggestion(userId: string, options: EmergencySugges
         category: { notIn: ["Ahorros", "Transferencias"] },
         OR: [{ excludeFromBudget: false }, { excludeFromBudget: { equals: null } }],
       },
-      select: { amount: true },
+      select: { amount: true, category: true, subCategory: true },
     }),
     db.recurringPayment.findMany({
       where: {
@@ -64,7 +77,7 @@ async function buildEmergencySuggestion(userId: string, options: EmergencySugges
         type: "expense",
         category: { notIn: ["Ahorros", "Transferencias"] },
       },
-      select: { amount: true },
+      select: { amount: true, category: true, subCategory: true },
     }),
     db.savingsGoal.findFirst({
       where: { userId, type: "emergency_fund", isActive: true },
@@ -84,13 +97,46 @@ async function buildEmergencySuggestion(userId: string, options: EmergencySugges
         },
       },
     }),
+    db.categoryRule.findMany({
+      where: {
+        userId,
+        OR: [
+          { countsForEmergencyIncome: true },
+          { isFixedExpense: true },
+        ],
+      },
+      select: {
+        type: true,
+        category: true,
+        subCategory: true,
+        countsForEmergencyIncome: true,
+        isFixedExpense: true,
+      },
+    }),
   ]);
 
-  const recentExpenses = expenseTransactions.reduce((sum, item) => sum + toNumber(item.amount), 0);
-  const recentRealIncome = incomeTransactions.reduce((sum, item) => sum + toNumber(item.amount), 0);
+  const realIncomeRules = categoryRules
+    .filter((rule) => rule.type === "income" && rule.countsForEmergencyIncome)
+    .map((rule) => ({ category: rule.category, subCategory: rule.subCategory }));
+  const fixedExpenseRules = categoryRules
+    .filter((rule) => rule.type === "expense" && rule.isFixedExpense)
+    .map((rule) => ({ category: rule.category, subCategory: rule.subCategory }));
+
+  const incomeBase = realIncomeRules.length > 0
+    ? incomeTransactions.filter((item) => matchesRule(item, realIncomeRules))
+    : incomeTransactions;
+  const expenseBase = fixedExpenseRules.length > 0
+    ? expenseTransactions.filter((item) => matchesRule(item, fixedExpenseRules))
+    : expenseTransactions;
+  const recurringBase = fixedExpenseRules.length > 0
+    ? recurring.filter((item) => matchesRule(item, fixedExpenseRules))
+    : recurring;
+
+  const recentExpenses = expenseBase.reduce((sum, item) => sum + toNumber(item.amount), 0);
+  const recentRealIncome = incomeBase.reduce((sum, item) => sum + toNumber(item.amount), 0);
   const averageMonthlyExpenses = Math.round(recentExpenses / 3);
   const averageMonthlyRealIncome = Math.round(recentRealIncome / 3);
-  const fixedMonthlyExpenses = recurring.reduce((sum, item) => sum + toNumber(item.amount), 0);
+  const fixedMonthlyExpenses = recurringBase.reduce((sum, item) => sum + toNumber(item.amount), 0);
   const monthlyNeed = Math.max(averageMonthlyExpenses, fixedMonthlyExpenses);
   const recommendedTarget = Math.max(500000, Math.round(monthlyNeed * coverageMonths));
   const availableBalance = accounts.reduce((sum, account) => {
@@ -122,7 +168,7 @@ async function buildEmergencySuggestion(userId: string, options: EmergencySugges
     ? `Este aporte supera el ${contributionRate}% de tu ingreso real promedio (${incomeBasedContribution.toLocaleString("es-CO")} COP); puedes aumentar el plazo si quieres una cuota más suave.`
     : `El aporte queda dentro del ${contributionRate}% de tu ingreso real promedio.`;
   const aiSuggestion = monthlyNeed > 0
-    ? `Tu colchón recomendado es de ${coverageMonths} meses de gastos esenciales. La meta sugerida es ${recommendedTarget.toLocaleString("es-CO")} COP y para construirla en ${monthsToBuild} meses necesitas aportes mensuales de ${monthlyContribution.toLocaleString("es-CO")} COP. ${contributionWarning} Para el ingreso real se excluyen transferencias internas y movimientos marcados fuera de presupuesto.`
+    ? `Tu colchón recomendado es de ${coverageMonths} meses de gastos esenciales. La meta sugerida es ${recommendedTarget.toLocaleString("es-CO")} COP y para construirla en ${monthsToBuild} meses necesitas aportes mensuales de ${monthlyContribution.toLocaleString("es-CO")} COP. ${contributionWarning} ${realIncomeRules.length > 0 ? "El ingreso real sale de las categorías marcadas para fondo de emergencia." : "Para el ingreso real se excluyen transferencias internas y movimientos marcados fuera de presupuesto."} ${fixedExpenseRules.length > 0 ? "Los gastos esenciales salen de las categorías marcadas como gasto fijo." : "Marca tus gastos fijos en Presupuesto para afinar este cálculo."}`
     : "Aún no hay suficiente historial de gastos. Quid propone una meta base mientras registras más movimientos.";
 
   return {
@@ -141,6 +187,8 @@ async function buildEmergencySuggestion(userId: string, options: EmergencySugges
     gapMonthlyContribution,
     gap,
     monthlyContribution,
+    configuredRealIncomeRules: realIncomeRules.length,
+    configuredFixedExpenseRules: fixedExpenseRules.length,
     recommendedDeadline: addMonths(now, monthsToBuild).toISOString(),
     aiSuggestion,
   };

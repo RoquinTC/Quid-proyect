@@ -145,9 +145,8 @@ export async function POST() {
 
       console.log(`[Recalculate] ${budget.type}:${budget.category}${budget.subCategory ? `/${budget.subCategory}` : ""} — Source A (transactions): ${transactions.length} txs, total: ${transactions.reduce((s, t) => s + (t.type !== "transfer" ? toNumber(t.amount) : 0), 0)}`);
 
-      // ── Source B: Credit card installments with purchaseDate in the current period ──
-      // These represent spending committed via TC — the money is already "spent" at
-      // purchase time regardless of whether the CC bill has been paid.
+      // ── Source B: Credit card installments due in the current budget period ──
+      // CC payments are transfers, so installments carry the real spending category.
       // We include BOTH paid and unpaid CC installments because:
       //   - CC payments create "transfer" transactions (not expenses), so Source A
       //     never counts CC purchases — Source B is the only source for CC spending.
@@ -157,7 +156,7 @@ export async function POST() {
       //     this user's CC installments.
       if (budget.type === "expense") {
         const installmentWhereClause: Record<string, unknown> = {
-          purchaseDate: { gte: periodStart, lte: periodEnd },
+          nextPaymentDate: { gte: periodStart, lt: periodEndPlus },
           // Include BOTH paid and unpaid CC installments
           // Exclude loan installments (their expense transactions are counted in Source A)
           // CRITICAL FIX: Include userId in debt filter to scope to this user only
@@ -181,7 +180,7 @@ export async function POST() {
 
         const installments = await db.installment.findMany({
           where: installmentWhereClause,
-          select: { installmentAmount: true, id: true, description: true, category: true, subCategory: true, purchaseDate: true },
+          select: { installmentAmount: true, id: true, description: true, category: true, subCategory: true, nextPaymentDate: true },
         });
 
         for (const inst of installments) {

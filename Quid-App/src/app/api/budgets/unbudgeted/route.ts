@@ -88,10 +88,10 @@ export async function GET() {
       },
     });
 
-    // Get CC installments in the current period (same logic as recalculate)
+    // Get CC installments due in the current period (same logic as recalculate)
     const installments = await db.installment.findMany({
       where: {
-        purchaseDate: { gte: periodStart, lte: periodEnd },
+        nextPaymentDate: { gte: periodStart, lt: periodEndPlus },
         debt: { type: { not: "loan" }, userId },
       },
       select: {

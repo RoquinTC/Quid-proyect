@@ -37,6 +37,7 @@ import {
   FolderClosed,
   Plus,
   Palette,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { CategoryData, CategoriesByType } from "@/lib/types";
@@ -263,6 +264,52 @@ export function CategoriesManager() {
       setCreating(false);
     }
   };
+
+  const handleToggleRule = async (
+    category: string,
+    subCategory: string | null,
+    enabled: boolean
+  ) => {
+    try {
+      await apiFetch("/api/categories", {
+        method: "PATCH",
+        body: JSON.stringify({
+          type: selectedType,
+          category,
+          subCategory,
+          countsForEmergencyIncome: selectedType === "income" ? enabled : false,
+          isFixedExpense: selectedType === "expense" ? enabled : false,
+        }),
+      });
+      toast.success(
+        selectedType === "income"
+          ? enabled
+            ? "Marcado como ingreso real"
+            : "Ya no cuenta como ingreso real"
+          : enabled
+            ? "Marcado como gasto fijo"
+            : "Ya no cuenta como gasto fijo"
+      );
+      fetchCategories();
+    } catch (error) {
+      console.error("Error updating category rule:", error);
+      toast.error("Error al actualizar la marca");
+    }
+  };
+
+  const isRuleEnabled = (cat: CategoryData, subCategory?: string) => {
+    if (subCategory) {
+      const meta = cat.subcategoryMeta?.[subCategory];
+      return selectedType === "income"
+        ? Boolean(meta?.countsForEmergencyIncome)
+        : Boolean(meta?.isFixedExpense);
+    }
+    return selectedType === "income"
+      ? Boolean(cat.countsForEmergencyIncome)
+      : Boolean(cat.isFixedExpense);
+  };
+
+  const ruleLabel = selectedType === "income" ? "Ingreso real" : "Gasto fijo";
 
   const currentCategories = categories[selectedType] || [];
 
@@ -509,8 +556,30 @@ export function CategoriesManager() {
                               {cat.subcategories.length}
                             </Badge>
                           )}
+                          {isRuleEnabled(cat) && (
+                            <Badge className={`text-[10px] shrink-0 border-0 ${
+                              selectedType === "income"
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                            }`}>
+                              {ruleLabel}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleToggleRule(cat.name, null, !isRuleEnabled(cat))}
+                            className={`h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-semibold transition-colors ${
+                              isRuleEnabled(cat)
+                                ? selectedType === "income"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                : "bg-gray-100 text-gray-400 hover:text-gray-600 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300"
+                            }`}
+                            title={ruleLabel}
+                          >
+                            <ShieldCheck className="size-3" />
+                          </button>
                           <button
                             onClick={() => handleEditCategory(cat.name)}
                             className="size-6 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-blue-500 transition-colors"
@@ -572,7 +641,29 @@ export function CategoriesManager() {
                                 <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 truncate">
                                   {sub}
                                 </span>
+                                {isRuleEnabled(cat, sub) && (
+                                  <Badge className={`text-[10px] shrink-0 border-0 ${
+                                    selectedType === "income"
+                                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                      : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                  }`}>
+                                    {ruleLabel}
+                                  </Badge>
+                                )}
                                 <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    onClick={() => handleToggleRule(cat.name, sub, !isRuleEnabled(cat, sub))}
+                                    className={`h-6 rounded-md px-2 flex items-center gap-1 text-[10px] font-semibold transition-colors ${
+                                      isRuleEnabled(cat, sub)
+                                        ? selectedType === "income"
+                                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                          : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                                        : "bg-gray-100 text-gray-400 hover:text-gray-600 dark:bg-gray-800 dark:text-gray-500 dark:hover:text-gray-300"
+                                    }`}
+                                    title={ruleLabel}
+                                  >
+                                    <ShieldCheck className="size-3" />
+                                  </button>
                                   <button
                                     onClick={() => handleEditSubCategory(cat.name, sub)}
                                     className="size-6 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center text-gray-400 hover:text-blue-500 transition-colors"
