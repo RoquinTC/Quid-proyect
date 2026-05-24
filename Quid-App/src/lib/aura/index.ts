@@ -53,6 +53,10 @@ type AuraStructuredAction =
       type: "executed";
       tool: string;
       payload?: Record<string, unknown>;
+    }
+  | {
+      type: "select_account";
+      choices: Array<{ name: string; id: string; kind: "account" | "subAccount" | "debt" }>;
     };
 
 type AuraToolResult = {
@@ -888,7 +892,16 @@ async function createTransactionFromAura(userId: string, text: string, options: 
     }
     const accountOptions = accounts.slice(0, 6).map((item) => `• ${item.name}: ${COP.format(item.balance)}`).join("\n");
     const debtOptions = debts.slice(0, 5).map((item) => `• ${item.name}: saldo ${COP.format(item.currentBalance)}`).join("\n");
-    return { text: `Puedo guardarlo, pero me falta la cuenta o tarjeta. ¿Desde cuál lo registro?\n${accountOptions}${debtOptions ? `\n${debtOptions}` : ""}` };
+    return {
+      text: `Puedo guardarlo, pero me falta la cuenta o tarjeta. ¿Desde cuál lo registro?\n${accountOptions}${debtOptions ? `\n${debtOptions}` : ""}`,
+      action: {
+        type: "select_account" as const,
+        choices: [
+          ...accounts.slice(0, 6).map((a) => ({ name: a.name, id: a.id, kind: a.kind })),
+          ...debts.slice(0, 5).map((d) => ({ name: d.name, id: d.id, kind: d.kind })),
+        ],
+      },
+    };
   }
 
   const type = inferTransactionType(text);
