@@ -301,6 +301,91 @@ function inferCategory(text: string, type: "income" | "expense") {
   return "Otros";
 }
 
+export async function getSmartCategory(text: string, userId: string, type: "income" | "expense"): Promise<{ category: string, subCategory: string | null }> {
+  const defaultIncomeCategories = ["Salario", "Freelance", "Inversiones", "Ventas", "Otros"];
+  const defaultExpenseCategories = [
+    "Alimentación", "Transporte", "Vivienda", "Salud", "Entretenimiento", 
+    "Educación", "Ropa", "Servicios", "Deudas", "Ahorros", "Suscripciones", 
+    "Otros"
+  ];
+
+  const [budgets, customCats] = await Promise.all([
+    db.budget.findMany({
+      where: { userId, type },
+      select: { category: true, subCategory: true },
+    }),
+    db.category.findMany({
+      where: { userId, type, hidden: false },
+      select: { name: true },
+    }),
+  ]);
+
+  const normalized = normalize(text);
+
+  // 1. Check for category: <cat> or subcategory: <sub> matches in message
+  const categoryMatch = text.match(/categor[ií]a:\s*([^/]+?)(?:\s*\/\s*(.+))?$/i) || text.match(/^categor[ií]a\s+([^/]+?)(?:\s*\/\s*(.+))?$/i);
+  if (categoryMatch) {
+    const cat = categoryMatch[1].trim();
+    const sub = categoryMatch[2] ? categoryMatch[2].trim() : null;
+    return { category: cat, subCategory: sub };
+  }
+
+  // 2. Exact or partial match on budget subcategory
+  for (const b of budgets) {
+    if (b.subCategory) {
+      const combined = normalize(`${b.category} / ${b.subCategory}`);
+      const subNorm = normalize(b.subCategory);
+      if (normalized.includes(combined) || normalized.includes(subNorm)) {
+        return { category: b.category, subCategory: b.subCategory };
+      }
+    }
+  }
+
+  // 3. Exact or partial match on budget main category
+  for (const b of budgets) {
+    const catNorm = normalize(b.category);
+    if (normalized.includes(catNorm)) {
+      return { category: b.category, subCategory: null };
+    }
+  }
+
+  // 4. Exact or partial match on custom categories
+  for (const cc of customCats) {
+    const ccNorm = normalize(cc.name);
+    if (normalized.includes(ccNorm)) {
+      return { category: cc.name, subCategory: null };
+    }
+  }
+
+  // 5. Contextual keyword mapping for standard categories
+  if (type === "income") {
+    if (/\b(sueldo|salario|nomina|nómina)\b/.test(normalized)) return { category: "Salario", subCategory: null };
+    if (/\b(freelance|honorarios|proyecto|contrato)\b/.test(normalized)) return { category: "Freelance", subCategory: null };
+    if (/\b(inversion|inversiones|dividendos|cdt)\b/.test(normalized)) return { category: "Inversiones", subCategory: null };
+    if (/\b(venta|ventas|negocio)\b/.test(normalized)) return { category: "Ventas", subCategory: null };
+  } else {
+    if (/\b(gasolina|tanqueo|combustible|peaje|peajes|transporte|moto|carro|uber|didi|cabify|taxi|soat)\b/.test(normalized)) {
+      const isFuel = /\b(gasolina|tanqueo|combustible)\b/.test(normalized);
+      return { category: "Transporte", subCategory: isFuel ? "Combustible" : null };
+    }
+    if (/\b(papeleria|papelería|cuaderno|esfero|lapiz|impresion|impresiones|copias)\b/.test(normalized)) {
+      return { category: "Otros", subCategory: "Papelería" };
+    }
+    if (/\b(mercado|supermercado|comida|despensa|restaurante|almuerzo|cena|desayuno|pan|leche|cafe|cafeteria|domicilio|rappicard|rappi)\b/.test(normalized)) {
+      const isRest = /\b(restaurante|almuerzo|cena|desayuno|cafe|cafeteria|domicilio)\b/.test(normalized);
+      return { category: "Alimentación", subCategory: isRest ? "Restaurantes" : "Supermercado" };
+    }
+    if (/\b(medicina|medico|médico|cita|salud|drogueria|farmacia|pastillas|eps|clinica|hospital)\b/.test(normalized)) return { category: "Salud", subCategory: null };
+    if (/\b(arriendo|renta|servicio|internet|luz|agua|gas|hogar|casa|apartamento)\b/.test(normalized)) return { category: "Servicios", subCategory: null };
+    if (/\b(cine|pelicula|concierto|bar|cerveza|cervezas|fiesta|rumba|juego|juegos|netflix|spotify|disney|hbo|streaming)\b/.test(normalized)) return { category: "Entretenimiento", subCategory: null };
+    if (/\b(ropa|camisa|pantalon|zapatos|vestido|chaqueta|tienda)\b/.test(normalized)) return { category: "Ropa", subCategory: null };
+    if (/\b(cuota|tarjeta|prestamo|préstamo|banco|intereses)\b/.test(normalized)) return { category: "Deudas", subCategory: null };
+    if (/\b(ahorro|ahorrar|inversion|alcancia|bolsillo)\b/.test(normalized)) return { category: "Ahorros", subCategory: null };
+  }
+
+  return { category: "Otros", subCategory: null };
+}
+
 function isFuelIntent(text: string) {
   return /\b(gasolina|tanqueo|combustible|galon|galones|galón)\b/.test(normalize(text));
 }
@@ -856,15 +941,16 @@ async function createTransactionFromAura(userId: string, text: string, options: 
     if (debt) {
       const type = inferTransactionType(text);
       if (type === "income") return { text: "Ese movimiento parece ingreso, pero mencionaste una tarjeta/deuda. ¿Lo registro en una cuenta o es un abono?" };
-      const category = inferCategory(text, type);
+      const { category, subCategory } = await getSmartCategory(text, userId, type);
       const date = parseRecordDate(text);
       if (!options.commit) {
+        const categoryDisplay = subCategory ? `${category} / ${subCategory}` : category;
         return {
           text: [
             "Resumen para confirmar la compra:",
             `- Tarjeta/deuda: ${debt.name}`,
             `- Valor: ${COP.format(amount)}`,
-            `- Categoría: ${category}`,
+            `- Categoría: ${categoryDisplay}`,
             `- Fecha: ${formatDate(date)}`,
             "",
             "Responde CONFIRMAR para guardarla o CANCELAR para descartarla.",
@@ -873,7 +959,7 @@ async function createTransactionFromAura(userId: string, text: string, options: 
             type: "proposal",
             tool: "registrar_transaccion",
             requiresConfirmation: true,
-            payload: { debtId: debt.id, amount, category, date: date.toISOString() },
+            payload: { debtId: debt.id, amount, category, subCategory, date: date.toISOString() },
           },
         };
       }
@@ -883,11 +969,12 @@ async function createTransactionFromAura(userId: string, text: string, options: 
         amount,
         description: transactionDescription(text, category),
         category,
+        subCategory,
         date,
       });
       return {
-        text: `Listo, lo guardé como compra en ${debt.name}: ${COP.format(amount)}, categoría ${category}.`,
-        action: { type: "executed", tool: "registrar_transaccion", payload: { debtId: debt.id, amount, category } },
+        text: `Listo, lo guardé como compra en ${debt.name}: ${COP.format(amount)}, categoría ${subCategory ? `${category} / ${subCategory}` : category}.`,
+        action: { type: "executed", tool: "registrar_transaccion", payload: { debtId: debt.id, amount, category, subCategory } },
       };
     }
     const accountOptions = accounts.slice(0, 6).map((item) => `• ${item.name}: ${COP.format(item.balance)}`).join("\n");
@@ -905,17 +992,18 @@ async function createTransactionFromAura(userId: string, text: string, options: 
   }
 
   const type = inferTransactionType(text);
-  const category = inferCategory(text, type);
+  const { category, subCategory } = await getSmartCategory(text, userId, type);
   const description = transactionDescription(text, category);
   const balanceChange = type === "income" ? amount : -amount;
 
   if (!options.commit) {
+    const categoryDisplay = subCategory ? `${category} / ${subCategory}` : category;
     return {
       text: [
         `Resumen para confirmar el ${type === "income" ? "ingreso" : "gasto"}:`,
         `- Cuenta: ${account.name}`,
         `- Valor: ${COP.format(amount)}`,
-        `- Categoría: ${category}`,
+        `- Categoría: ${categoryDisplay}`,
         `- Fecha: ${formatDate(parseRecordDate(text))}`,
         "",
         "Responde CONFIRMAR para guardarlo o CANCELAR para descartarlo.",
@@ -930,6 +1018,7 @@ async function createTransactionFromAura(userId: string, text: string, options: 
           type,
           amount,
           category,
+          subCategory,
           date: parseRecordDate(text).toISOString(),
         },
       },
@@ -944,6 +1033,7 @@ async function createTransactionFromAura(userId: string, text: string, options: 
         amount,
         description,
         category,
+        subCategory,
         date: parseRecordDate(text),
         accountId: account.kind === "account" ? account.id : account.parentAccountId,
         subAccountId: account.kind === "subAccount" ? account.id : null,
@@ -958,7 +1048,7 @@ async function createTransactionFromAura(userId: string, text: string, options: 
       await tx.account.update({ where: { id: account.id }, data: { balance: { increment: balanceChange } } });
     }
 
-    const budget = await tx.budget.findFirst({ where: { userId, type, category, subCategory: null } });
+    const budget = await tx.budget.findFirst({ where: { userId, type, category, subCategory: subCategory ?? null } });
     if (budget) {
       await tx.budget.update({ where: { id: budget.id }, data: { spent: { increment: amount } } });
     }
@@ -967,9 +1057,10 @@ async function createTransactionFromAura(userId: string, text: string, options: 
   });
 
   const verb = type === "income" ? "ingreso" : "gasto";
+  const categoryDisplay = subCategory ? `${category} / ${subCategory}` : category;
   return {
-    text: `Listo, lo guardé como ${verb}: ${COP.format(amount)} en ${account.name}, categoría ${category}. ID: ${transaction.id}.`,
-    action: { type: "executed", tool: "registrar_transaccion", payload: { transactionId: transaction.id, amount, type, category } },
+    text: `Listo, lo guardé como ${verb}: ${COP.format(amount)} en ${account.name}, categoría ${categoryDisplay}. ID: ${transaction.id}.`,
+    action: { type: "executed", tool: "registrar_transaccion", payload: { transactionId: transaction.id, amount, type, category, subCategory } },
   };
 }
 

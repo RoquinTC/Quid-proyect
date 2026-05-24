@@ -74,14 +74,20 @@ export function parseRecordDate(text: string): Date {
 
 // Buscar coincidencia de cuentas o tarjetas en los presupuestos del usuario
 async function findCategoryAndSubcategoryFromText(text: string, userId: string) {
-  const budgets = await db.budget.findMany({
-    where: { userId },
-    select: { category: true, subCategory: true },
-  });
+  const [budgets, customCats] = await Promise.all([
+    db.budget.findMany({
+      where: { userId },
+      select: { category: true, subCategory: true },
+    }),
+    db.category.findMany({
+      where: { userId, hidden: false },
+      select: { name: true },
+    }),
+  ]);
 
   const normalized = normalize(text);
 
-  // Intentar coincidencia exacta con categoría / subcategoría
+  // 1. Intentar coincidencia exacta con categoría / subcategoría de presupuestos
   for (const b of budgets) {
     if (b.subCategory) {
       const combined = normalize(`${b.category} / ${b.subCategory}`);
@@ -92,11 +98,32 @@ async function findCategoryAndSubcategoryFromText(text: string, userId: string) 
     }
   }
 
-  // Intentar coincidencia con categoría principal
+  // 2. Intentar coincidencia con categoría principal de presupuestos
   for (const b of budgets) {
     const catNorm = normalize(b.category);
     if (normalized.includes(catNorm)) {
       return { category: b.category, subCategory: null };
+    }
+  }
+
+  // 3. Intentar coincidencia con categorías personalizadas
+  for (const cc of customCats) {
+    const ccNorm = normalize(cc.name);
+    if (normalized.includes(ccNorm)) {
+      return { category: cc.name, subCategory: null };
+    }
+  }
+
+  // 4. Intentar coincidencia con categorías estándar
+  const standardCats = [
+    "Alimentación", "Transporte", "Vivienda", "Salud", "Entretenimiento", 
+    "Educación", "Ropa", "Servicios", "Deudas", "Ahorros", "Suscripciones", 
+    "Otros", "Salario", "Freelance", "Inversiones", "Ventas"
+  ];
+  for (const sc of standardCats) {
+    const scNorm = normalize(sc);
+    if (normalized.includes(scNorm)) {
+      return { category: sc, subCategory: null };
     }
   }
 
@@ -196,10 +223,16 @@ export async function updateTransactionProposal(
   // 4. Detectar categoría y subcategoría
   let category = prevProposal.category;
   let subCategory = prevProposal.subCategory;
-  const matchedCat = await findCategoryAndSubcategoryFromText(lastUserMsg, userId);
-  if (matchedCat) {
-    category = matchedCat.category;
-    subCategory = matchedCat.subCategory;
+  const categoryMatch = lastUserMsg.match(/categor[ií]a:\s*([^/]+?)(?:\s*\/\s*(.+))?$/i) || lastUserMsg.match(/^categor[ií]a\s+([^/]+?)(?:\s*\/\s*(.+))?$/i);
+  if (categoryMatch) {
+    category = categoryMatch[1].trim();
+    subCategory = categoryMatch[2] ? categoryMatch[2].trim() : null;
+  } else {
+    const matchedCat = await findCategoryAndSubcategoryFromText(lastUserMsg, userId);
+    if (matchedCat) {
+      category = matchedCat.category;
+      subCategory = matchedCat.subCategory;
+    }
   }
 
   // 5. Detectar fecha
