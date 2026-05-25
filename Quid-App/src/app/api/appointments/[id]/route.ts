@@ -68,6 +68,12 @@ export async function PUT(
       // Revertir la transacción anterior antes de recrearla o si ya no está completada
       await reverseHealthFinanceEntry(id, session.user.id);
       updateData.financeSourceId = null;
+      if (!isCompleted) {
+        updateData.copayAmount = null;
+        updateData.accountId = null;
+        updateData.subAccountId = null;
+        updateData.debtId = null;
+      }
     }
 
     if (isCompleted && (wasCompleted ? financialFieldChanged : true)) {

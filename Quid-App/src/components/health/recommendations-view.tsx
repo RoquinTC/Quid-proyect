@@ -94,9 +94,9 @@ export function RecommendationsView() {
   // Agrupamiento inteligente por momento del día
   const getRoutineCategory = (med: Medication) => {
     const h = med.howToTake;
-    if (h === "morning" || h === "without_food") return "morning";
-    if (h === "night") return "night";
-    if (h === "with_food") return "meals";
+    if (h === "morning" || h === "en_ayunas" || h === "without_food" || h === "before_meals") return "morning";
+    if (h === "night" || h === "before_sleep") return "night";
+    if (h === "with_food" || h === "after_meals" || h === "with_first_bite") return "meals";
     return "flexible";
   };
 
@@ -108,14 +108,28 @@ export function RecommendationsView() {
   const getHowToTakeLabel = (val?: string | null) => {
     if (!val) return "Tomar según dosis sugerida";
     switch (val) {
+      case "en_ayunas":
+        return "Tomar estrictamente en ayunas (30-60 min antes de desayunar)";
+      case "before_meals":
+        return "Tomar antes de las comidas";
       case "with_food":
-        return "Tomar acompañado de alimentos";
-      case "without_food":
-        return "Tomar estrictamente en ayunas";
+        return "Tomar con alimentos / durante la comida";
+      case "after_meals":
+        return "Tomar después de las comidas";
+      case "with_first_bite":
+        return "Tomar con el primer bocado de comida";
       case "morning":
         return "Tomar por la mañana";
+      case "afternoon":
+        return "Tomar por la tarde";
       case "night":
-        return "Tomar por la noche";
+        return "Tomar por la noche al acostarse";
+      case "as_needed":
+        return "Tomar según necesidad o dolor";
+      case "custom":
+        return "Tomar según indicación personalizada";
+      case "without_food":
+        return "Tomar en ayunas (Sin alimentos)";
       default:
         return val;
     }

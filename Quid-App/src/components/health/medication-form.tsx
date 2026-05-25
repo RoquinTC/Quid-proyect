@@ -448,21 +448,33 @@ const frequencyOptions = [
 ];
 
 const howToTakeOptions = [
-  { value: "with_food", label: "Con alimentos" },
-  { value: "without_food", label: "Sin alimentos" },
-  { value: "morning", label: "Mañana" },
-  { value: "night", label: "Noche" },
-  { value: "custom", label: "Personalizado" },
+  { value: "en_ayunas", label: "En ayunas (30-60 min antes de desayunar)" },
+  { value: "before_meals", label: "Antes de las comidas" },
+  { value: "with_food", label: "Con alimentos / durante la comida" },
+  { value: "after_meals", label: "Después de las comidas" },
+  { value: "with_first_bite", label: "Con el primer bocado de comida" },
+  { value: "morning", label: "En la mañana" },
+  { value: "afternoon", label: "En la tarde" },
+  { value: "night", label: "En la noche / al acostarse" },
+  { value: "as_needed", label: "Según necesidad / dolor" },
+  { value: "custom", label: "Personalizado / Otra indicación" },
 ];
 
 const translateHowToTake = (h: string): string => {
   if (!h) return "";
   const lower = h.toLowerCase().trim();
-  if (lower === "with_food") return "Con alimentos";
-  if (lower === "without_food") return "Sin alimentos";
-  if (lower === "morning") return "Mañana";
-  if (lower === "night") return "Noche";
-  if (lower === "custom") return "Personalizado";
+  if (lower === "en_ayunas") return "En ayunas (30-60 min antes de desayunar)";
+  if (lower === "before_meals") return "Antes de las comidas";
+  if (lower === "with_food") return "Con alimentos / durante la comida";
+  if (lower === "after_meals") return "Después de las comidas";
+  if (lower === "with_first_bite") return "Con el primer bocado de comida";
+  if (lower === "morning") return "En la mañana";
+  if (lower === "afternoon") return "En la tarde";
+  if (lower === "night") return "En la noche / al acostarse";
+  if (lower === "as_needed") return "Según necesidad / dolor";
+  if (lower === "custom") return "Personalizado / Otra indicación";
+  // Fallbacks for older entries
+  if (lower === "without_food") return "En ayunas (Sin alimentos)";
   return h;
 };
 

@@ -39,11 +39,17 @@ const frequencyLabels: Record<string, string> = {
 };
 
 const howToTakeLabels: Record<string, string> = {
-  with_food: "Con alimentos",
-  without_food: "Sin alimentos",
-  morning: "Mañana",
-  night: "Noche",
-  custom: "Personalizado",
+  en_ayunas: "En ayunas (30-60 min antes de desayunar)",
+  before_meals: "Antes de las comidas",
+  with_food: "Con alimentos / durante la comida",
+  after_meals: "Después de las comidas",
+  with_first_bite: "Con el primer bocado de comida",
+  morning: "En la mañana",
+  afternoon: "En la tarde",
+  night: "En la noche / al acostarse",
+  as_needed: "Según necesidad / dolor",
+  custom: "Personalizado / Otra indicación",
+  without_food: "En ayunas (Sin alimentos)",
 };
 
 export function MedicationDetail({ medication, onBack, onEdit, onDelete }: MedicationDetailProps) {

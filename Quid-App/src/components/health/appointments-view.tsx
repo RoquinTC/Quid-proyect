@@ -172,7 +172,53 @@ export function AppointmentsView() {
           }}
           onConfirm={async (payload) => {
             if (!completingAppointment) return;
-            await handleStatusChange(completingAppointment.id, "completed", payload);
+            
+            // 1. Completar cita actual con copago si aplica
+            await handleStatusChange(completingAppointment.id, "completed", {
+              copayAmount: payload.copayAmount,
+              accountId: payload.accountId,
+              subAccountId: payload.subAccountId,
+              debtId: payload.debtId,
+            });
+
+            // 2. Crear la orden médica si aplica
+            if (payload.createOrder) {
+              try {
+                await apiFetch("/api/medical-orders", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    appointmentId: completingAppointment.id,
+                    title: payload.createOrder.title,
+                    orderNumber: payload.createOrder.orderNumber || null,
+                    nextClaimDate: payload.createOrder.nextClaimDate || null,
+                    notes: payload.createOrder.notes || null,
+                    items: [],
+                  }),
+                });
+              } catch (error) {
+                console.error("Error al crear orden médica:", error);
+              }
+            }
+
+            // 3. Crear cita de control si aplica
+            if (payload.createFollowUp) {
+              try {
+                await apiFetch("/api/appointments", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    specialty: payload.createFollowUp.specialty,
+                    doctorName: payload.createFollowUp.doctorName || null,
+                    date: payload.createFollowUp.date,
+                    location: payload.createFollowUp.location || null,
+                    reminderEnabled: true,
+                    status: "scheduled",
+                  }),
+                });
+              } catch (error) {
+                console.error("Error al crear cita de control:", error);
+              }
+            }
+
             setCompletingAppointment(null);
             setSelectedAppointment(null);
           }}
@@ -356,6 +402,18 @@ function CompleteAppointmentDialog({
     accountId: string | null;
     subAccountId: string | null;
     debtId: string | null;
+    createOrder?: {
+      title: string;
+      orderNumber: string | null;
+      nextClaimDate: string | null;
+      notes: string | null;
+    };
+    createFollowUp?: {
+      specialty: string;
+      doctorName: string | null;
+      date: string;
+      location: string | null;
+    };
   }) => Promise<void>;
 }) {
   const [hasCopay, setHasCopay] = useState(false);
@@ -373,6 +431,21 @@ function CompleteAppointmentDialog({
     debtId: null,
     installmentCount: null,
   });
+
+  // Medical Order follow-up
+  const [hasOrder, setHasOrder] = useState(false);
+  const [orderTitle, setOrderTitle] = useState("Fórmula Médica");
+  const [orderNumber, setOrderNumber] = useState("");
+  const [orderClaimDate, setOrderClaimDate] = useState("");
+  const [orderNotes, setOrderNotes] = useState("");
+
+  // Next scheduled appointment control
+  const [hasFollowUp, setHasFollowUp] = useState(false);
+  const [followUpSpecialty, setFollowUpSpecialty] = useState("");
+  const [followUpDoctor, setFollowUpDoctor] = useState("");
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpLocation, setFollowUpLocation] = useState("");
+
   const [saving, setSaving] = useState(false);
 
   const numericAmount = amount ? Number(amount) : 0;
@@ -390,10 +463,21 @@ function CompleteAppointmentDialog({
       debtId: null,
       installmentCount: null,
     });
-  }, [open, appointment?.id]);
+    setHasOrder(false);
+    setOrderTitle("Fórmula Médica");
+    setOrderNumber("");
+    setOrderClaimDate("");
+    setOrderNotes("");
+    setHasFollowUp(false);
+    setFollowUpSpecialty(appointment?.specialty ? `Control de ${appointment.specialty}` : "Control Médico");
+    setFollowUpDoctor(appointment?.doctorName || "");
+    setFollowUpDate("");
+    setFollowUpLocation(appointment?.location || "");
+  }, [open, appointment]);
 
   const handleConfirm = async () => {
     if (needsPayment && !hasPaymentSource) return;
+    if (hasFollowUp && !followUpDate) return;
     setSaving(true);
     try {
       await onConfirm({
@@ -401,6 +485,18 @@ function CompleteAppointmentDialog({
         accountId: needsPayment ? payment.accountId : null,
         subAccountId: needsPayment ? payment.subAccountId : null,
         debtId: needsPayment && payment.paymentType === "credit_card" ? payment.debtId : null,
+        createOrder: hasOrder ? {
+          title: orderTitle || "Fórmula Médica",
+          orderNumber: orderNumber || null,
+          nextClaimDate: orderClaimDate || null,
+          notes: orderNotes || null,
+        } : undefined,
+        createFollowUp: hasFollowUp ? {
+          specialty: followUpSpecialty || "Control Médico",
+          doctorName: followUpDoctor || null,
+          date: followUpDate,
+          location: followUpLocation || null,
+        } : undefined,
       });
     } finally {
       setSaving(false);
@@ -409,60 +505,214 @@ function CompleteAppointmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:w-full sm:max-w-lg rounded-2xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Completar cita médica</DialogTitle>
           <DialogDescription>
-            Confirma si hubo copago o gasto médico para registrarlo correctamente en Finanzas.
+            Registra copagos, guarda fórmulas médicas o programa citas de control para continuar tu tratamiento.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="rounded-xl bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/20 dark:text-rose-200">
+        <div className="space-y-4 pt-1">
+          {/* Cita actual */}
+          <div className="rounded-xl bg-violet-50 p-3 text-xs font-medium text-violet-800 dark:bg-violet-950/20 dark:text-violet-200">
             {appointment?.specialty || "Cita médica"}
             {appointment?.doctorName ? ` con ${appointment.doctorName}` : ""}
           </div>
 
-          <div className="flex items-center justify-between rounded-xl bg-gray-50 p-3 dark:bg-gray-800">
-            <div>
-              <Label className="text-sm">¿Generó copago o gasto?</Label>
-              <p className="text-xs text-gray-500">Si no pagaste nada, déjalo desactivado.</p>
+          {/* SECCIÓN 1: COPAGO */}
+          <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2.5 items-center">
+                <div className="size-8 rounded-xl bg-rose-50 dark:bg-rose-950/20 flex items-center justify-center text-rose-500">
+                  <Wallet className="size-4" />
+                </div>
+                <div>
+                  <Label className="text-sm font-semibold">¿Generó copago o gasto?</Label>
+                  <p className="text-xs text-gray-400">Si pagaste copago, moderadora o consulta particular.</p>
+                </div>
+              </div>
+              <Switch checked={hasCopay} onCheckedChange={setHasCopay} />
             </div>
-            <Switch checked={hasCopay} onCheckedChange={setHasCopay} />
+
+            {hasCopay && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="space-y-4 pt-2 border-t border-gray-50 dark:border-gray-800"
+              >
+                <div className="space-y-2">
+                  <Label htmlFor="complete-copay" className="text-xs text-gray-500">Valor pagado</Label>
+                  <Input
+                    id="complete-copay"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Ej: 12000"
+                    value={amount}
+                    onChange={(event) => setAmount(event.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+
+                {numericAmount > 0 && (
+                  <PaymentMethodSelector
+                    defaultPaymentType="account"
+                    onChange={setPayment}
+                  />
+                )}
+              </motion.div>
+            )}
           </div>
 
-          {hasCopay && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="complete-copay">Valor pagado</Label>
-                <Input
-                  id="complete-copay"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="Ej: 12000"
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  className="rounded-xl"
-                />
+          {/* SECCIÓN 2: RECETA MÉDICA (ÓRDENES) */}
+          <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2.5 items-center">
+                <div className="size-8 rounded-xl bg-violet-50 dark:bg-violet-950/20 flex items-center justify-center text-violet-500">
+                  <FileText className="size-4" />
+                </div>
+                <div>
+                  <Label className="text-sm font-semibold">¿Te dieron receta u orden médica?</Label>
+                  <p className="text-xs text-gray-400">Registra los medicamentos o exámenes formulados.</p>
+                </div>
               </div>
+              <Switch checked={hasOrder} onCheckedChange={setHasOrder} />
+            </div>
 
-              {numericAmount > 0 && (
-                <PaymentMethodSelector
-                  defaultPaymentType="account"
-                  onChange={setPayment}
-                />
-              )}
-            </>
-          )}
+            {hasOrder && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="space-y-3 pt-2 border-t border-gray-50 dark:border-gray-800"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="order-title" className="text-xs text-gray-500">Título de la receta/orden</Label>
+                    <Input
+                      id="order-title"
+                      placeholder="Ej: Fórmula de Medicamentos"
+                      value={orderTitle}
+                      onChange={(e) => setOrderTitle(e.target.value)}
+                      className="rounded-xl h-9 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="order-number" className="text-xs text-gray-500">Número de orden/fórmula (Opcional)</Label>
+                    <Input
+                      id="order-number"
+                      placeholder="Ej: F-92831"
+                      value={orderNumber}
+                      onChange={(e) => setOrderNumber(e.target.value)}
+                      className="rounded-xl h-9 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="order-claim-date" className="text-xs text-gray-500">Fecha de reclamo / Expiración (Opcional)</Label>
+                  <Input
+                    id="order-claim-date"
+                    type="date"
+                    value={orderClaimDate}
+                    onChange={(e) => setOrderClaimDate(e.target.value)}
+                    className="rounded-xl h-9 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="order-notes" className="text-xs text-gray-500">Notas / Medicamentos formulados (Opcional)</Label>
+                  <textarea
+                    id="order-notes"
+                    rows={2}
+                    placeholder="Ej: Acetaminofén 500mg, Loratadina 10mg..."
+                    value={orderNotes}
+                    onChange={(e) => setOrderNotes(e.target.value)}
+                    className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-transparent p-2.5 outline-none resize-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* SECCIÓN 3: CITA DE CONTROL */}
+          <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2.5 items-center">
+                <div className="size-8 rounded-xl bg-amber-50 dark:bg-amber-950/20 flex items-center justify-center text-amber-500">
+                  <Plus className="size-4" />
+                </div>
+                <div>
+                  <Label className="text-sm font-semibold">¿Tienes cita de control o especialista?</Label>
+                  <p className="text-xs text-gray-400">Agenda tu próxima consulta de seguimiento ahora mismo.</p>
+                </div>
+              </div>
+              <Switch checked={hasFollowUp} onCheckedChange={setHasFollowUp} />
+            </div>
+
+            {hasFollowUp && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="space-y-3 pt-2 border-t border-gray-50 dark:border-gray-800"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="follow-up-specialty" className="text-xs text-gray-500">Especialidad</Label>
+                    <Input
+                      id="follow-up-specialty"
+                      placeholder="Ej: Control Medicina Interna"
+                      value={followUpSpecialty}
+                      onChange={(e) => setFollowUpSpecialty(e.target.value)}
+                      className="rounded-xl h-9 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="follow-up-doctor" className="text-xs text-gray-500">Médico (Opcional)</Label>
+                    <Input
+                      id="follow-up-doctor"
+                      placeholder="Ej: Dr. Alejandro"
+                      value={followUpDoctor}
+                      onChange={(e) => setFollowUpDoctor(e.target.value)}
+                      className="rounded-xl h-9 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="follow-up-date" className="text-xs text-gray-500">Fecha y Hora</Label>
+                    <Input
+                      id="follow-up-date"
+                      type="datetime-local"
+                      required
+                      value={followUpDate}
+                      onChange={(e) => setFollowUpDate(e.target.value)}
+                      className="rounded-xl h-9 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="follow-up-location" className="text-xs text-gray-500">Consultorio / Lugar (Opcional)</Label>
+                    <Input
+                      id="follow-up-location"
+                      placeholder="Ej: Torre Médica Piso 4"
+                      value={followUpLocation}
+                      onChange={(e) => setFollowUpLocation(e.target.value)}
+                      className="rounded-xl h-9 text-xs"
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </div>
 
           <Button
-            className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-pink-500 hover:from-rose-700 hover:to-pink-600"
+            className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-pink-500 hover:from-rose-700 hover:to-pink-600 text-white font-medium py-2.5"
             onClick={handleConfirm}
-            disabled={saving || (needsPayment && !hasPaymentSource)}
+            disabled={saving || (needsPayment && !hasPaymentSource) || (hasFollowUp && !followUpDate)}
           >
             {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : <CalendarCheck className="size-4 mr-2" />}
-            Completar cita
+            Guardar y Completar Cita
           </Button>
         </div>
       </DialogContent>
