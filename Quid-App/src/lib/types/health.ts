@@ -36,6 +36,7 @@ export interface MedicalAppointment {
   subAccountId?: string | null;
   debtId?: string | null;
   financeSourceId?: string | null;
+  authorizationId?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

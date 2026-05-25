@@ -457,35 +457,37 @@ async function cacheGetResponse(url: string, data: unknown): Promise<void> {
 async function updateLocalAfterMutation(url: string, options: RequestInit, data: any): Promise<void> {
   const method = options.method?.toUpperCase() || "POST";
   const { tableName, isComplex } = parseApiUrl(url);
-  if (!tableName || isComplex || !_localDB) return;
+  if (!_localDB) return;
 
   try {
-    const table = (_localDB as any)[tableName];
-    if (!table) return;
-
     const now = Date.now();
 
-    if (method === "POST" && data?.id) {
-      // After create: store the server response (with real ID)
-      await table.put({
-        ...data,
-        _syncStatus: "synced",
-        _version: 1,
-        _lastModified: now,
-      });
-    } else if (method === "PUT" && data?.id) {
-      // After update: store the server response
-      await table.put({
-        ...data,
-        _syncStatus: "synced",
-        _version: 1,
-        _lastModified: now,
-      });
-    } else if (method === "DELETE") {
-      // After delete: remove from IndexedDB
-      const parts = url.split("/");
-      const id = parts[parts.length - 1];
-      await table.delete(id);
+    if (tableName && !isComplex) {
+      const table = (_localDB as any)[tableName];
+      if (table) {
+        if (method === "POST" && data?.id) {
+          // After create: store the server response (with real ID)
+          await table.put({
+            ...data,
+            _syncStatus: "synced",
+            _version: 1,
+            _lastModified: now,
+          });
+        } else if (method === "PUT" && data?.id) {
+          // After update: store the server response
+          await table.put({
+            ...data,
+            _syncStatus: "synced",
+            _version: 1,
+            _lastModified: now,
+          });
+        } else if (method === "DELETE") {
+          // After delete: remove from IndexedDB
+          const parts = url.split("/");
+          const id = parts[parts.length - 1];
+          await table.delete(id);
+        }
+      }
     }
 
     // ── Cross-table balance updates ──────────────────────────────

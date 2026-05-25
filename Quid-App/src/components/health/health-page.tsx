@@ -111,9 +111,9 @@ export function HealthPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Sub-tab navigation */}
-      <div className="px-4 pt-3 pb-1">
-        <div className="flex items-center gap-1.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-x-auto scrollbar-none flex-nowrap max-w-full">
+      {/* Sticky Sub-tab navigation */}
+      <div className="sticky top-0 z-30 px-4 pt-3 pb-1 bg-white dark:bg-gray-900">
+        <div className="flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-x-auto no-scrollbar">
           {tabs.map((tab) => {
             const isActive = healthSubView === tab.id;
             const Icon = tab.icon;
@@ -121,7 +121,7 @@ export function HealthPage() {
               <button
                 key={tab.id}
                 onClick={() => setHealthSubView(tab.id)}
-                className="relative flex items-center justify-center gap-1.5 flex-1 md:flex-initial py-2.5 px-3 rounded-xl text-sm font-medium transition-colors duration-200 flex-shrink-0 whitespace-nowrap cursor-pointer"
+                className="relative flex items-center justify-center gap-1 shrink-0 min-w-0 py-2 px-2 rounded-xl text-sm font-medium transition-colors duration-200 whitespace-nowrap cursor-pointer"
               >
                 {isActive && (
                   <motion.div
@@ -135,7 +135,7 @@ export function HealthPage() {
                   />
                 )}
                 <Icon
-                  className={`size-4 relative z-10 ${
+                  className={`size-3.5 relative z-10 ${
                     isActive ? "text-rose-600" : "text-gray-400"
                   }`}
                 />

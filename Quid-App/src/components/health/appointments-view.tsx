@@ -131,6 +131,16 @@ export function AppointmentsView() {
     }
   };
 
+  const handleReverseCompletion = async (id: string) => {
+    try {
+      await apiFetch(`/api/appointments/${id}/reverse-completion`, { method: "POST" });
+      await fetchAppointments();
+      setSelectedAppointment(null);
+    } catch (error) {
+      console.error("Error reversing appointment completion:", error);
+    }
+  };
+
   const handleEdit = (apt: Appointment) => {
     setEditingAppointment(apt);
     setShowForm(true);
@@ -159,6 +169,7 @@ export function AppointmentsView() {
           onEdit={() => handleEdit(selectedAppointment)}
           onDelete={() => handleDelete(selectedAppointment.id)}
           onCompleteRequest={() => setCompletingAppointment(selectedAppointment)}
+          onReverseCompletion={() => handleReverseCompletion(selectedAppointment.id)}
           onStatusChange={(status) => {
             handleStatusChange(selectedAppointment.id, status);
             setSelectedAppointment(null);
@@ -172,70 +183,12 @@ export function AppointmentsView() {
           }}
           onConfirm={async (payload) => {
             if (!completingAppointment) return;
-            
-            // 1. Completar cita actual con copago si aplica
-            await handleStatusChange(completingAppointment.id, "completed", {
-              copayAmount: payload.copayAmount,
-              accountId: payload.accountId,
-              subAccountId: payload.subAccountId,
-              debtId: payload.debtId,
+
+            await apiFetch(`/api/appointments/${completingAppointment.id}/complete`, {
+              method: "POST",
+              body: JSON.stringify(payload),
             });
-
-            // 2. Crear la orden médica si aplica
-            if (payload.createOrder) {
-              try {
-                await apiFetch("/api/medical-orders", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    appointmentId: completingAppointment.id,
-                    title: payload.createOrder.title,
-                    orderNumber: payload.createOrder.orderNumber || null,
-                    nextClaimDate: payload.createOrder.nextClaimDate || null,
-                    notes: payload.createOrder.notes || null,
-                    items: payload.createOrder.items || [],
-                  }),
-                });
-              } catch (error) {
-                console.error("Error al crear orden médica:", error);
-              }
-            }
-
-            // 3. Crear cita de control si aplica
-            if (payload.createFollowUp) {
-              try {
-                await apiFetch("/api/appointments", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    specialty: payload.createFollowUp.specialty,
-                    doctorName: payload.createFollowUp.doctorName || null,
-                    date: payload.createFollowUp.date,
-                    location: payload.createFollowUp.location || null,
-                    reminderEnabled: true,
-                    status: "scheduled",
-                  }),
-                });
-              } catch (error) {
-                console.error("Error al crear cita de control:", error);
-              }
-            }
-
-            // 4. Crear autorización EPS si aplica
-            if (payload.createAuthorization) {
-              try {
-                await apiFetch("/api/health/authorizations", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    originAppointmentId: completingAppointment.id,
-                    type: payload.createAuthorization.type,
-                    specialty: payload.createAuthorization.specialty,
-                    notes: payload.createAuthorization.notes || null,
-                    status: "pending_authorization",
-                  }),
-                });
-              } catch (error) {
-                console.error("Error al crear autorización EPS:", error);
-              }
-            }
+            await fetchAppointments();
 
             setCompletingAppointment(null);
             setSelectedAppointment(null);
@@ -920,6 +873,7 @@ function AppointmentDetail({
   onDelete,
   onStatusChange,
   onCompleteRequest,
+  onReverseCompletion,
 }: {
   appointment: Appointment;
   onBack: () => void;
@@ -927,6 +881,7 @@ function AppointmentDetail({
   onDelete: () => void;
   onStatusChange: (status: string) => void;
   onCompleteRequest: () => void;
+  onReverseCompletion: () => void;
 }) {
   const date = new Date(appointment.date);
   const statusLabels: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -1074,6 +1029,17 @@ function AppointmentDetail({
             Cancelar
           </Button>
         </div>
+      ) : appointment.status === "completed" ? (
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 rounded-xl border-amber-200 text-amber-600 hover:bg-amber-50 dark:border-amber-800/30 dark:hover:bg-amber-950/20"
+            onClick={onReverseCompletion}
+          >
+            <RotateCcw className="size-4 mr-1.5" />
+            Reversar cita y copago
+          </Button>
+        </div>
       ) : (
         <div className="flex gap-2">
           <Button
@@ -1082,7 +1048,7 @@ function AppointmentDetail({
             onClick={() => onStatusChange("scheduled")}
           >
             <RotateCcw className="size-4 mr-1.5" />
-            Reversar Cita (Volver a Programar)
+            Volver a programar
           </Button>
         </div>
       )}
