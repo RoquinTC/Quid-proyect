@@ -3,12 +3,14 @@
 import { useState, useEffect } from "react";
 import { useAppStore, type HealthSubView, type SidebarAction } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
-import { ClipboardList, Pill, Stethoscope, Sparkles, Package } from "lucide-react";
+import { ClipboardList, Pill, Stethoscope, Sparkles, Package, ShieldCheck, ShoppingBag } from "lucide-react";
 import { MedicationsView } from "./medications-view";
 import { AppointmentsView } from "./appointments-view";
 import { MedicalOrdersView } from "./medical-orders-view";
 import { RecommendationsView } from "./recommendations-view";
 import { InventoryView } from "./inventory-view";
+import { AuthorizationsTab } from "./authorizations-tab";
+import { PendingClaimsTab } from "./pending-claims-tab";
 import { MedicationForm } from "./medication-form";
 import { AppointmentForm } from "./appointment-form";
 import { MedicalOrderForm } from "./medical-order-form";
@@ -17,6 +19,8 @@ const tabs: { id: HealthSubView; label: string; icon: any }[] = [
   { id: "medications", label: "Medicamentos", icon: Pill },
   { id: "appointments", label: "Citas", icon: Stethoscope },
   { id: "orders", label: "Órdenes", icon: ClipboardList },
+  { id: "authorizations", label: "EPS Autorizaciones", icon: ShieldCheck },
+  { id: "claims", label: "Pendientes Farmacia", icon: ShoppingBag },
   { id: "profiles", label: "Recomendaciones", icon: Sparkles },
   { id: "inventory", label: "Inventario", icon: Package },
 ];
@@ -92,6 +96,10 @@ export function HealthPage() {
         return <AppointmentsView />;
       case "orders":
         return <MedicalOrdersView />;
+      case "authorizations":
+        return <AuthorizationsTab />;
+      case "claims":
+        return <PendingClaimsTab />;
       case "profiles":
         return <RecommendationsView />;
       case "inventory":

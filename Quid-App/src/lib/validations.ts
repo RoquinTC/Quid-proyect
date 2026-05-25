@@ -750,6 +750,7 @@ export const appointmentCreateSchema = z.object({
   accountId: z.string().nullable().optional(),
   subAccountId: z.string().nullable().optional(),
   debtId: z.string().nullable().optional(),
+  authorizationId: z.string().nullable().optional(),
 });
 
 export const appointmentUpdateSchema = z.object({
@@ -764,6 +765,7 @@ export const appointmentUpdateSchema = z.object({
   accountId: z.string().nullable().optional(),
   subAccountId: z.string().nullable().optional(),
   debtId: z.string().nullable().optional(),
+  authorizationId: z.string().nullable().optional(),
 });
 
 export const medicalOrderItemSchema = z.object({

@@ -37,7 +37,20 @@ export async function POST(req: NextRequest) {
       if (err instanceof Response) return err;
       return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
-    const { doctorName, specialty, location, date, notes, reminderEnabled, status, copayAmount, accountId, subAccountId, debtId } = body;
+    const {
+      doctorName,
+      specialty,
+      location,
+      date,
+      notes,
+      reminderEnabled,
+      status,
+      copayAmount,
+      accountId,
+      subAccountId,
+      debtId,
+      authorizationId,
+    } = body;
 
     if (!date) {
       return NextResponse.json(
@@ -60,6 +73,7 @@ export async function POST(req: NextRequest) {
         accountId: accountId ?? null,
         subAccountId: subAccountId ?? null,
         debtId: debtId ?? null,
+        authorizationId: authorizationId ?? null,
       },
     });
 

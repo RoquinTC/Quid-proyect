@@ -192,7 +192,7 @@ export function AppointmentsView() {
                     orderNumber: payload.createOrder.orderNumber || null,
                     nextClaimDate: payload.createOrder.nextClaimDate || null,
                     notes: payload.createOrder.notes || null,
-                    items: [],
+                    items: payload.createOrder.items || [],
                   }),
                 });
               } catch (error) {
@@ -216,6 +216,24 @@ export function AppointmentsView() {
                 });
               } catch (error) {
                 console.error("Error al crear cita de control:", error);
+              }
+            }
+
+            // 4. Crear autorización EPS si aplica
+            if (payload.createAuthorization) {
+              try {
+                await apiFetch("/api/health/authorizations", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    originAppointmentId: completingAppointment.id,
+                    type: payload.createAuthorization.type,
+                    specialty: payload.createAuthorization.specialty,
+                    notes: payload.createAuthorization.notes || null,
+                    status: "pending_authorization",
+                  }),
+                });
+              } catch (error) {
+                console.error("Error al crear autorización EPS:", error);
               }
             }
 
@@ -407,12 +425,18 @@ function CompleteAppointmentDialog({
       orderNumber: string | null;
       nextClaimDate: string | null;
       notes: string | null;
+      items: Array<{ name: string; prescribedQty: number; unit: string }>;
     };
     createFollowUp?: {
       specialty: string;
       doctorName: string | null;
       date: string;
       location: string | null;
+    };
+    createAuthorization?: {
+      type: string;
+      specialty: string;
+      notes: string | null;
     };
   }) => Promise<void>;
 }) {
@@ -439,7 +463,18 @@ function CompleteAppointmentDialog({
   const [orderClaimDate, setOrderClaimDate] = useState("");
   const [orderNotes, setOrderNotes] = useState("");
 
-  // Next scheduled appointment control
+  // Prescribed medications inside order
+  const [meds, setMeds] = useState<Array<{ name: string; qty: string; unit: string }>>([
+    { name: "", qty: "30", unit: "unit" }
+  ]);
+
+  // EPS Authorization follow-up
+  const [hasAuthorization, setHasAuthorization] = useState(false);
+  const [authSpecialty, setAuthSpecialty] = useState("");
+  const [authType, setAuthType] = useState("specialist");
+  const [authNotes, setAuthNotes] = useState("");
+
+  // Next scheduled appointment control (direct)
   const [hasFollowUp, setHasFollowUp] = useState(false);
   const [followUpSpecialty, setFollowUpSpecialty] = useState("");
   const [followUpDoctor, setFollowUpDoctor] = useState("");
@@ -468,6 +503,13 @@ function CompleteAppointmentDialog({
     setOrderNumber("");
     setOrderClaimDate("");
     setOrderNotes("");
+    setMeds([{ name: "", qty: "30", unit: "unit" }]);
+
+    setHasAuthorization(false);
+    setAuthSpecialty("");
+    setAuthType("specialist");
+    setAuthNotes("");
+
     setHasFollowUp(false);
     setFollowUpSpecialty(appointment?.specialty ? `Control de ${appointment.specialty}` : "Control Médico");
     setFollowUpDoctor(appointment?.doctorName || "");
@@ -475,11 +517,36 @@ function CompleteAppointmentDialog({
     setFollowUpLocation(appointment?.location || "");
   }, [open, appointment]);
 
+  const addMedRow = () => {
+    setMeds([...meds, { name: "", qty: "30", unit: "unit" }]);
+  };
+
+  const removeMedRow = (index: number) => {
+    const updated = [...meds];
+    updated.splice(index, 1);
+    setMeds(updated.length > 0 ? updated : [{ name: "", qty: "30", unit: "unit" }]);
+  };
+
+  const updateMedRow = (index: number, field: "name" | "qty" | "unit", val: string) => {
+    const updated = [...meds];
+    updated[index][field] = val;
+    setMeds(updated);
+  };
+
   const handleConfirm = async () => {
     if (needsPayment && !hasPaymentSource) return;
     if (hasFollowUp && !followUpDate) return;
+    if (hasAuthorization && !authSpecialty) return;
     setSaving(true);
     try {
+      const validMeds = meds
+        .filter((m) => m.name.trim() !== "")
+        .map((m) => ({
+          name: m.name.trim(),
+          prescribedQty: Number(m.qty) || 1,
+          unit: m.unit || "unit",
+        }));
+
       await onConfirm({
         copayAmount: hasCopay ? numericAmount : null,
         accountId: needsPayment ? payment.accountId : null,
@@ -490,6 +557,7 @@ function CompleteAppointmentDialog({
           orderNumber: orderNumber || null,
           nextClaimDate: orderClaimDate || null,
           notes: orderNotes || null,
+          items: validMeds,
         } : undefined,
         createFollowUp: hasFollowUp ? {
           specialty: followUpSpecialty || "Control Médico",
@@ -497,11 +565,22 @@ function CompleteAppointmentDialog({
           date: followUpDate,
           location: followUpLocation || null,
         } : undefined,
+        createAuthorization: hasAuthorization ? {
+          type: authType,
+          specialty: authSpecialty,
+          notes: authNotes || null,
+        } : undefined,
       });
     } finally {
       setSaving(false);
     }
   };
+
+  const authTypes = [
+    { value: "specialist", label: "Especialista" },
+    { value: "procedure", label: "Examen / Proc." },
+    { value: "control", label: "Control" },
+  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -544,14 +623,14 @@ function CompleteAppointmentDialog({
                 <div className="space-y-2">
                   <Label htmlFor="complete-copay" className="text-xs text-gray-500">Valor pagado</Label>
                   <Input
-                    id="complete-copay"
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="Ej: 12000"
-                    value={amount}
-                    onChange={(event) => setAmount(event.target.value)}
-                    className="rounded-xl"
+                     id="complete-copay"
+                     type="number"
+                     min="0"
+                     step="1"
+                     placeholder="Ej: 12000"
+                     value={amount}
+                     onChange={(event) => setAmount(event.target.value)}
+                     className="rounded-xl"
                   />
                 </div>
 
@@ -565,7 +644,7 @@ function CompleteAppointmentDialog({
             )}
           </div>
 
-          {/* SECCIÓN 2: RECETA MÉDICA (ÓRDENES) */}
+          {/* SECCIÓN 2: RECETA MÉDICA (ÓRDENES / MEDICAMENTOS) */}
           <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex gap-2.5 items-center">
@@ -610,7 +689,7 @@ function CompleteAppointmentDialog({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="order-claim-date" className="text-xs text-gray-500">Fecha de reclamo / Expiración (Opcional)</Label>
+                  <Label htmlFor="order-claim-date" className="text-xs text-gray-500">Fecha límite de reclamo (Opcional)</Label>
                   <Input
                     id="order-claim-date"
                     type="date"
@@ -620,12 +699,58 @@ function CompleteAppointmentDialog({
                   />
                 </div>
 
+                {/* Formulario Dinámico de Medicamentos */}
+                <div className="space-y-2 pt-2">
+                  <Label className="text-xs font-semibold text-gray-500">Medicamentos Formulados</Label>
+                  <div className="space-y-2">
+                    {meds.map((med, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Nombre (ej: Ibuprofeno 400mg)"
+                          value={med.name}
+                          onChange={(e) => updateMedRow(idx, "name", e.target.value)}
+                          className="rounded-xl h-9 text-xs flex-1"
+                        />
+                        <Input
+                          type="number"
+                          min="1"
+                          placeholder="Cant."
+                          value={med.qty}
+                          onChange={(e) => updateMedRow(idx, "qty", e.target.value)}
+                          className="rounded-xl h-9 text-xs w-16"
+                        />
+                        <Input
+                          placeholder="Unid."
+                          value={med.unit}
+                          onChange={(e) => updateMedRow(idx, "unit", e.target.value)}
+                          className="rounded-xl h-9 text-xs w-16"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeMedRow(idx)}
+                          className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={addMedRow}
+                    className="w-full text-xs h-8 border-dashed rounded-xl"
+                  >
+                    <Plus className="size-3 mr-1" /> Agregar Medicamento
+                  </Button>
+                </div>
+
                 <div className="space-y-1.5">
-                  <Label htmlFor="order-notes" className="text-xs text-gray-500">Notas / Medicamentos formulados (Opcional)</Label>
+                  <Label htmlFor="order-notes" className="text-xs text-gray-500">Notas Adicionales (Opcional)</Label>
                   <textarea
                     id="order-notes"
                     rows={2}
-                    placeholder="Ej: Acetaminofén 500mg, Loratadina 10mg..."
+                    placeholder="Instrucciones del médico, dosis diaria..."
                     value={orderNotes}
                     onChange={(e) => setOrderNotes(e.target.value)}
                     className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-transparent p-2.5 outline-none resize-none focus:ring-1 focus:ring-violet-500"
@@ -635,7 +760,74 @@ function CompleteAppointmentDialog({
             )}
           </div>
 
-          {/* SECCIÓN 3: CITA DE CONTROL */}
+          {/* SECCIÓN 3: TRÁMITE DE AUTORIZACIÓN EPS */}
+          <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2.5 items-center">
+                <div className="size-8 rounded-xl bg-blue-50 dark:bg-blue-950/20 flex items-center justify-center text-blue-500">
+                  <Stethoscope className="size-4" />
+                </div>
+                <div>
+                  <Label className="text-sm font-semibold">¿Requiere autorización de la EPS?</Label>
+                  <p className="text-xs text-gray-400">Si te remitieron a especialista o exámenes de diagnóstico.</p>
+                </div>
+              </div>
+              <Switch checked={hasAuthorization} onCheckedChange={setHasAuthorization} />
+            </div>
+
+            {hasAuthorization && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="space-y-3 pt-2 border-t border-gray-50 dark:border-gray-800"
+              >
+                <div className="space-y-1.5">
+                  <Label htmlFor="auth-specialty" className="text-xs text-gray-500">Especialidad u Orden Solicitada</Label>
+                  <Input
+                    id="auth-specialty"
+                    placeholder="Ej: Fisioterapia, Cardiología, Ecografía"
+                    value={authSpecialty}
+                    onChange={(e) => setAuthSpecialty(e.target.value)}
+                    className="rounded-xl h-9 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-gray-500">Tipo de Orden</Label>
+                  <div className="flex gap-2">
+                    {authTypes.map((t) => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        onClick={() => setAuthType(t.value)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                          authType === t.value
+                            ? "bg-violet-100 border-violet-300 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-200"
+                            : "border-gray-200 dark:border-gray-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-900"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="auth-notes" className="text-xs text-gray-500">Notas de la Autorización (Opcional)</Label>
+                  <textarea
+                    id="auth-notes"
+                    rows={2}
+                    placeholder="Ej: Diagnóstico asociado, requerimientos previos..."
+                    value={authNotes}
+                    onChange={(e) => setAuthNotes(e.target.value)}
+                    className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-transparent p-2.5 outline-none resize-none focus:ring-1 focus:ring-violet-500"
+                  />
+                </div>
+              </motion.div>
+            )}
+          </div>
+
+          {/* SECCIÓN 4: CITA DE CONTROL DIRECTA */}
           <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex gap-2.5 items-center">
@@ -643,8 +835,8 @@ function CompleteAppointmentDialog({
                   <Plus className="size-4" />
                 </div>
                 <div>
-                  <Label className="text-sm font-semibold">¿Tienes cita de control o especialista?</Label>
-                  <p className="text-xs text-gray-400">Agenda tu próxima consulta de seguimiento ahora mismo.</p>
+                  <Label className="text-sm font-semibold">¿Tienes cita de control directa?</Label>
+                  <p className="text-xs text-gray-400">Si programaste control inmediato sin autorización de EPS.</p>
                 </div>
               </div>
               <Switch checked={hasFollowUp} onCheckedChange={setHasFollowUp} />
@@ -709,7 +901,7 @@ function CompleteAppointmentDialog({
           <Button
             className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-pink-500 hover:from-rose-700 hover:to-pink-600 text-white font-medium py-2.5"
             onClick={handleConfirm}
-            disabled={saving || (needsPayment && !hasPaymentSource) || (hasFollowUp && !followUpDate)}
+            disabled={saving || (needsPayment && !hasPaymentSource) || (hasFollowUp && !followUpDate) || (hasAuthorization && !authSpecialty)}
           >
             {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : <CalendarCheck className="size-4 mr-2" />}
             Guardar y Completar Cita

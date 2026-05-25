@@ -54,6 +54,70 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const itemsData: any[] = [];
+    if (body.items) {
+      for (const item of body.items) {
+        let medicationId = item.medicationId || null;
+
+        if (!medicationId && item.name) {
+          const trimmedName = item.name.trim();
+          // Buscar si existe el medicamento por nombre (insensitivo a mayúsculas) para el usuario
+          const existingMed = await db.medication.findFirst({
+            where: {
+              userId: session.user.id,
+              name: {
+                equals: trimmedName,
+                mode: "insensitive",
+              },
+            },
+          });
+
+          if (existingMed) {
+            medicationId = existingMed.id;
+            if (item.deliveredQty > 0) {
+              await db.medication.update({
+                where: { id: medicationId },
+                data: {
+                  stockQuantity: { increment: item.deliveredQty },
+                },
+              });
+            }
+          } else {
+            // Auto-crear el medicamento en el catálogo
+            const newMed = await db.medication.create({
+              data: {
+                userId: session.user.id,
+                name: trimmedName,
+                stockQuantity: item.deliveredQty || 0,
+                stockUnit: item.unit || "unit",
+                dosage: "Por definir", // O alguna dosis por defecto para cumplir con el esquema si es requerida
+              },
+            });
+            medicationId = newMed.id;
+          }
+        } else if (medicationId && item.deliveredQty > 0) {
+          // Si el medicamento ya está asociado y hay cantidad entregada, sumar al stock
+          await db.medication.update({
+            where: { id: medicationId, userId: session.user.id },
+            data: {
+              stockQuantity: { increment: item.deliveredQty },
+            },
+          });
+        }
+
+        itemsData.push({
+          medicationId,
+          name: item.name.trim(),
+          prescribedQty: item.prescribedQty,
+          deliveredQty: item.deliveredQty || 0,
+          unit: item.unit || "unit",
+          monthlyDose: item.monthlyDose ?? null,
+          pendingQty: Math.max(0, item.prescribedQty - (item.deliveredQty || 0)),
+          notes: item.notes || null,
+        });
+      }
+    }
+
     const order = await db.medicalOrder.create({
       data: {
         userId: session.user.id,
@@ -64,18 +128,9 @@ export async function POST(req: NextRequest) {
         nextClaimDate: body.nextClaimDate ? createColombiaDate(body.nextClaimDate.split("T")[0]) : null,
         notes: body.notes || null,
         status: inferStatus(body.items),
-        items: body.items
+        items: itemsData.length > 0
           ? {
-              create: body.items.map((item) => ({
-                medicationId: item.medicationId || null,
-                name: item.name,
-                prescribedQty: item.prescribedQty,
-                deliveredQty: item.deliveredQty,
-                unit: item.unit || "unit",
-                monthlyDose: item.monthlyDose ?? null,
-                pendingQty: Math.max(0, item.prescribedQty - item.deliveredQty),
-                notes: item.notes || null,
-              })),
+              create: itemsData,
             }
           : undefined,
       },

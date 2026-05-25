@@ -38,6 +38,7 @@ model User {
   medications         Medication[]
   appointments        MedicalAppointment[]
   medicalOrders       MedicalOrder[]
+  medicalAuthorizations MedicalAuthorization[]
   pantryItems         PantryItem[]
   shoppingLists       ShoppingList[]
   healthProfiles      HealthProfile[]
@@ -768,27 +769,54 @@ model Medication {
 }
 
 model MedicalAppointment {
-  id              String    @id @default(cuid())
-  userId          String
-  doctorName      String?
-  specialty       String?
-  location        String?
-  date            DateTime
-  notes           String?
-  reminderEnabled Boolean   @default(true)
-  status          String    @default("scheduled") // scheduled, completed, cancelled
-  copayAmount     Decimal?
-  accountId       String?
-  subAccountId    String?
-  debtId          String?
-  financeSourceId String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  userId                String
+  doctorName            String?
+  specialty             String?
+  location              String?
+  date                  DateTime
+  notes                 String?
+  reminderEnabled       Boolean   @default(true)
+  status                String    @default("scheduled") // scheduled, completed, cancelled
+  copayAmount           Decimal?
+  accountId             String?
+  subAccountId          String?
+  debtId                String?
+  financeSourceId       String?
+  authorizationId       String?   @unique
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders          MedicalOrder[]
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders                MedicalOrder[]
+  authorization         MedicalAuthorization? @relation("AppointmentAuthorization", fields: [authorizationId], references: [id], onDelete: SetNull)
+  createdAuthorizations MedicalAuthorization[] @relation("AppointmentOrigin")
 
   @@map("medical_appointments")
+}
+
+model MedicalAuthorization {
+  id                  String    @id @default(cuid())
+  userId              String
+  type                String    @default("specialist") // specialist, control, procedure, other
+  specialty           String
+  status              String    @default("pending_authorization") // pending_authorization, authorized, expired, scheduled, cancelled
+  code                String?
+  authorizationDate   DateTime?
+  daysOfValidity      Int?      @default(30)
+  expirationDate      DateTime?
+  notes               String?
+  appointmentId       String?   @unique
+  originAppointmentId String?
+  renewals            Json?     // Array of renewals history [{ fechaAnterior, diasAnteriores, fechaNueva, motivo, updatedAt }]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointment         MedicalAppointment? @relation("AppointmentAuthorization")
+  originAppointment   MedicalAppointment? @relation("AppointmentOrigin", fields: [originAppointmentId], references: [id], onDelete: SetNull)
+
+  @@map("medical_authorizations")
 }
 
 model MedicalOrder {
@@ -801,6 +829,8 @@ model MedicalOrder {
   issueDate       DateTime  @default(now())
   nextClaimDate   DateTime?
   notes           String?
+  receiptUrl      String?
+  receiptThumbnail String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -830,10 +860,6 @@ model MedicalOrderItem {
 
   @@map("medical_order_items")
 }
-
-// ============================================
-// PANTRY MODULE
-// ============================================
 
 model PantryItem {
   id              String    @id @default(cuid())
