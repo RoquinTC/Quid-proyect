@@ -6,12 +6,44 @@ import { db } from "@/lib/db";
 const AURA_MODEL = process.env.AURA_MODEL || "hermes3:8b";
 const OLLAMA_API_BASE = process.env.OLLAMA_URL || "http://localhost:11434/api";
 
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const report = await db.healthAiReport.findUnique({
+      where: { userId: session.user.id },
+    });
+
+    if (!report) {
+      return NextResponse.json({ report: null });
+    }
+
+    return NextResponse.json({
+      report: {
+        summary: report.summary,
+        source: "ollama",
+        model: report.model,
+        generatedAt: report.generatedAt.toISOString(),
+        cached: true,
+      },
+    });
+  } catch (error) {
+    console.error("Error leyendo informe clínico guardado:", error);
+    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const body = await req.json().catch(() => ({})) as { mode?: "local" | "deep" };
+    const mode = body.mode === "deep" ? "deep" : "local";
 
     const [medications, appointments, authorizations, orders] = await Promise.all([
       db.medication.findMany({
@@ -140,7 +172,16 @@ export async function POST(req: NextRequest) {
       return text;
     };
 
-    // 2. Intentar consultar a Ollama para un reporte de nivel profesional y personalizado
+    if (mode === "local") {
+      return NextResponse.json({
+        summary: createLocalSummary(),
+        source: "local",
+        model: null,
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    // 2. Consultar a Ollama solo cuando el usuario solicita un análisis profundo.
     try {
       const medListString = medications.length > 0
         ? medications
@@ -199,9 +240,11 @@ Sé conciso, empático y estructurado. No utilices jerga excesivamente técnica.
       const response = await fetch(`${OLLAMA_API_BASE.replace(/\/$/, "")}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(90000),
         body: JSON.stringify({
           model: AURA_MODEL,
           stream: false,
+          keep_alive: -1,
           messages: [{ role: "user", content: systemPrompt }],
         }),
       });
@@ -210,11 +253,25 @@ Sé conciso, empático y estructurado. No utilices jerga excesivamente técnica.
         const result = await response.json();
         const content = result.message?.content?.trim() || "";
         if (content && content.length > 100) {
+          const report = await db.healthAiReport.upsert({
+            where: { userId: session.user.id },
+            update: {
+              summary: content,
+              model: AURA_MODEL,
+              generatedAt: new Date(),
+            },
+            create: {
+              userId: session.user.id,
+              summary: content,
+              model: AURA_MODEL,
+            },
+          });
           return NextResponse.json({
             summary: content,
             source: "ollama",
             model: AURA_MODEL,
-            generatedAt: new Date().toISOString(),
+            generatedAt: report.generatedAt.toISOString(),
+            cached: false,
           });
         }
       }

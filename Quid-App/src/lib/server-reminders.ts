@@ -5,6 +5,7 @@ import { calculateFuelLevel } from "@/lib/fuel-level";
 import { toNumber } from "@/lib/decimal-serializer";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_MEDICATION_REMINDER_WINDOW_MINUTES = 15;
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
@@ -31,6 +32,40 @@ function parseNotificationData(data: string | null): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function parseReminderTimes(reminderTimes: string | null) {
+  if (!reminderTimes) return [];
+  try {
+    const parsed = JSON.parse(reminderTimes);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((time): time is string => typeof time === "string" && /^\d{2}:\d{2}$/.test(time));
+  } catch {
+    return [];
+  }
+}
+
+function getColombiaMinutesNow() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Bogota",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function isTimeDue(time: string, nowMinutes: number) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const scheduledMinutes = hours * 60 + minutes;
+  const configuredWindow = Number(process.env.MEDICATION_REMINDER_WINDOW_MINUTES);
+  const windowMinutes = Number.isFinite(configuredWindow) && configuredWindow > 0
+    ? configuredWindow
+    : DEFAULT_MEDICATION_REMINDER_WINDOW_MINUTES;
+  const elapsed = nowMinutes - scheduledMinutes;
+  return elapsed >= 0 && elapsed < windowMinutes;
 }
 
 async function wasReminderSent(userId: string, reminderKey: string, type: string, since: Date) {
@@ -303,20 +338,74 @@ async function sendTransportReminders(today: Date, since: Date) {
   return { checked, sent };
 }
 
+async function sendMedicationReminders(since: Date) {
+  const medications = await db.medication.findMany({
+    where: {
+      isActive: true,
+      reminderEnabled: true,
+      user: {
+        settings: { notificationsEnabled: true },
+      },
+    },
+    select: {
+      id: true,
+      userId: true,
+      name: true,
+      dosage: true,
+      howToTake: true,
+      reminderTimes: true,
+    },
+  });
+
+  const nowMinutes = getColombiaMinutesNow();
+  let sent = 0;
+
+  for (const medication of medications) {
+    for (const time of parseReminderTimes(medication.reminderTimes)) {
+      if (!isTimeDue(time, nowMinutes)) continue;
+
+      const instructions = medication.howToTake === "with_food"
+        ? " Tómalo con alimentos."
+        : medication.howToTake === "without_food"
+          ? " Tómalo en ayunas."
+          : "";
+      const wasSent = await sendReminderOnce({
+        userId: medication.userId,
+        type: "medication_due",
+        title: `Hora de tomar ${medication.name}`,
+        message: `Toma ${medication.dosage} de ${medication.name} a las ${time}.${instructions}`,
+        pushBody: `${medication.name}: ${medication.dosage}.${instructions}`,
+        url: "/?module=health&tab=medications",
+        reminderKey: `medication:${medication.id}:${getColombiaTodayString()}:${time}`,
+        data: {
+          medicationId: medication.id,
+          scheduledTime: time,
+        },
+        since,
+      });
+      if (wasSent) sent += 1;
+    }
+  }
+
+  return { checked: medications.length, sent };
+}
+
 export async function runServerReminders() {
   const todayString = getColombiaTodayString();
   const today = createColombiaDate(todayString);
   const since = startOfDay(today);
 
-  const [recurring, transport] = await Promise.all([
+  const [recurring, transport, medications] = await Promise.all([
     sendRecurringPaymentReminders(today, since),
     sendTransportReminders(today, since),
+    sendMedicationReminders(since),
   ]);
 
   return {
     date: todayString,
     recurring,
     transport,
-    sent: recurring.sent + transport.sent,
+    medications,
+    sent: recurring.sent + transport.sent + medications.sent,
   };
 }

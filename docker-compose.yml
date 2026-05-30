@@ -49,6 +49,7 @@ services:
       - AURA_MODEL=${AURA_MODEL:-hermes3:8b}
       - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-false}
       - CRON_SECRET=${CRON_SECRET:-local-cron-secret-change-me}
+      - MEDICATION_REMINDER_WINDOW_MINUTES=${MEDICATION_REMINDER_WINDOW_MINUTES:-2}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -56,11 +57,33 @@ services:
   quid-ollama:
     image: ollama/ollama:latest
     container_name: quid-ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=-1
     volumes:
       - quid-ollama-data:/root/.ollama
     ports:
-      - "11434:11434"
+      - "${OLLAMA_PORT:-11435}:11434"
     restart: unless-stopped
+
+  quid-ollama-warmup:
+    image: curlimages/curl:8.11.1
+    container_name: quid-ollama-warmup
+    depends_on:
+      quid-ollama:
+        condition: service_started
+    environment:
+      - AURA_MODEL=${AURA_MODEL:-hermes3:8b}
+    command:
+      - sh
+      - -c
+      - |
+        until curl -fsS "http://quid-ollama:11434/api/tags" >/dev/null; do
+          sleep 2
+        done
+        curl -fsS "http://quid-ollama:11434/api/generate" \
+          -H "Content-Type: application/json" \
+          -d "{\"model\":\"$${AURA_MODEL}\",\"prompt\":\"Responde listo.\",\"stream\":false,\"keep_alive\":-1,\"options\":{\"num_predict\":1}}" || true
+    restart: "no"
 
   quid-cron:
     image: curlimages/curl:8.11.1
@@ -71,18 +94,21 @@ services:
     environment:
       - CRON_SECRET=${CRON_SECRET:-local-cron-secret-change-me}
       - AURA_API_KEY=${AURA_API_KEY:-AuraSecretKey2026}
-      - CRON_INTERVAL_SECONDS=${CRON_INTERVAL_SECONDS:-900}
+      - AURA_DIGEST_URL=${AURA_DIGEST_URL:-}
+      - CRON_INTERVAL_SECONDS=${CRON_INTERVAL_SECONDS:-60}
     command:
       - sh
       - -c
       - |
         while true; do
           date
-          curl -fsS "http://quid-app:3000/api/push/reminders?token=${CRON_SECRET:-local-cron-secret-change-me}" || true
+          curl -fsS "http://quid-app:3000/api/push/reminders?token=$${CRON_SECRET}" || true
           echo
-          curl -fsS -X POST "http://aura-super-agent:3000/digest" -H "x-aura-token: ${AURA_API_KEY:-AuraSecretKey2026}" || true
-          echo
-          sleep "${CRON_INTERVAL_SECONDS:-900}"
+          if [ -n "$${AURA_DIGEST_URL}" ]; then
+            curl -fsS -X POST "$${AURA_DIGEST_URL}" -H "x-aura-token: $${AURA_API_KEY}" || true
+            echo
+          fi
+          sleep "$${CRON_INTERVAL_SECONDS}"
         done
     restart: unless-stopped
 

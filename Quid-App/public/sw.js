@@ -413,6 +413,12 @@ self.addEventListener('push', (event) => {
         { action: 'dismiss', title: 'Recordar después' },
       ];
       break;
+    case 'medication_due':
+      actions = [
+        { action: 'view', title: 'Ver medicamento' },
+        { action: 'dismiss', title: 'Descartar' },
+      ];
+      break;
     case 'transport_fuel_low':
       actions = [
         { action: 'view', title: 'Ver vehículo' },
@@ -474,7 +480,7 @@ self.addEventListener('push', (event) => {
         notificationData: data.data || {},
       },
       actions,
-      vibrate: [100, 50, 100],
+      vibrate: data.type === 'medication_due' ? [120, 80, 120, 80, 220] : [100, 50, 100],
       tag: `quid-${data.type}-${Date.now()}`,
       renotify: true,
       requireInteraction: data.type === 'invitation_received',

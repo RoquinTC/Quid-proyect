@@ -112,6 +112,17 @@ function lastUserText(messages: CoreMessage[]) {
   return [...messages].reverse().find((message) => message.role === "user")?.content.trim() || "";
 }
 
+function getBasicConversationFallback(text: string) {
+  const normalized = normalize(text);
+  if (/^(hola|buenas|buenos dias|buenas tardes|buenas noches|hey|holi)\b/.test(normalized)) {
+    return "Hola. Aquí estoy. Puedo ayudarte a registrar movimientos, revisar tus cuentas, ver pendientes o conversar un rato. ¿Qué tienes en mente?";
+  }
+  if (/\b(que haces|como estas|quien eres)\b/.test(normalized)) {
+    return "Soy Aura, tu asistente dentro de QUID. Estoy aquí para ayudarte a organizar finanzas, pendientes y tu información diaria. También podemos conversar con calma.";
+  }
+  return null;
+}
+
 function resolveActionText(messages: CoreMessage[]) {
   const lastText = lastUserText(messages);
   if (isConfirmationText(lastText)) {
@@ -1294,7 +1305,8 @@ No menciones herramientas internas ni detalles técnicos.`;
   const response = await fetch(`${OLLAMA_API_BASE.replace(/\/$/, "")}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: AURA_MODEL, stream: false, messages: ollamaMessages }),
+    signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({ model: AURA_MODEL, stream: false, keep_alive: -1, messages: ollamaMessages }),
   });
 
   if (!response.ok) {
@@ -1416,6 +1428,15 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
       };
     }
 
+    const conversationFallback = getBasicConversationFallback(lastUserMsg);
+    if (conversationFallback) {
+      return {
+        text: conversationFallback,
+        action,
+        responseMessages: [...messages, { role: "assistant" as const, content: conversationFallback }],
+      };
+    }
+
     const [balance, expenses, planner] = await Promise.all([
       getBalanceSnapshot(userId),
       getExpenseSnapshot(userId),
@@ -1431,7 +1452,7 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
   } catch (error) {
     console.error("Error en Aura Engine:", error);
     const text =
-      error instanceof Error && error.message.toLowerCase().includes("fetch")
+      error instanceof Error && (error.message.toLowerCase().includes("fetch") || error.name === "TimeoutError")
         ? "No pude contactar a Ollama. Verifica que Ollama esté abierto y que el modelo de Aura esté disponible."
         : "Tuve un problema procesando eso. Intenta de nuevo o revisa si Quid y Ollama están activos.";
     return { text, action: "chat" as const, error: error instanceof Error ? error.message : String(error) };

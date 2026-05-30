@@ -25,12 +25,14 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
   const pinEnabled = session?.user?.pinEnabled ?? false;
   const biometricEnabled = session?.user?.biometricEnabled ?? false;
 
-  // Determine default method based on enabled features
+  // PIN is intentionally the fast default on the web. Browser WebAuthn remains
+  // available as an explicit option and can be replaced by native biometrics
+  // when the Android shell is introduced.
   useEffect(() => {
-    if (biometricEnabled) {
-      setMethod("biometric");
-    } else if (pinEnabled) {
+    if (pinEnabled) {
       setMethod("pin");
+    } else if (biometricEnabled) {
+      setMethod("biometric");
     }
   }, [pinEnabled, biometricEnabled]);
 

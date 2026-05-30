@@ -39,6 +39,7 @@ model User {
   appointments        MedicalAppointment[]
   medicalOrders       MedicalOrder[]
   medicalAuthorizations MedicalAuthorization[]
+  healthAiReport      HealthAiReport?
   pantryItems         PantryItem[]
   shoppingLists       ShoppingList[]
   healthProfiles      HealthProfile[]
@@ -766,6 +767,19 @@ model Medication {
   orderItems      MedicalOrderItem[]
 
   @@map("medications")
+}
+
+model HealthAiReport {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  summary     String
+  model       String?
+  generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("health_ai_reports")
 }
 
 model MedicalAppointment {

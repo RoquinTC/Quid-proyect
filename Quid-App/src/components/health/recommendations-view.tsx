@@ -29,6 +29,11 @@ interface HealthSummaryRes {
   source?: "ollama" | "local";
   model?: string | null;
   generatedAt?: string;
+  cached?: boolean;
+}
+
+interface StoredHealthSummaryRes {
+  report: HealthSummaryRes | null;
 }
 
 export function RecommendationsView() {
@@ -38,6 +43,7 @@ export function RecommendationsView() {
   const [summaryMeta, setSummaryMeta] = useState<Omit<HealthSummaryRes, "summary"> | null>(null);
   const [summaryError, setSummaryError] = useState("");
   const [loadingSummary, setLoadingSummary] = useState(false);
+  const [loadingDeepSummary, setLoadingDeepSummary] = useState(false);
   const [subView, setSubView] = useState<"routine" | "ai-report">("routine");
   const [takenStatus, setTakenStatus] = useState<Record<string, boolean>>({});
 
@@ -63,19 +69,25 @@ export function RecommendationsView() {
     fetchMedications();
   }, [fetchMedications]);
 
-  const generateAISummary = async () => {
+  const applySummary = (data: HealthSummaryRes) => {
+    setSummary(data.summary);
+    setSummaryMeta({
+      source: data.source,
+      model: data.model,
+      generatedAt: data.generatedAt,
+      cached: data.cached,
+    });
+  };
+
+  const generateLocalSummary = async () => {
     setLoadingSummary(true);
     setSummaryError("");
     try {
       const data = await apiFetch<HealthSummaryRes>("/api/ai/health-summary", {
         method: "POST",
+        body: JSON.stringify({ mode: "local" }),
       });
-      setSummary(data.summary);
-      setSummaryMeta({
-        source: data.source,
-        model: data.model,
-        generatedAt: data.generatedAt,
-      });
+      applySummary(data);
     } catch (err) {
       console.error("Error generating clinical summary:", err);
       setSummary("");
@@ -86,9 +98,43 @@ export function RecommendationsView() {
     }
   };
 
+  const loadStoredOrLocalSummary = async () => {
+    setLoadingSummary(true);
+    setSummaryError("");
+    try {
+      const stored = await apiFetch<StoredHealthSummaryRes>("/api/ai/health-summary");
+      if (stored.report) {
+        applySummary(stored.report);
+        return;
+      }
+      await generateLocalSummary();
+    } catch {
+      await generateLocalSummary();
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
+
+  const generateDeepSummary = async () => {
+    setLoadingDeepSummary(true);
+    setSummaryError("");
+    try {
+      const data = await apiFetch<HealthSummaryRes>("/api/ai/health-summary", {
+        method: "POST",
+        body: JSON.stringify({ mode: "deep" }),
+      });
+      applySummary(data);
+    } catch (err) {
+      console.error("Error generating deep clinical summary:", err);
+      setSummaryError(err instanceof Error ? err.message : "Aura no pudo completar el análisis profundo. Conservamos tu último resumen disponible.");
+    } finally {
+      setLoadingDeepSummary(false);
+    }
+  };
+
   useEffect(() => {
     if (subView === "ai-report" && !summary && medications.length > 0) {
-      generateAISummary();
+      loadStoredOrLocalSummary();
     }
   }, [subView, summary, medications.length]);
 
@@ -399,14 +445,21 @@ export function RecommendationsView() {
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={generateAISummary}
-                disabled={loadingSummary}
+                onClick={generateDeepSummary}
+                disabled={loadingSummary || loadingDeepSummary}
                 className="h-8 px-2 text-rose-500 text-[11px] rounded-lg"
               >
                 <Sparkles className="size-3 mr-1" />
-                Re-generar reporte
+                {loadingDeepSummary ? "Aura está pensando..." : "Preparar análisis profundo"}
               </Button>
             </div>
+
+            {loadingDeepSummary && (
+              <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/20 dark:text-rose-300">
+                <span className="font-semibold">Aura está preparando una guía más detallada.</span>
+                <span className="block opacity-80">Puede tardar entre 30 y 90 segundos. Puedes seguir consultando el resumen visible mientras termina.</span>
+              </div>
+            )}
 
             {summaryMeta && (
               <div className={`rounded-2xl border p-3 text-xs ${
@@ -415,8 +468,8 @@ export function RecommendationsView() {
                   : "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300"
               }`}>
                 {summaryMeta.source === "ollama"
-                  ? `Informe generado con IA local${summaryMeta.model ? ` (${summaryMeta.model})` : ""}.`
-                  : "Informe generado con reglas locales porque Ollama no respondió o el modelo no está disponible."}
+                  ? `Análisis profundo guardado por Aura${summaryMeta.model ? ` (${summaryMeta.model})` : ""}${summaryMeta.cached ? ". Recuperado de tu último informe." : "."}`
+                  : "Resumen inmediato generado con los datos actuales de QUID."}
                 {summaryMeta.generatedAt && (
                   <span className="block opacity-80">
                     Generado: {new Date(summaryMeta.generatedAt).toLocaleString("es-CO")}
@@ -477,7 +530,7 @@ export function RecommendationsView() {
                     <p className="text-xs">{summaryError}</p>
                     <Button
                       size="sm"
-                      onClick={generateAISummary}
+                      onClick={generateLocalSummary}
                       className="mt-2 rounded-xl bg-rose-600 text-white"
                     >
                       Reintentar
@@ -486,7 +539,7 @@ export function RecommendationsView() {
                 ) : (
                   <div className="py-8 text-center space-y-2 text-gray-400">
                     <Info className="size-8 mx-auto" />
-                    <p className="text-xs">Toca “Re-generar reporte” para consultar Aura.</p>
+                    <p className="text-xs">Toca “Preparar análisis profundo” para consultar Aura.</p>
                   </div>
                 )}
               </CardContent>

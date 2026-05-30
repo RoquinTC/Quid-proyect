@@ -96,6 +96,19 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  // ---- Server Reminder Cron Bypass ----
+  // The route performs the same validation again before generating reminders.
+  // This allows the internal Docker cron to run while keeping the endpoint
+  // protected from unauthenticated public requests.
+  if (pathname === "/api/push/reminders") {
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = request.headers.get("authorization");
+    const token = request.nextUrl.searchParams.get("token");
+    if (cronSecret && (authHeader === `Bearer ${cronSecret}` || token === cronSecret)) {
+      return NextResponse.next();
+    }
+  }
+
   // Allow public routes (still apply lighter rate limiting below)
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
 
