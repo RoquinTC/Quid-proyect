@@ -400,10 +400,7 @@ export function DashboardPage() {
       {/* AURA ENTRY */}
       {/* ============================================================ */}
       <motion.div variants={itemVariants}>
-        <Card
-          className="border-0 shadow-md rounded-2xl cursor-pointer hover:shadow-lg transition-all overflow-hidden"
-          onClick={() => setActiveModule("settings")}
-        >
+        <Card className="border-0 shadow-md rounded-2xl hover:shadow-lg transition-all overflow-hidden">
           <CardContent className="p-5">
             <div className="flex items-center gap-4">
               <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-sky-500 flex items-center justify-center flex-shrink-0">
@@ -417,7 +414,23 @@ export function DashboardPage() {
                   IA integrada de Quid. Por ahora puedes vincularla desde ajustes.
                 </p>
               </div>
-              <ChevronRight className="size-5 text-gray-400 flex-shrink-0" />
+              <div className="flex shrink-0 flex-col gap-1.5">
+                <Button
+                  size="sm"
+                  className="h-8 rounded-xl bg-gradient-to-r from-violet-600 to-sky-500 px-3 text-xs text-white"
+                  onClick={() => window.open("https://t.me/Aura_RQC_Bot", "_blank", "noopener,noreferrer")}
+                >
+                  Abrir Aura
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 rounded-lg px-2 text-[11px] text-gray-500"
+                  onClick={() => setActiveModule("settings")}
+                >
+                  Configurar
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

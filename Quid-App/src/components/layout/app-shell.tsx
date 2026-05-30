@@ -25,6 +25,7 @@ import { LockScreen } from "@/components/security/lock-screen";
 import { OfflineLockScreen } from "@/components/security/offline-lock-screen";
 import { ModuleErrorBoundary } from "@/components/layout/module-error-boundary";
 import { DiscoveryCoach } from "@/components/discovery/discovery-coach";
+import { AppDeepLinkHandler } from "@/components/layout/app-deep-link-handler";
 import { AchievementsProvider } from "@/hooks/use-achievements";
 import { useUpdateChecker } from "@/hooks/use-update-checker";
 import { motion, AnimatePresence } from "framer-motion";
@@ -65,10 +66,21 @@ function ModuleContent() {
 
 export function AppShell() {
   const { session, status, isOffline } = useAppSession();
-  const { authView, setOfflineSession } = useAppStore();
+  const { authView, setActiveModule, setOfflineSession } = useAppStore();
   const { setTheme: applyTheme } = useTheme();
   const [showBackupPrompt, setShowBackupPrompt] = useState(false);
   const [manuallyUnlocked, setManuallyUnlocked] = useState(false);
+  const hasInitialDeepLinkRef = useRef(
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).has("module")
+  );
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    if (!hasInitialDeepLinkRef.current) {
+      setActiveModule("dashboard");
+    }
+  }, [session?.user?.id, setActiveModule]);
 
   // Check for app updates every 60 seconds
   useUpdateChecker(60000);
@@ -233,16 +245,22 @@ export function AppShell() {
   }, [session?.user?.id, isOffline]);
 
   const handleUnlock = useCallback(() => {
+    if (!hasInitialDeepLinkRef.current) {
+      setActiveModule("dashboard");
+    }
     setManuallyUnlocked(true);
-  }, []);
+  }, [setActiveModule]);
 
   // Handle offline unlock — set the offline session in Zustand
   const handleOfflineUnlock = useCallback((cachedSession: any) => {
+    if (!hasInitialDeepLinkRef.current) {
+      setActiveModule("dashboard");
+    }
     setOfflineSession(cachedSession);
     setManuallyUnlocked(true);
     setJustLoggedIn(true);
     try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
-  }, [setOfflineSession]);
+  }, [setActiveModule, setOfflineSession]);
 
   // Cache session for offline access whenever it's available
   // BUT: skip if user just logged out (prevents re-caching during logout)
@@ -338,6 +356,7 @@ export function AppShell() {
         <ModuleContent />
         <BottomNav />
         <AppSidebar />
+        <AppDeepLinkHandler />
         <DiscoveryCoach />
         {showBackupPrompt && <BackupRestorePrompt />}
       </div>

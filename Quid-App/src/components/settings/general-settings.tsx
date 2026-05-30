@@ -178,7 +178,7 @@ export function GeneralSettings({
 
   return (
     <div className="space-y-4">
-      <Accordion type="multiple" defaultValue={["personalizacion"]} className="space-y-2">
+      <Accordion type="multiple" defaultValue={[]} className="space-y-2">
         {/* Personalización */}
         <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
           <AccordionItem value="personalizacion" className="border-0">
@@ -194,7 +194,7 @@ export function GeneralSettings({
                       <div className="size-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
                         {settings.theme === "light" ? (
                           <Sun className="size-3.5 text-violet-600 dark:text-violet-400" />
-                        ) : settings.theme === "dark" ? (
+                        ) : settings.theme === "dark" || settings.theme === "oled" ? (
                           <Moon className="size-3.5 text-violet-600 dark:text-violet-400" />
                         ) : (
                           <Monitor className="size-3.5 text-violet-600 dark:text-violet-400" />
@@ -205,13 +205,20 @@ export function GeneralSettings({
                         <p className="text-xs text-gray-400">Apariencia de la aplicación</p>
                       </div>
                     </div>
-                    <Select value={settings.theme} onValueChange={(val) => updateSetting("theme", val)}>
+                    <Select
+                      value={settings.theme}
+                      onValueChange={(val) => {
+                        applyTheme(val);
+                        updateSetting("theme", val);
+                      }}
+                    >
                       <SelectTrigger className="w-24 rounded-xl text-xs h-8">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="light">Claro</SelectItem>
                         <SelectItem value="dark">Oscuro</SelectItem>
+                        <SelectItem value="oled">OLED</SelectItem>
                         <SelectItem value="system">Sistema</SelectItem>
                       </SelectContent>
                     </Select>

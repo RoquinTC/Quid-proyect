@@ -295,13 +295,14 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
     }
   }
 
-  // Cost to fill calculation — prefer last logged price, fallback to fuel-prices API
+  // Cost to fill calculation — prefer the manually updated price.
   const costToFillData = (() => {
     if (!fuelLevelData || fuelLevelData.fuelLevel >= 100 || !vehicle.tankCapacity || !vehicle.fuelType || vehicle.fuelType === "electric") return null;
     const gallonsNeeded = fuelLevelData.gallonsToRefuel > 0 ? fuelLevelData.gallonsToRefuel : vehicle.tankCapacity - fuelLevelData.currentFuel;
     if (gallonsNeeded <= 0) return null;
-    // Priority: last price from fuel logs > fuel-prices API
-    const effectivePrice = fuelLevelData.lastPricePerGallon > 0 ? fuelLevelData.lastPricePerGallon : (currentFuelPrice ?? 0);
+    const effectivePrice = currentFuelPrice && currentFuelPrice > 0
+      ? currentFuelPrice
+      : fuelLevelData.lastPricePerGallon;
     if (effectivePrice > 0) {
       const costToFill = gallonsNeeded * effectivePrice;
       return { gallonsNeeded, costToFill, pricePerGallon: effectivePrice, hasPrice: true };

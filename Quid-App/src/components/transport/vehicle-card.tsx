@@ -117,13 +117,13 @@ export function VehicleCard({ vehicle, onClick, onKmUpdated, currentFuelPrice }:
     return "text-red-500";
   };
 
-  // Cost to fill calculation — prefer last logged price, fallback to fuel-prices API
+  // Cost to fill calculation — prefer the manually updated price.
   const lastPricePerGallon = vehicle.lastPricePerGallon ?? 0;
   const costToFillData = (() => {
     if (fuelLevel >= 100 || !vehicle.tankCapacity || !vehicle.fuelType || vehicle.fuelType === "electric") return null;
     const gallonsNeeded = gallonsToRefuel > 0 ? gallonsToRefuel : vehicle.tankCapacity - currentFuel;
     if (gallonsNeeded <= 0) return null;
-    const effectivePrice = lastPricePerGallon > 0 ? lastPricePerGallon : (currentFuelPrice ?? 0);
+    const effectivePrice = currentFuelPrice && currentFuelPrice > 0 ? currentFuelPrice : lastPricePerGallon;
     if (effectivePrice > 0) {
       const costToFill = gallonsNeeded * effectivePrice;
       return { gallonsNeeded, costToFill, pricePerGallon: effectivePrice, hasPrice: true };

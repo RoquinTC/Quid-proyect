@@ -48,7 +48,7 @@ export function HealthSettings({ setResetResult }: HealthSettingsProps) {
 
   return (
     <div className="space-y-4">
-      <Accordion type="multiple" defaultValue={["medicamentos", "citas", "privacidad"]} className="space-y-2">
+      <Accordion type="multiple" defaultValue={[]} className="space-y-2">
         {/* Medicamentos e Inventario */}
         <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
           <AccordionItem value="medicamentos" className="border-0">

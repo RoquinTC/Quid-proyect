@@ -268,27 +268,6 @@ export function MedicationsView() {
         </div>
       )}
 
-      {/* FAB - Add Medication */}
-      {medications.length > 0 && (
-        <motion.div
-          className="fixed bottom-24 right-4 md:right-8 z-40"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring" }}
-        >
-          <Button
-            onClick={() => {
-              setEditingMedication(null);
-              setShowForm(true);
-            }}
-            className="size-14 rounded-full bg-gradient-to-br from-rose-600 to-pink-500 shadow-lg shadow-rose-500/30 hover:shadow-xl hover:shadow-rose-500/40"
-            size="icon"
-          >
-            <Plus className="size-6 text-white" />
-          </Button>
-        </motion.div>
-      )}
-
       {/* Form */}
       <MedicationForm
         open={showForm}

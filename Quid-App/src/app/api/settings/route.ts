@@ -96,7 +96,7 @@ export async function PUT(req: NextRequest) {
     }
 
     // Validate theme
-    if (theme && !["light", "dark", "system"].includes(theme)) {
+    if (theme && !["light", "dark", "oled", "system"].includes(theme)) {
       return NextResponse.json(
         { error: "Tema no válido" },
         { status: 400 }

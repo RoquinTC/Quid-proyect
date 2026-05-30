@@ -31,7 +31,7 @@ export function Header() {
   // This prevents the race condition where the redirect kills cleanup effects
 
   return (
-    <header className="z-50 bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-b-2xl shadow-lg shadow-emerald-500/20 shrink-0">
+    <header className="z-50 bg-primary text-primary-foreground rounded-b-2xl shadow-lg shadow-primary/20 shrink-0">
       <div className="flex items-center justify-between px-4 py-3 safe-area-top">
         <div className="flex items-center gap-3">
           <Button

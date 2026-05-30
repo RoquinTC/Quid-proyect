@@ -930,7 +930,7 @@ export const payrollUpdateSchema = z.object({
 // ============================================
 
 export const settingsUpdateSchema = z.object({
-  theme: z.enum(["light", "dark", "system"]).optional(),
+  theme: z.enum(["light", "dark", "oled", "system"]).optional(),
   budgetCutoffDay: z.number().int().min(1).max(31).optional(),
   respectHolidays: z.boolean().optional(),
   countryCode: z.string().optional(),

@@ -84,10 +84,10 @@ export function HealthPage() {
     };
 
     const handler = actionMap[sidebarAction];
-    if (handler) handler();
-
-    // Consume the action so it doesn't re-fire
-    setSidebarAction(null);
+    if (handler) {
+      handler();
+      setSidebarAction(null);
+    }
   }, [sidebarAction, setSidebarAction, setHealthSubView]);
 
   const renderContent = () => {

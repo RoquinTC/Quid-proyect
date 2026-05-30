@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateBody, fuelPriceCreateSchema } from "@/lib/validations";
+import { toNumber } from "@/lib/decimal-serializer";
 
 export async function GET() {
   try {
@@ -16,7 +17,39 @@ export async function GET() {
       orderBy: { updatedAt: "desc" },
     });
 
-    return NextResponse.json(fuelPrices);
+    const latestLogs = await db.fuelLog.findMany({
+      where: {
+        vehicle: { userId: session.user.id },
+      },
+      include: {
+        vehicle: { select: { fuelType: true } },
+      },
+      orderBy: { date: "desc" },
+    });
+
+    const knownTypes = new Set(fuelPrices.map((price) => price.fuelType));
+    const derivedPrices = latestLogs.flatMap((log) => {
+      const fuelType = log.vehicle.fuelType || "gasoline";
+      if (knownTypes.has(fuelType)) return [];
+      knownTypes.add(fuelType);
+      return [{
+        id: `derived-${fuelType}`,
+        userId: session.user.id,
+        fuelType,
+        pricePerGallon: toNumber(log.pricePerGallon),
+        updatedAt: log.date.toISOString(),
+        createdAt: log.date.toISOString(),
+        derivedFromLastLog: true,
+      }];
+    });
+
+    return NextResponse.json([
+      ...fuelPrices.map((price) => ({
+        ...price,
+        pricePerGallon: toNumber(price.pricePerGallon),
+      })),
+      ...derivedPrices,
+    ]);
   } catch (error) {
     console.error("Get fuel prices error:", error);
     return NextResponse.json({ error: "Error al obtener precios de combustible" }, { status: 500 });

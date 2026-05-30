@@ -42,13 +42,25 @@
     {
       "name": "Mis Cuentas",
       "short_name": "Cuentas",
-      "url": "/finance?tab=cuentas",
+      "url": "/?module=finance&view=accounts",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     },
     {
       "name": "Transacciones",
       "short_name": "Transacciones",
-      "url": "/finance?tab=transacciones",
+      "url": "/?module=finance&action=create-transaction",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Lista de Mercado",
+      "short_name": "Mercado",
+      "url": "/?module=pantry&view=shopping-lists",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Nueva Cita Médica",
+      "short_name": "Cita Médica",
+      "url": "/?module=health&action=create-appointment",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]

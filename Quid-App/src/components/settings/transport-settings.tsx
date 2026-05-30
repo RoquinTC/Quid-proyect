@@ -103,7 +103,7 @@ export function TransportSettings({ setResetResult }: TransportSettingsProps) {
 
   return (
     <div className="space-y-4">
-      <Accordion type="multiple" defaultValue={["combustible", "mantenimiento", "documentos", "importacion"]} className="space-y-2">
+      <Accordion type="multiple" defaultValue={[]} className="space-y-2">
         {/* Combustible */}
         <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
           <AccordionItem value="combustible" className="border-0">

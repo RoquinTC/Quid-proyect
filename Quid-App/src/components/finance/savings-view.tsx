@@ -347,24 +347,6 @@ export function SavingsView() {
         </div>
       )}
 
-      {/* FAB */}
-      {goals.length > 0 && (
-        <motion.div
-          className="fixed bottom-24 right-4 md:right-8 z-40"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring" }}
-        >
-          <Button
-            onClick={handleCreateNew}
-            className="size-14 rounded-full bg-gradient-to-br from-purple-600 to-violet-500 shadow-lg shadow-purple-500/30"
-            size="icon"
-          >
-            <Plus className="size-6 text-white" />
-          </Button>
-        </motion.div>
-      )}
-
       {/* Goal Form Dialog */}
       <SavingsGoalForm
         open={showGoalForm}

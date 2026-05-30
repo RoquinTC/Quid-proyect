@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *, .oled *));
 
 @theme inline {
   --color-background: var(--background);
@@ -171,6 +171,26 @@
 /* Safe area bottom padding for scrollable content (prevents content hidden behind nav on iPhone) */
 .pb-safe {
   padding-bottom: max(10rem, calc(8rem + env(safe-area-inset-bottom, 0px))) !important;
+}
+
+.oled {
+  --background: oklch(0.02 0 0);
+  --foreground: oklch(0.96 0 0);
+  --card: oklch(0.08 0.005 250);
+  --card-foreground: oklch(0.96 0 0);
+  --popover: oklch(0.08 0.005 250);
+  --popover-foreground: oklch(0.96 0 0);
+  --secondary: oklch(0.13 0.005 250);
+  --secondary-foreground: oklch(0.96 0 0);
+  --muted: oklch(0.13 0.005 250);
+  --muted-foreground: oklch(0.68 0.01 250);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 14%);
+  --sidebar: oklch(0.06 0.005 250);
+  --sidebar-foreground: oklch(0.96 0 0);
+  --sidebar-accent: oklch(0.13 0.005 250);
+  --sidebar-accent-foreground: oklch(0.96 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
 }
 
 .scroll-pb-safe {

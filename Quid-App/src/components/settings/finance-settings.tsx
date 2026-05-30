@@ -180,7 +180,7 @@ export function FinanceSettings({
 
   return (
     <div className="space-y-4">
-      <Accordion type="multiple" defaultValue={["ciclo", "cuentas", "categorias", "importacion"]} className="space-y-2">
+      <Accordion type="multiple" defaultValue={[]} className="space-y-2">
         {/* Ciclo y Presupuesto */}
         <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
           <AccordionItem value="ciclo" className="border-0">

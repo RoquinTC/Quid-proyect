@@ -220,24 +220,6 @@ export function DebtsView() {
         </div>
       )}
 
-      {/* FAB - Add Debt */}
-      {debts.length > 0 && (
-        <motion.div
-          className="fixed bottom-24 right-4 md:right-8 z-40"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring" }}
-        >
-          <Button
-            onClick={() => setShowDebtForm(true)}
-            className="size-14 rounded-full bg-gradient-to-br from-rose-500 to-pink-500 shadow-lg shadow-rose-500/30"
-            size="icon"
-          >
-            <Plus className="size-6 text-white" />
-          </Button>
-        </motion.div>
-      )}
-
       <DebtForm
         open={showDebtForm}
         onOpenChange={setShowDebtForm}

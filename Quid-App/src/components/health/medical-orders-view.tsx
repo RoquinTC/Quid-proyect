@@ -221,26 +221,6 @@ export function MedicalOrdersView() {
         </div>
       )}
 
-      {orders.length > 0 && (
-        <motion.div
-          className="fixed bottom-24 right-4 md:right-8 z-40"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2, type: "spring" }}
-        >
-          <Button
-            onClick={() => {
-              setEditingOrder(null);
-              setShowForm(true);
-            }}
-            className="size-14 rounded-full bg-gradient-to-br from-cyan-600 to-teal-500 shadow-lg shadow-cyan-500/30"
-            size="icon"
-          >
-            <Plus className="size-6 text-white" />
-          </Button>
-        </motion.div>
-      )}
-
       <MedicalOrderForm
         open={showForm}
         onOpenChange={(open) => {

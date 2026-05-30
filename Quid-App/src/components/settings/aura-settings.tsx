@@ -76,7 +76,7 @@ export function AuraSettings({
 
   return (
     <div className="space-y-4">
-      <Accordion type="multiple" defaultValue={["conexion", "modelo", "herramientas", "comportamiento"]} className="space-y-2">
+      <Accordion type="multiple" defaultValue={[]} className="space-y-2">
         {/* Conexión con Telegram */}
         <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
           <AccordionItem value="conexion" className="border-0">

@@ -56,7 +56,7 @@ export function YieldManager({ accounts }: YieldManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isPendingExpanded, setIsPendingExpanded] = useState(true);
+  const [isPendingExpanded, setIsPendingExpanded] = useState(false);
   const [isConfirmedExpanded, setIsConfirmedExpanded] = useState(false);
   const [reversingId, setReversingId] = useState<string | null>(null);
   const [confirmReverseId, setConfirmReverseId] = useState<string | null>(null);

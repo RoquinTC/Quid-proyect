@@ -297,24 +297,6 @@ export function PantryView() {
         </div>
       )}
 
-      {/* FAB - Add Item */}
-      {items.length > 0 && (
-        <motion.div
-          className="fixed bottom-24 right-4 md:right-8 z-40"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring" }}
-        >
-          <Button
-            onClick={() => setShowForm(true)}
-            className="size-14 rounded-full bg-gradient-to-br from-amber-600 to-orange-500 shadow-lg shadow-amber-500/30 hover:shadow-xl hover:shadow-amber-500/40"
-            size="icon"
-          >
-            <Plus className="size-6 text-white" />
-          </Button>
-        </motion.div>
-      )}
-
       {/* Form */}
       <PantryItemForm
         open={showForm}

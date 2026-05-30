@@ -381,27 +381,6 @@ export function AppointmentsView() {
         </motion.div>
       )}
 
-      {/* FAB - Add Appointment */}
-      {appointments.length > 0 && (
-        <motion.div
-          className="fixed bottom-24 right-4 md:right-8 z-40"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring" }}
-        >
-          <Button
-            onClick={() => {
-              setEditingAppointment(null);
-              setShowForm(true);
-            }}
-            className="size-14 rounded-full bg-gradient-to-br from-violet-600 to-purple-500 shadow-lg shadow-violet-500/30 hover:shadow-xl hover:shadow-violet-500/40"
-            size="icon"
-          >
-            <Plus className="size-6 text-white" />
-          </Button>
-        </motion.div>
-      )}
-
       {/* Form */}
       <AppointmentForm
         open={showForm}

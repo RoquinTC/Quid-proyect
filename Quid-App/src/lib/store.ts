@@ -27,6 +27,8 @@ export type SidebarAction =
   | "log-maintenance"
   | "register-document"
   | "update-fuel-price"
+  | "create-vehicle-reminder"
+  | "manage-maintenance-rules"
   // Health
   | "create-medication"
   | "create-appointment"
@@ -75,8 +77,8 @@ interface AppState {
   // User preferences
   currency: string;
   setCurrency: (currency: string) => void;
-  theme: "light" | "dark" | "system";
-  setTheme: (theme: "light" | "dark" | "system") => void;
+  theme: "light" | "dark" | "oled" | "system";
+  setTheme: (theme: "light" | "dark" | "oled" | "system") => void;
 
   // Notifications
   notifications: Notification[];
@@ -115,10 +117,17 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       // Navigation
       activeModule: "dashboard",
-      setActiveModule: (module) => set({ activeModule: module }),
+      setActiveModule: (module) =>
+        set({
+          activeModule: module,
+          ...(module === "finance" ? { financeSubView: "overview" as FinanceSubView } : {}),
+          ...(module === "transport" ? { transportSubView: "vehicles" as TransportSubView } : {}),
+          ...(module === "health" ? { healthSubView: "summary" as HealthSubView } : {}),
+          ...(module === "pantry" ? { pantrySubView: "items" as PantrySubView } : {}),
+        }),
 
       // Sub-views
-      financeSubView: "accounts",
+      financeSubView: "overview",
       setFinanceSubView: (view) => set({ financeSubView: view }),
       transportSubView: "vehicles",
       setTransportSubView: (view) => set({ transportSubView: view }),

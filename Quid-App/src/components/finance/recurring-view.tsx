@@ -1337,6 +1337,21 @@ export function RecurringView() {
         </motion.div>
       )}
 
+      <motion.div variants={itemVariants} className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setEditingPayrollGroup(null);
+            setShowPayrollForm(true);
+          }}
+          className="rounded-xl"
+        >
+          <Briefcase className="mr-1 size-4" />
+          Nueva nómina
+        </Button>
+      </motion.div>
+
       {/* Empty State */}
       {payments.length === 0 && (
         <motion.div variants={itemVariants}>
@@ -1366,37 +1381,6 @@ export function RecurringView() {
           </Card>
         </motion.div>
       )}
-
-      {/* FAB - Two buttons */}
-      <motion.div
-        className="fixed bottom-24 right-4 md:right-8 z-40 flex flex-col gap-2"
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ delay: 0.3, type: "spring" }}
-      >
-        <Button
-          onClick={() => {
-            setEditingPayrollGroup(null);
-            setShowPayrollForm(true);
-          }}
-          className="size-12 rounded-full bg-gradient-to-br from-emerald-600 to-teal-500 shadow-lg shadow-emerald-500/30"
-          size="icon"
-          title="Asistente de Nómina"
-        >
-          <Briefcase className="size-5 text-white" />
-        </Button>
-        <Button
-          onClick={() => {
-            setEditingPayment(null);
-            setShowForm(true);
-          }}
-          className="size-12 rounded-full bg-gradient-to-br from-amber-600 to-orange-500 shadow-lg shadow-amber-500/30"
-          size="icon"
-          title="Nuevo Pago Recurrente"
-        >
-          <Plus className="size-5 text-white" />
-        </Button>
-      </motion.div>
 
       {/* Recurring Form Dialog */}
       <RecurringForm

@@ -305,27 +305,6 @@ export function VehiclesView({ onSelectVehicle }: VehiclesViewProps) {
         </div>
       )}
 
-      {/* FAB - Add Vehicle */}
-      {vehicles.length > 0 && (
-        <motion.div
-          className="fixed bottom-24 right-4 md:right-8 z-40"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring" }}
-        >
-          <Button
-            onClick={() => {
-              setEditVehicle(null);
-              setShowVehicleForm(true);
-            }}
-            className="size-14 rounded-full bg-gradient-to-br from-cyan-600 to-blue-600 shadow-lg shadow-cyan-500/30 hover:shadow-xl hover:shadow-cyan-500/40"
-            size="icon"
-          >
-            <Plus className="size-6 text-white" />
-          </Button>
-        </motion.div>
-      )}
-
       {/* Vehicle Form */}
       <VehicleForm
         open={showVehicleForm}

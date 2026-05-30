@@ -52,6 +52,7 @@ export default async function RootLayout({
             attribute="class"
             defaultTheme="light"
             enableSystem
+            themes={["light", "dark", "oled"]}
             disableTransitionOnChange
           >
             <AppearanceProvider>

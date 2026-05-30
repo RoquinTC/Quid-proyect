@@ -22,13 +22,19 @@ const tabs: { id: PantryTab; label: string; icon: typeof Refrigerator }[] = [
 ];
 
 export function PantryPage() {
-  const { sidebarAction, setSidebarAction } = useAppStore();
+  const { pantrySubView, setPantrySubView, sidebarAction, setSidebarAction } = useAppStore();
   const [activeTab, setActiveTab] = useState<PantryTab>("fridge");
 
   // Sidebar quick-action forms
   const [showPantryItemForm, setShowPantryItemForm] = useState(false);
   const [showShoppingListForm, setShowShoppingListForm] = useState(false);
   const [showHealthProfileForm, setShowHealthProfileForm] = useState(false);
+
+  useEffect(() => {
+    if (pantrySubView === "shopping-lists") {
+      setActiveTab("shopping");
+    }
+  }, [pantrySubView]);
 
   // ─── Swipe gesture for tab switching ─────────────────────────
   const [touchStart, setTouchStart] = useState<{ x: number; y: number; time: number } | null>(null);
@@ -79,10 +85,10 @@ export function PantryPage() {
     };
 
     const handler = actionMap[sidebarAction];
-    if (handler) handler();
-
-    // Consume the action so it doesn't re-fire
-    setSidebarAction(null);
+    if (handler) {
+      handler();
+      setSidebarAction(null);
+    }
   }, [sidebarAction, setSidebarAction]);
 
   const renderContent = () => {
@@ -111,7 +117,10 @@ export function PantryPage() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setPantrySubView(tab.id === "shopping" ? "shopping-lists" : "items");
+                }}
                 className="relative flex items-center justify-center gap-1 flex-1 py-2.5 px-1 rounded-xl text-sm font-medium transition-colors duration-200"
               >
                 {isActive && (

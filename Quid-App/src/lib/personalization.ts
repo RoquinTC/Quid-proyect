@@ -1,6 +1,6 @@
 'use client';
 
-export type AccentColor = 'emerald' | 'blue' | 'violet' | 'rose' | 'amber';
+export type AccentColor = 'emerald' | 'blue' | 'cyan' | 'violet' | 'fuchsia' | 'rose' | 'amber' | 'orange';
 
 export interface AccentOption {
   id: AccentColor;
@@ -77,6 +77,40 @@ export const ACCENT_OPTIONS: AccentOption[] = [
     },
   },
   {
+    id: 'cyan',
+    label: 'Cian',
+    swatch: '#0891B2',
+    light: {
+      primary: 'oklch(0.58 0.14 220)',
+      primaryForeground: 'oklch(0.99 0 0)',
+      ring: 'oklch(0.58 0.14 220)',
+      selection: 'oklch(0.58 0.14 220 / 18%)',
+    },
+    dark: {
+      primary: 'oklch(0.74 0.14 220)',
+      primaryForeground: 'oklch(0.12 0.02 220)',
+      ring: 'oklch(0.74 0.14 220)',
+      selection: 'oklch(0.74 0.14 220 / 24%)',
+    },
+  },
+  {
+    id: 'fuchsia',
+    label: 'Fucsia',
+    swatch: '#C026D3',
+    light: {
+      primary: 'oklch(0.56 0.24 325)',
+      primaryForeground: 'oklch(0.99 0 0)',
+      ring: 'oklch(0.56 0.24 325)',
+      selection: 'oklch(0.56 0.24 325 / 18%)',
+    },
+    dark: {
+      primary: 'oklch(0.72 0.2 325)',
+      primaryForeground: 'oklch(0.14 0.03 325)',
+      ring: 'oklch(0.72 0.2 325)',
+      selection: 'oklch(0.72 0.2 325 / 24%)',
+    },
+  },
+  {
     id: 'rose',
     label: 'Rosa',
     swatch: '#E11D48',
@@ -108,6 +142,23 @@ export const ACCENT_OPTIONS: AccentOption[] = [
       primaryForeground: 'oklch(0.15 0.04 75)',
       ring: 'oklch(0.78 0.16 75)',
       selection: 'oklch(0.78 0.16 75 / 24%)',
+    },
+  },
+  {
+    id: 'orange',
+    label: 'Naranja',
+    swatch: '#EA580C',
+    light: {
+      primary: 'oklch(0.61 0.19 48)',
+      primaryForeground: 'oklch(0.99 0 0)',
+      ring: 'oklch(0.61 0.19 48)',
+      selection: 'oklch(0.61 0.19 48 / 18%)',
+    },
+    dark: {
+      primary: 'oklch(0.74 0.17 48)',
+      primaryForeground: 'oklch(0.15 0.03 48)',
+      ring: 'oklch(0.74 0.17 48)',
+      selection: 'oklch(0.74 0.17 48 / 24%)',
     },
   },
 ];
@@ -145,7 +196,7 @@ export function applyAccent(accent: AccentColor) {
 
   const root = document.documentElement;
   const option = getAccentOption(accent);
-  const palette = root.classList.contains('dark') ? option.dark : option.light;
+  const palette = root.classList.contains('dark') || root.classList.contains('oled') ? option.dark : option.light;
 
   root.dataset.accent = accent;
   root.style.setProperty('--primary', palette.primary);

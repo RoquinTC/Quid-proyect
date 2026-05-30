@@ -171,8 +171,14 @@ export function AppSidebar() {
     setSidebarOpen(false);
   };
 
+  const handleSidebarOpenChange = (open: boolean) => {
+    setSidebarOpen(open);
+    setExpandedModule(null);
+    setSimulatorsOpen(false);
+  };
+
   return (
-    <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+    <Sheet open={sidebarOpen} onOpenChange={handleSidebarOpenChange}>
       <SheetContent side="left" className="flex h-dvh w-[min(300px,92vw)] flex-col gap-0 overflow-hidden rounded-r-2xl border-r border-border bg-white/95 p-0 text-gray-900 shadow-2xl backdrop-blur-xl dark:bg-gray-950/95 dark:text-gray-100">
         {/* User Profile Header */}
         <div className="shrink-0 border-b border-gray-100 bg-white/80 p-4 pb-4 dark:border-gray-800 dark:bg-gray-950/80">

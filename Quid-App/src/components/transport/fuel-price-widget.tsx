@@ -12,6 +12,7 @@ interface FuelPriceData {
   fuelType: string;
   pricePerGallon: number;
   updatedAt: string;
+  derivedFromLastLog?: boolean;
 }
 
 export function FuelPriceWidget() {
@@ -172,7 +173,7 @@ export function FuelPriceWidget() {
         {/* Last updated */}
         {gasolinePrice && (
           <p className="text-xs text-gray-400 text-right">
-            Actualizado: {formatDate(gasolinePrice.updatedAt)}
+            {gasolinePrice.derivedFromLastLog ? "Tomado del último tanqueo" : "Actualizado"}: {formatDate(gasolinePrice.updatedAt)}
           </p>
         )}
       </div>

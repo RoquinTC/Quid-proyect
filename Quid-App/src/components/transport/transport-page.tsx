@@ -172,7 +172,9 @@ export function TransportPage() {
 
   // Data
   const { data: vehiclesData, refetch: refetchVehicles, loading: vehiclesLoading } = useLocalQuery<VehicleWithDetails>("/api/vehicles");
+  const { data: fuelPricesData } = useLocalQuery<{ id: string; fuelType: string; pricePerGallon: number }>("/api/fuel-prices");
   const vehicles = (vehiclesData || []) as VehicleWithDetails[];
+  const fuelPrices = fuelPricesData || [];
 
   // ─── Reactive data event subscriptions ────────────────────────────
   // When mutations happen to sub-resources (maintenance, fuel-logs, documents),
@@ -331,10 +333,14 @@ export function TransportPage() {
       "log-maintenance": () => { setEditMaintenance(null); setShowMaintenanceForm(true); },
       "register-document": () => { setEditDocument(null); setShowDocumentForm(true); },
       "update-fuel-price": () => setShowFuelPriceDialog(true),
+      "create-vehicle-reminder": () => { setEditReminder(null); setShowReminderForm(true); },
+      "manage-maintenance-rules": () => setShowMaintenanceRules(true),
     };
     const handler = actionMap[sidebarAction];
-    if (handler) handler();
-    setSidebarAction(null);
+    if (handler) {
+      handler();
+      setSidebarAction(null);
+    }
   }, [sidebarAction, setSidebarAction]);
 
   // ─── Stats ──────────────────────────────────────────────────────
@@ -350,11 +356,12 @@ export function TransportPage() {
   const isLowFuel = selectedVehicle?.isLowFuel ?? false;
   const avgKmPerDay = selectedVehicle?.avgKmPerDay ?? 0;
   const isLearning = selectedVehicle?.isLearning ?? true;
-  const lastFuelPricePerGallon = selectedVehicle?.lastPricePerGallon && selectedVehicle.lastPricePerGallon > 0
-    ? selectedVehicle.lastPricePerGallon
-    : selectedVehicle?.fuelLogs?.find((log) => log.pricePerGallon > 0)?.pricePerGallon ?? 0;
-  const estimatedRefuelCost = gallonsToRefuel > 0 && lastFuelPricePerGallon > 0
-    ? gallonsToRefuel * lastFuelPricePerGallon
+  const projectedFuelPricePerGallon = fuelPrices.find((price) => price.fuelType === selectedVehicle?.fuelType)?.pricePerGallon
+    ?? selectedVehicle?.lastPricePerGallon
+    ?? selectedVehicle?.fuelLogs?.find((log) => log.pricePerGallon > 0)?.pricePerGallon
+    ?? 0;
+  const estimatedRefuelCost = gallonsToRefuel > 0 && projectedFuelPricePerGallon > 0
+    ? gallonsToRefuel * projectedFuelPricePerGallon
     : null;
   const selectedTotalFuelSpent = selectedVehicle?.fuelLogs?.reduce((sum, log) => sum + log.amount, 0) ?? 0;
   const selectedTotalMaintenanceSpent = selectedVehicle?.maintenanceRecords?.reduce((sum, record) => sum + record.cost, 0) ?? 0;
@@ -637,6 +644,7 @@ export function TransportPage() {
     return (
       <VehicleDetailView
         vehicle={detailVehicle}
+        currentFuelPrice={fuelPrices.find((price) => price.fuelType === detailVehicle.fuelType)?.pricePerGallon ?? null}
         onBack={() => setDetailVehicleId(null)}
         onRefresh={refetchVehicles}
         onEditVehicle={(v) => { setEditVehicle(v); setShowVehicleForm(true); }}
@@ -977,7 +985,7 @@ export function TransportPage() {
                                   )}
                                   {estimatedRefuelCost != null && (
                                     <span className={`basis-full text-[10px] ${isLowFuel ? "text-red-500 dark:text-red-400" : "text-cyan-500 dark:text-cyan-400"}`}>
-                                      calculado con el ultimo precio: {formatCurrency(lastFuelPricePerGallon)}/gal
+                                      calculado con el precio actualizado: {formatCurrency(projectedFuelPricePerGallon)}/gal
                                     </span>
                                   )}
                                 </div>
@@ -1655,55 +1663,6 @@ export function TransportPage() {
         )}
       </div>
 
-      {/* ─── FAB ───────────────────────────────────────────────── */}
-      <motion.div
-        className="fixed bottom-24 right-4 md:right-8 z-40"
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ delay: 0.2, type: "spring" }}
-      >
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              className="size-14 rounded-full bg-gradient-to-br from-cyan-600 to-blue-600 shadow-lg shadow-cyan-500/30 hover:shadow-xl hover:shadow-cyan-500/40"
-              size="icon"
-            >
-              <Plus className="size-6 text-white" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-xl">
-            <DropdownMenuItem onClick={() => { setEditFuelLog(null); setShowFuelLogForm(true); }}>
-              <Fuel className="size-4 mr-2 text-cyan-500" />
-              Registrar Recarga
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setEditMaintenance(null); setShowMaintenanceForm(true); }}>
-              <Wrench className="size-4 mr-2 text-amber-500" />
-              Registrar Mantenimiento
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setEditDocument(null); setShowDocumentForm(true); }}>
-              <Shield className="size-4 mr-2 text-violet-500" />
-              Registrar Documento
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setEditReminder(null); setShowReminderForm(true); }}>
-              <Bell className="size-4 mr-2 text-cyan-500" />
-              Crear Recordatorio
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowFuelPriceDialog(true)}>
-              <Settings className="size-4 mr-2 text-blue-500" />
-              Precio Combustible
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setShowMaintenanceRules(true)}>
-              <Settings className="size-4 mr-2 text-cyan-500" />
-              Intervalos Mantenimiento
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setEditVehicle(null); setShowVehicleForm(true); }}>
-              <Car className="size-4 mr-2 text-emerald-500" />
-              Nuevo Vehículo
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </motion.div>
-
       {/* ─── Forms ─────────────────────────────────────────────── */}
       <VehicleForm
         open={showVehicleForm}
@@ -2027,6 +1986,7 @@ function TimelineCard({
 // ─── Vehicle Detail View (from timeline) ──────────────────────────
 function VehicleDetailView({
   vehicle,
+  currentFuelPrice,
   onBack,
   onRefresh,
   onEditVehicle,
@@ -2035,6 +1995,7 @@ function VehicleDetailView({
   onDelete,
 }: {
   vehicle: VehicleWithDetails;
+  currentFuelPrice: number | null;
   onBack: () => void;
   onRefresh: () => void;
   onEditVehicle: (v: VehicleWithDetails) => void;
@@ -2054,11 +2015,13 @@ function VehicleDetailView({
   const estimatedRange = vehicle.estimatedRange ?? 0;
   const avgKmPerGallon = vehicle.avgKmPerGallon ?? 0;
   const detailGallonsToRefuel = vehicle.gallonsToRefuel ?? 0;
-  const detailLastFuelPrice = vehicle.lastPricePerGallon && vehicle.lastPricePerGallon > 0
-    ? vehicle.lastPricePerGallon
-    : vehicle.fuelLogs?.find((log) => log.pricePerGallon > 0)?.pricePerGallon ?? 0;
-  const detailRefuelCost = detailGallonsToRefuel > 0 && detailLastFuelPrice > 0
-    ? detailGallonsToRefuel * detailLastFuelPrice
+  const detailProjectedFuelPrice = currentFuelPrice && currentFuelPrice > 0
+    ? currentFuelPrice
+    : vehicle.lastPricePerGallon && vehicle.lastPricePerGallon > 0
+      ? vehicle.lastPricePerGallon
+      : vehicle.fuelLogs?.find((log) => log.pricePerGallon > 0)?.pricePerGallon ?? 0;
+  const detailRefuelCost = detailGallonsToRefuel > 0 && detailProjectedFuelPrice > 0
+    ? detailGallonsToRefuel * detailProjectedFuelPrice
     : null;
 
   const totalFuelSpent = (vehicle.fuelLogs || []).reduce((s, l) => s + l.amount, 0);
