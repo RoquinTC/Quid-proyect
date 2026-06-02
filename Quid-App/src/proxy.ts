@@ -195,6 +195,20 @@ export async function proxy(request: NextRequest) {
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-user-id", userId);
 
+    // Capacitor persists the native session as a Bearer token because Android
+    // WebView does not reliably retain the cross-site NextAuth cookie. Expose
+    // that validated token as the regular session cookie for existing API
+    // handlers that still use getServerSession().
+    const authorization = request.headers.get("authorization");
+    const bearerToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length)
+      : null;
+    if (bearerToken && !request.cookies.has(SESSION_COOKIE_NAME)) {
+      const existingCookies = requestHeaders.get("cookie");
+      const sessionCookie = `${SESSION_COOKIE_NAME}=${bearerToken}`;
+      requestHeaders.set("cookie", existingCookies ? `${existingCookies}; ${sessionCookie}` : sessionCookie);
+    }
+
     return addCorsHeaders(NextResponse.next({
       request: { headers: requestHeaders },
     }), request);
