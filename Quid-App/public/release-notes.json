@@ -1,6 +1,26 @@
 {
-  "currentVersion": "1.0.6",
+  "currentVersion": "1.0.8",
   "releases": [
+    {
+      "version": "1.0.8",
+      "date": "2026-06-03",
+      "title": "Pago predeterminado aplicado en transporte",
+      "changes": [
+        "El formulario manual de combustible ahora carga automaticamente el metodo de pago predeterminado del vehiculo.",
+        "Aura conserva la cuenta asociada a la tarjeta predeterminada al confirmar un tanqueo.",
+        "Al cambiar de vehiculo, el selector de pago se actualiza con el metodo guardado para ese vehiculo."
+      ]
+    },
+    {
+      "version": "1.0.7",
+      "date": "2026-06-03",
+      "title": "Aura entiende mejor tus tanqueos",
+      "changes": [
+        "Aura ahora muestra un resumen completo antes de guardar un tanqueo: valor, galones, precio por galon, kilometraje, metodo de pago y categoria.",
+        "El metodo de pago predeterminado de transporte queda visible en ajustes para saber que cuenta o tarjeta esta guardada.",
+        "El registro rapido de combustible interpreta mejor frases naturales como tanqueé 50.000, galon a 15.500 y odometro 80.000."
+      ]
+    },
     {
       "version": "1.0.6",
       "date": "2026-06-02",

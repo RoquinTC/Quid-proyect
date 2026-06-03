@@ -108,6 +108,38 @@ function normalize(value: string) {
     .trim();
 }
 
+function parseLocaleNumber(rawValue: string) {
+  const compact = rawValue.replace(/\s+/g, "");
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+  const decimalSeparator =
+    lastComma > lastDot ? "," : lastDot > lastComma ? "." : null;
+
+  if (decimalSeparator) {
+    const parts = compact.split(decimalSeparator);
+    const decimalPart = parts.at(-1) || "";
+    const integerPart = parts.slice(0, -1).join(decimalSeparator);
+
+    if (decimalPart.length === 3 && /^\d+$/.test(integerPart.replace(/[.,]/g, ""))) {
+      const value = Number(compact.replace(/[.,]/g, ""));
+      return Number.isFinite(value) ? value : null;
+    }
+
+    const normalized = `${integerPart.replace(/[.,]/g, "")}.${decimalPart}`;
+    const value = Number(normalized);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const value = Number(compact.replace(/[^\d]/g, ""));
+  return Number.isFinite(value) ? value : null;
+}
+
+function readNumberAfter(text: string, pattern: RegExp) {
+  const match = text.match(pattern);
+  if (!match?.[1]) return null;
+  return parseLocaleNumber(match[1]);
+}
+
 function lastUserText(messages: CoreMessage[]) {
   return [...messages].reverse().find((message) => message.role === "user")?.content.trim() || "";
 }
@@ -185,7 +217,7 @@ function inferAction(text: string): AuraAction {
     if (/\b(transferi|transferido|transferencias)\b/.test(normalized)) return "consultar_transferencias";
   }
   if (/\b(ingresos?\s+(vs|versus|contra)\s+gastos?|gastos?\s+(vs|versus|contra)\s+ingresos?|flujo|balance del mes)\b/.test(normalized)) return "consultar_flujo";
-  if (/\b(gaste|compre|pague|registre|registra|anota|anote)\b/.test(normalized)) {
+  if (/\b(gaste|compre|pague|registre|registra|anota|anote|tanquee|tanque|tanquear|tanqueado|recargue|recargar|recarga)\b/.test(normalized)) {
     if (/\b(recurrente|pendiente|programado|programada)\b/.test(normalized)) return "confirmar_recurrente";
     return "registrar_transaccion";
   }
@@ -282,14 +314,16 @@ function parseRecordDate(text: string) {
 
 function parseAmount(text: string) {
   const normalized = normalize(text);
-  const moneyMatch = normalized.match(/(?:\$|cop\s*)?\s*(\d+(?:[.,]\d{3})*(?:[.,]\d+)?)\s*(mil|k|millones|millon)?/);
+  const moneyMatch =
+    text.match(/(?:\$|cop\s*)?\s*([\d.,\s]+)\s*(mil|k|millones|mill[oó]n|pesos?)?/i) ||
+    normalized.match(/(?:cop\s*)?\s*([\d\s]+)\s*(mil|k|millones|millon|pesos?)?/i);
   if (!moneyMatch) return null;
 
   const rawNumber = moneyMatch[1];
-  const suffix = moneyMatch[2];
-  let amount = Number(rawNumber.replace(/\./g, "").replace(",", "."));
-  if (!Number.isFinite(amount)) return null;
-  if (suffix === "mil" || suffix === "k") amount *= 1000;
+  const suffix = normalize(moneyMatch[2] || "");
+  let amount = parseLocaleNumber(rawNumber);
+  if (amount == null || !Number.isFinite(amount)) return null;
+  if ((suffix === "mil" || suffix === "k") && amount < 1000) amount *= 1000;
   if (suffix === "millon" || suffix === "millones") amount *= 1_000_000;
   return Math.round(amount);
 }
@@ -401,24 +435,26 @@ export async function getSmartCategory(text: string, userId: string, type: "inco
 }
 
 function isFuelIntent(text: string) {
-  return /\b(gasolina|tanqueo|combustible|galon|galones|galón)\b/.test(normalize(text));
+  return /\b(gasolina|tanqueo|tanquee|tanque|tanquear|tanqueado|recarga|recargue|combustible|galon|galones|galón)\b/.test(normalize(text));
 }
 
 function parseKm(text: string) {
   const normalized = normalize(text);
-  const match = normalized.match(/\b(?:km|kilometraje|odometro|odómetro)\s*(?:en|de|actual)?\s*(\d+(?:[.,]\d+)?)\b/) || normalized.match(/\b(\d+(?:[.,]\d+)?)\s*km\b/);
-  if (!match) return null;
-  const km = Number(match[1].replace(/\./g, "").replace(",", "."));
+  const km =
+    readNumberAfter(text, /(?:km|kilometraje|kil[oó]metros?|od[oó]metro)\s*(?:en|de|actual|est[aá]\s*en)?\s*([\d.,\s]+)/i) ??
+    readNumberAfter(text, /([\d.,\s]+)\s*(?:km|kil[oó]metros?)\b/i) ??
+    readNumberAfter(normalized, /(?:km|kilometraje|kilometros?|odometro)\s*(?:en|de|actual|esta en)?\s*([\d\s]+)/i) ??
+    readNumberAfter(normalized, /([\d\s]+)\s*(?:km|kilometros?)\b/i);
   return Number.isFinite(km) ? km : null;
 }
 
 function parsePricePerGallon(text: string) {
   const normalized = normalize(text);
-  const match =
-    normalized.match(/\b(?:galon|galón)\s*(?:a|en|de)?\s*(\d+(?:[.,]\d{3})*(?:[.,]\d+)?)\b/) ||
-    normalized.match(/\bprecio\s*(?:del)?\s*(?:galon|galón)?\s*(\d+(?:[.,]\d{3})*(?:[.,]\d+)?)\b/);
-  if (!match) return null;
-  const price = Number(match[1].replace(/\./g, "").replace(",", "."));
+  const price =
+    readNumberAfter(text, /(?:gal[oó]n|galones)\s*(?:costaba|cuesta|a|en|de|estaba\s*a)?\s*([\d.,\s]+)/i) ??
+    readNumberAfter(text, /precio\s*(?:del|por)?\s*(?:gal[oó]n|galones)?\s*(?:es|era|a|de)?\s*([\d.,\s]+)/i) ??
+    readNumberAfter(normalized, /(?:galon|galones)\s*(?:costaba|cuesta|a|en|de|estaba a)?\s*([\d\s]+)/i) ??
+    readNumberAfter(normalized, /precio\s*(?:del|por)?\s*(?:galon|galones)?\s*(?:es|era|a|de)?\s*([\d\s]+)/i);
   return Number.isFinite(price) ? price : null;
 }
 
@@ -813,6 +849,28 @@ async function getPantrySnapshot(userId: string) {
   return { totalItems: items.length, expiring, lowStock };
 }
 
+function getDefaultPaymentLabel(
+  paymentDefault: { paymentType?: string | null; accountId?: string | null; subAccountId?: string | null; debtId?: string | null } | null | undefined,
+  accounts: AccountChoice[],
+  debts: DebtChoice[]
+) {
+  if (!paymentDefault) return "sin método de pago";
+
+  if (paymentDefault.paymentType === "credit_card" && paymentDefault.debtId) {
+    const debt = debts.find((item) => item.id === paymentDefault.debtId);
+    return debt ? `con tarjeta ${debt.name}` : "con tarjeta predeterminada";
+  }
+
+  const account = accounts.find((item) => item.kind === "account" && item.id === paymentDefault.accountId);
+  const subAccount = paymentDefault.subAccountId
+    ? accounts.find((item) => item.kind === "subAccount" && item.id === paymentDefault.subAccountId)
+    : null;
+
+  if (account && subAccount) return `desde ${account.name} / ${subAccount.name}`;
+  if (account) return `desde ${account.name}`;
+  return "desde cuenta predeterminada";
+}
+
 async function registerFuelFromAura(userId: string, text: string, amount: number, options: { commit?: boolean } = {}): Promise<AuraToolResult> {
   const vehicles = await db.vehicle.findMany({
     where: { userId },
@@ -854,7 +912,11 @@ async function registerFuelFromAura(userId: string, text: string, amount: number
   const debtId = debt?.id ?? paymentDefault?.debtId ?? null;
   const gallons = Math.round((amount / pricePerGallon!) * 100) / 100;
   const recordDate = parseRecordDate(text);
-  const paidWith = debt ? `con ${debt.name}` : account ? `desde ${account.name}` : "con el método predeterminado";
+  const paidWith = debt
+    ? `con tarjeta ${debt.name}`
+    : account
+      ? `desde ${account.name}`
+      : getDefaultPaymentLabel(paymentDefault, accounts, debts);
 
   if (!options.commit) {
     return {
@@ -866,6 +928,8 @@ async function registerFuelFromAura(userId: string, text: string, amount: number
         `- Precio por galón: ${COP.format(pricePerGallon!)}`,
         `- Kilometraje: ${km!.toLocaleString("es-CO")} km`,
         `- Método: ${paidWith}`,
+        `- Categoría: Transporte`,
+        `- Subcategoría: Combustible`,
         "",
         "Responde CONFIRMAR para guardarlo o CANCELAR para descartarlo.",
       ].join("\n"),

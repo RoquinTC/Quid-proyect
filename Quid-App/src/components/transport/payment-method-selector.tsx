@@ -127,13 +127,19 @@ export function PaymentMethodSelector({
 
       if (data && !defaultPaymentType) {
         setPaymentType(data.paymentType || "account");
-        if (data.accountId && !defaultAccountId) setAccountId(data.accountId);
-        if (data.subAccountId && !defaultSubAccountId) setSubAccountId(data.subAccountId);
-        if (data.debtId && !defaultDebtId) setDebtId(data.debtId);
-        if (data.installmentCount && !defaultInstallmentCount) setInstallmentCount(data.installmentCount);
+        setAccountId(data.accountId ?? null);
+        setSubAccountId(data.subAccountId ?? null);
+        setDebtId(data.debtId ?? null);
+        setInstallmentCount(data.installmentCount ?? null);
       }
     } catch (error) {
-      // No default set — that's fine, use defaults
+      if (!defaultPaymentType) {
+        setPaymentType("account");
+        setAccountId(null);
+        setSubAccountId(null);
+        setDebtId(null);
+        setInstallmentCount(null);
+      }
     }
   }, [vehicleId, defaultPaymentType, defaultAccountId, defaultSubAccountId, defaultDebtId, defaultInstallmentCount]);
 

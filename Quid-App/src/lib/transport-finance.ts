@@ -417,7 +417,8 @@ export function getTransportSubCategory(
     case "fuel":
       return "Combustible";
     case "maintenance":
-      return (subType && MAINTENANCE_SUBCATEGORY_MAP[subType]) || "Mantenimiento";
+      // Siempre agrupar financieramente bajo "Mantenimiento" en lugar de crear subcategorías por ítem
+      return "Mantenimiento";
     case "document":
       return (subType && DOCUMENT_SUBCATEGORY_MAP[subType]) || "Otro";
     default:

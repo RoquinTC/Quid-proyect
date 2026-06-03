@@ -23,9 +23,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const paymentDefault = await db.vehiclePaymentDefault.findUnique({
       where: { vehicleId: id },
+      include: {
+        account: { select: { name: true } },
+        subAccount: { select: { name: true } },
+        debt: { select: { name: true } },
+      },
     });
 
-    return NextResponse.json(paymentDefault || { paymentType: "account", accountId: null, subAccountId: null, debtId: null, installmentCount: null });
+    return NextResponse.json(paymentDefault ? {
+      ...paymentDefault,
+      accountName: paymentDefault.account?.name ?? null,
+      subAccountName: paymentDefault.subAccount?.name ?? null,
+      debtName: paymentDefault.debt?.name ?? null,
+    } : { paymentType: "account", accountId: null, subAccountId: null, debtId: null, installmentCount: null });
   } catch (error) {
     console.error("Get payment default error:", error);
     return NextResponse.json({ error: "Error al obtener método de pago predeterminado" }, { status: 500 });
@@ -51,6 +61,59 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Vehículo no encontrado" }, { status: 404 });
     }
 
+    if (paymentType === "account" && !accountId) {
+      return NextResponse.json(
+        { error: "Selecciona una cuenta para guardar el método de pago predeterminado." },
+        { status: 400 }
+      );
+    }
+
+    if (paymentType === "credit_card" && !debtId) {
+      return NextResponse.json(
+        { error: "Selecciona una tarjeta de crédito para guardar el método de pago predeterminado." },
+        { status: 400 }
+      );
+    }
+
+    if (accountId) {
+      const account = await db.account.findFirst({
+        where: { id: accountId, userId: session.user.id },
+        select: { id: true },
+      });
+      if (!account) {
+        return NextResponse.json(
+          { error: "La cuenta seleccionada no existe o no pertenece a tu usuario." },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (subAccountId) {
+      const subAccount = await db.subAccount.findFirst({
+        where: { id: subAccountId, account: { userId: session.user.id } },
+        select: { id: true },
+      });
+      if (!subAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo seleccionado no existe o no pertenece a tu usuario." },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (debtId) {
+      const debt = await db.debt.findFirst({
+        where: { id: debtId, userId: session.user.id, type: "credit_card" },
+        select: { id: true },
+      });
+      if (!debt) {
+        return NextResponse.json(
+          { error: "La tarjeta seleccionada no existe o no pertenece a tu usuario." },
+          { status: 400 }
+        );
+      }
+    }
+
     // Upsert: create or update the payment default
     const paymentDefault = await db.vehiclePaymentDefault.upsert({
       where: { vehicleId: id },
@@ -73,7 +136,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     });
 
-    return NextResponse.json(paymentDefault);
+    const saved = await db.vehiclePaymentDefault.findUnique({
+      where: { vehicleId: id },
+      include: {
+        account: { select: { name: true } },
+        subAccount: { select: { name: true } },
+        debt: { select: { name: true } },
+      },
+    });
+
+    return NextResponse.json(saved ? {
+      ...saved,
+      accountName: saved.account?.name ?? null,
+      subAccountName: saved.subAccount?.name ?? null,
+      debtName: saved.debt?.name ?? null,
+    } : paymentDefault);
   } catch (error) {
     if (error instanceof Response) return error;
     console.error("Update payment default error:", error);

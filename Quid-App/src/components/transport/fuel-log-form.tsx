@@ -532,7 +532,7 @@ export function FuelLogForm({
           {/* ─── Payment Method ── */}
           <PaymentMethodSelector
             vehicleId={vehicleId}
-            defaultPaymentType={fuelLog?.debtId ? "credit_card" : "account"}
+            defaultPaymentType={fuelLog ? (fuelLog.debtId ? "credit_card" : "account") : undefined}
             defaultAccountId={fuelLog?.accountId}
             defaultSubAccountId={fuelLog?.subAccountId}
             defaultDebtId={fuelLog?.debtId}

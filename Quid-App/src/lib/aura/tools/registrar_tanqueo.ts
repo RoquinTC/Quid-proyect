@@ -30,37 +30,74 @@ function normalize(value: string) {
     .trim();
 }
 
+function parseLocaleNumber(rawValue: string) {
+  const compact = rawValue.replace(/\s+/g, "");
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+  const decimalSeparator =
+    lastComma > lastDot ? "," : lastDot > lastComma ? "." : null;
+
+  if (decimalSeparator) {
+    const parts = compact.split(decimalSeparator);
+    const decimalPart = parts.at(-1) || "";
+    const integerPart = parts.slice(0, -1).join(decimalSeparator);
+
+    if (decimalPart.length === 3 && /^\d+$/.test(integerPart.replace(/[.,]/g, ""))) {
+      const value = Number(compact.replace(/[.,]/g, ""));
+      return Number.isFinite(value) ? value : null;
+    }
+
+    const normalized = `${integerPart.replace(/[.,]/g, "")}.${decimalPart}`;
+    const value = Number(normalized);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const value = Number(compact.replace(/[^\d]/g, ""));
+  return Number.isFinite(value) ? value : null;
+}
+
+function readNumberAfter(text: string, pattern: RegExp) {
+  const match = text.match(pattern);
+  if (!match?.[1]) return null;
+  return parseLocaleNumber(match[1]);
+}
+
 // Parsear kilometraje
 function parseKm(text: string) {
   const normalized = normalize(text);
-  const match = normalized.match(/\b(?:km|kilometraje|odometro|odómetro)\s*(?:en|de|actual)?\s*(\d+(?:[.,]\d+)?)\b/) || normalized.match(/\b(\d+(?:[.,]\d+)?)\s*km\b/);
-  if (!match) return null;
-  const km = Number(match[1].replace(/\./g, "").replace(",", "."));
+  const fromOriginal =
+    readNumberAfter(text, /(?:km|kilometraje|kil[oó]metros?|od[oó]metro)\s*(?:en|de|actual|est[aá]\s*en)?\s*([\d.,\s]+)/i) ??
+    readNumberAfter(text, /([\d.,\s]+)\s*(?:km|kil[oó]metros?)\b/i);
+  const km = fromOriginal ??
+    readNumberAfter(normalized, /(?:km|kilometraje|kilometros?|odometro)\s*(?:en|de|actual|esta en)?\s*([\d\s]+)/i) ??
+    readNumberAfter(normalized, /([\d\s]+)\s*(?:km|kilometros?)\b/i);
   return Number.isFinite(km) ? km : null;
 }
 
 // Parsear precio por galón
 function parsePricePerGallon(text: string) {
   const normalized = normalize(text);
-  const match =
-    normalized.match(/\b(?:galon|galón)\s*(?:a|en|de)?\s*(\d+(?:[.,]\d{3})*(?:[.,]\d+)?)\b/) ||
-    normalized.match(/\bprecio\s*(?:del)?\s*(?:galon|galón)?\s*(\d+(?:[.,]\d{3})*(?:[.,]\d+)?)\b/);
-  if (!match) return null;
-  const price = Number(match[1].replace(/\./g, "").replace(",", "."));
+  const price =
+    readNumberAfter(text, /(?:gal[oó]n|galones)\s*(?:costaba|cuesta|a|en|de|estaba\s*a)?\s*([\d.,\s]+)/i) ??
+    readNumberAfter(text, /precio\s*(?:del|por)?\s*(?:gal[oó]n|galones)?\s*(?:es|era|a|de)?\s*([\d.,\s]+)/i) ??
+    readNumberAfter(normalized, /(?:galon|galones)\s*(?:costaba|cuesta|a|en|de|estaba a)?\s*([\d\s]+)/i) ??
+    readNumberAfter(normalized, /precio\s*(?:del|por)?\s*(?:galon|galones)?\s*(?:es|era|a|de)?\s*([\d\s]+)/i);
   return Number.isFinite(price) ? price : null;
 }
 
 // Parsear valor de compra
 function parseAmount(text: string) {
   const normalized = normalize(text);
-  const moneyMatch = normalized.match(/(?:\$|cop\s*)?\s*(\d+(?:[.,]\d{3})*(?:[.,]\d+)?)\s*(mil|k|millones|millon)?/);
+  const moneyMatch =
+    text.match(/(?:\$|cop\s*)?\s*([\d.,\s]+)\s*(mil|k|millones|mill[oó]n|pesos?)?/i) ||
+    normalized.match(/(?:cop\s*)?\s*([\d\s]+)\s*(mil|k|millones|millon|pesos?)?/i);
   if (!moneyMatch) return null;
 
   const rawNumber = moneyMatch[1];
-  const suffix = moneyMatch[2];
-  let amount = Number(rawNumber.replace(/\./g, "").replace(",", "."));
-  if (!Number.isFinite(amount)) return null;
-  if (suffix === "mil" || suffix === "k") amount *= 1000;
+  const suffix = normalize(moneyMatch[2] || "");
+  let amount = parseLocaleNumber(rawNumber);
+  if (amount == null || !Number.isFinite(amount)) return null;
+  if ((suffix === "mil" || suffix === "k") && amount < 1000) amount *= 1000;
   if (suffix === "millon" || suffix === "millones") amount *= 1_000_000;
   return Math.round(amount);
 }
@@ -114,7 +151,7 @@ export function parsePreviousFuelProposal(content: string): FuelProposalState {
     } else if (line.includes("- Método:")) {
       const methodStr = line.replace("- Método:", "").trim();
       if (methodStr.startsWith("con ")) {
-        debtName = methodStr.replace("con ", "").trim();
+        debtName = methodStr.replace("con ", "").replace(/^tarjeta\s+/i, "").trim();
       } else if (methodStr.startsWith("desde ")) {
         accountName = methodStr.replace("desde ", "").trim();
       }
@@ -124,6 +161,24 @@ export function parsePreviousFuelProposal(content: string): FuelProposalState {
   }
 
   return { vehicleName, amount, gallons, pricePerGallon, km, accountName, debtName, dateText };
+}
+
+function getDefaultPaymentLabel(paymentDefault: any, accounts: any[], debts: any[]) {
+  if (!paymentDefault) return "sin método de pago";
+
+  if (paymentDefault.paymentType === "credit_card" && paymentDefault.debtId) {
+    const debt = debts.find((item) => item.id === paymentDefault.debtId);
+    return debt ? `con tarjeta ${debt.name}` : "con tarjeta predeterminada";
+  }
+
+  const account = accounts.find((item) => item.id === paymentDefault.accountId);
+  const subAccount = paymentDefault.subAccountId
+    ? accounts.find((item) => item.id === paymentDefault.subAccountId)
+    : null;
+
+  if (account && subAccount) return `desde ${account.name} / ${subAccount.name}`;
+  if (account) return `desde ${account.name}`;
+  return "desde cuenta predeterminada";
 }
 
 // Actualizar propuesta de tanqueo
@@ -208,7 +263,12 @@ export async function updateFuelProposal(
     gallons = Math.round((amount / pricePerGallon) * 100) / 100;
   }
 
-  const paidWith = debtName ? `con ${debtName}` : accountName ? `desde ${accountName}` : "con el método predeterminado";
+  const vehicle = vehicles.find((v) => vehicleName && normalize(v.name) === normalize(vehicleName));
+  const paidWith = debtName
+    ? `con tarjeta ${debtName}`
+    : accountName
+      ? `desde ${accountName}`
+      : getDefaultPaymentLabel(vehicle?.paymentDefault, accounts, debts);
 
   return {
     text: [
@@ -220,6 +280,8 @@ export async function updateFuelProposal(
       `- Precio por galón: ${COP.format(pricePerGallon || 0)}`,
       `- Kilometraje: ${(km || 0).toLocaleString("es-CO")} km`,
       `- Método: ${paidWith}`,
+      `- Categoría: Transporte`,
+      `- Subcategoría: Combustible`,
       `- Fecha: ${dateText || "Hoy"}`,
       "",
       "Responde CONFIRMAR para guardarlo o CANCELAR para descartarlo.",
@@ -271,6 +333,10 @@ export async function executeFuelProposal(
     if (!debt) throw new Error(`No encontré la tarjeta "${debtName}".`);
     debtId = debt.id;
     paymentType = "credit_card";
+    if (paymentDefault?.paymentType === "credit_card" && paymentDefault.debtId === debt.id) {
+      accountId = paymentDefault.accountId;
+      subAccountId = paymentDefault.subAccountId;
+    }
   } else if (accountName) {
     const account = accounts.find((a) => normalize(a.name) === normalize(accountName));
     if (!account) throw new Error(`No encontré la cuenta "${accountName}".`);
@@ -298,6 +364,7 @@ export async function executeFuelProposal(
       accountId,
       subAccountId,
       debtId,
+      installmentCount: paymentType === "credit_card" ? paymentDefault?.installmentCount ?? null : null,
       notes: "Registrado desde Aura",
     },
   });
@@ -324,7 +391,11 @@ export async function executeFuelProposal(
     vehicleName: vehicle.name,
   });
 
-  const paidWith = debtName ? `con ${debtName}` : accountName ? `desde ${accountName}` : "con el método predeterminado";
+  const paidWith = debtName
+    ? `con tarjeta ${debtName}`
+    : accountName
+      ? `desde ${accountName}`
+      : getDefaultPaymentLabel(paymentDefault, accounts, debts);
 
   return {
     text: `Listo, registré el tanqueo de ${vehicle.name}: ${COP.format(amount)}, ${calculatedGallons} galones, km ${km.toLocaleString("es-CO")}, ${paidWith}.`,

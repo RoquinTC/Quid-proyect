@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -33,10 +33,26 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   AlertTriangle,
+  CreditCard,
+  Landmark,
 } from "lucide-react";
+import { PaymentMethodSelector } from "@/components/transport/payment-method-selector";
+import { apiFetch } from "@/lib/api";
+import type { PaymentMethodType, Vehicle } from "@/lib/types/transport";
 
 type TransportSettingsProps = {
   setResetResult: (msg: string | null) => void;
+};
+
+type PaymentDefault = {
+  paymentType: PaymentMethodType;
+  accountId: string | null;
+  subAccountId: string | null;
+  debtId: string | null;
+  installmentCount: number | null;
+  accountName?: string | null;
+  subAccountName?: string | null;
+  debtName?: string | null;
 };
 
 export function TransportSettings({ setResetResult }: TransportSettingsProps) {
@@ -58,6 +74,122 @@ export function TransportSettings({ setResetResult }: TransportSettingsProps) {
     errors: string[];
   } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  // Default Payment Configuration
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
+  const [paymentData, setPaymentData] = useState<{
+    paymentType: PaymentMethodType;
+    accountId: string | null;
+    subAccountId: string | null;
+    debtId: string | null;
+    installmentCount: number | null;
+  } | null>(null);
+  const [savedPaymentDefault, setSavedPaymentDefault] = useState<PaymentDefault | null>(null);
+  const [loadingPaymentDefault, setLoadingPaymentDefault] = useState(false);
+  const [savingPayment, setSavingPayment] = useState(false);
+
+  useEffect(() => {
+    const fetchVehicles = async () => {
+      try {
+        const data = await apiFetch<Vehicle[]>("/api/vehicles");
+        setVehicles(data);
+        if (data.length > 0) {
+          setSelectedVehicleId(data[0].id);
+        }
+      } catch (error) {
+        console.error("Error fetching vehicles:", error);
+      }
+    };
+    fetchVehicles();
+  }, []);
+
+  useEffect(() => {
+    setPaymentData(null);
+    setSavedPaymentDefault(null);
+    if (!selectedVehicleId) return;
+
+    let cancelled = false;
+    async function fetchPaymentDefault() {
+      setLoadingPaymentDefault(true);
+      try {
+        const data = await apiFetch<PaymentDefault>(`/api/vehicles/${selectedVehicleId}/payment-default`);
+        if (!cancelled) setSavedPaymentDefault(data);
+      } catch (error) {
+        console.error("Error fetching payment default:", error);
+        if (!cancelled) setSavedPaymentDefault(null);
+      } finally {
+        if (!cancelled) setLoadingPaymentDefault(false);
+      }
+    }
+
+    fetchPaymentDefault();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedVehicleId]);
+
+  const paymentReady = Boolean(
+    paymentData &&
+    ((paymentData.paymentType === "account" && paymentData.accountId) ||
+      (paymentData.paymentType === "credit_card" && paymentData.debtId))
+  );
+
+  const savePaymentDefault = async () => {
+    if (!selectedVehicleId) {
+      setResetResult("Selecciona un vehículo antes de guardar el método de pago.");
+      setTimeout(() => setResetResult(null), 3000);
+      return;
+    }
+    if (!paymentData || !paymentReady) {
+      const message =
+        paymentData?.paymentType === "credit_card"
+          ? "Selecciona la tarjeta de crédito predeterminada."
+          : "Selecciona la cuenta predeterminada.";
+      setResetResult(message);
+      setTimeout(() => setResetResult(null), 3000);
+      return;
+    }
+    setSavingPayment(true);
+    try {
+      const saved = await apiFetch<PaymentDefault>(`/api/vehicles/${selectedVehicleId}/payment-default`, {
+        method: "PUT",
+        body: JSON.stringify(paymentData),
+      });
+      setSavedPaymentDefault(saved);
+      setResetResult("Método de pago predeterminado guardado con éxito");
+      setTimeout(() => setResetResult(null), 3000);
+    } catch (error) {
+      console.error("Error saving payment default:", error);
+      setResetResult(error instanceof Error ? error.message : "Error al guardar el método de pago");
+      setTimeout(() => setResetResult(null), 4000);
+    } finally {
+      setSavingPayment(false);
+    }
+  };
+
+  const savedPaymentLabel = (() => {
+    if (!savedPaymentDefault) return null;
+    if (savedPaymentDefault.paymentType === "credit_card") {
+      if (!savedPaymentDefault.debtId) return null;
+      return {
+        icon: CreditCard,
+        title: savedPaymentDefault.debtName || "Tarjeta guardada",
+        detail: savedPaymentDefault.accountName
+          ? `Se pagará desde ${savedPaymentDefault.accountName}${savedPaymentDefault.subAccountName ? ` / ${savedPaymentDefault.subAccountName}` : ""}`
+          : "Sin cuenta de pago asociada",
+      };
+    }
+    if (!savedPaymentDefault.accountId) return null;
+    return {
+      icon: Landmark,
+      title: savedPaymentDefault.accountName || "Cuenta guardada",
+      detail: savedPaymentDefault.subAccountName
+        ? `Bolsillo: ${savedPaymentDefault.subAccountName}`
+        : "Cuenta principal",
+    };
+  })();
+  const SavedPaymentIcon = savedPaymentLabel?.icon;
 
   const saveSettings = () => {
     setResetResult("Ajustes de transporte guardados");
@@ -266,6 +398,91 @@ export function TransportSettings({ setResetResult }: TransportSettingsProps) {
                   </div>
                 </CardContent>
               </Card>
+            </AccordionContent>
+          </AccordionItem>
+        </Card>
+
+        {/* Método de Pago Predeterminado */}
+        <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
+          <AccordionItem value="pago" className="border-0">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <div className="flex items-center gap-3 w-full">
+                <div className="size-8 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center shrink-0">
+                  <CreditCard className="size-4 text-pink-500" />
+                </div>
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">Método de Pago Predeterminado</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-gray-500">Selecciona un vehículo para configurar su pago</Label>
+                <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                  <SelectTrigger className="w-full rounded-xl h-10">
+                    <SelectValue placeholder="Seleccionar vehículo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vehicles.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name} {v.plate ? `(${v.plate})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedVehicleId && (
+                <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl mt-4">
+                  <CardContent className="p-3 space-y-3">
+                    {loadingPaymentDefault ? (
+                      <div className="rounded-xl bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-800">
+                        Revisando método guardado...
+                      </div>
+                    ) : savedPaymentLabel ? (
+                      <div className="flex items-start gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 dark:border-emerald-900/30 dark:bg-emerald-950/20">
+                        <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-600 shadow-sm dark:bg-gray-900 dark:text-emerald-300">
+                          {SavedPaymentIcon && <SavedPaymentIcon className="size-3.5" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                            Guardado actualmente: {savedPaymentLabel.title}
+                          </p>
+                          <p className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
+                            {savedPaymentLabel.detail}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl bg-gray-50 px-3 py-2 text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                        Este vehículo todavía no tiene método de pago predeterminado.
+                      </div>
+                    )}
+                    <PaymentMethodSelector
+                      key={`payment-selector-${selectedVehicleId}`}
+                      vehicleId={selectedVehicleId}
+                      onChange={setPaymentData}
+                    />
+                    {!paymentReady && (
+                      <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-700 dark:bg-amber-950/20 dark:text-amber-300">
+                        {paymentData?.paymentType === "credit_card"
+                          ? "Selecciona una tarjeta de crédito para poder guardar este método."
+                          : "Selecciona una cuenta para poder guardar este método."}
+                      </p>
+                    )}
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={savePaymentDefault}
+                        disabled={savingPayment || !paymentReady}
+                        className="rounded-lg bg-pink-600 hover:bg-pink-700"
+                      >
+                        {savingPayment ? <Loader2 className="size-3.5 animate-spin mr-1.5" /> : null}
+                        Guardar Pago Predeterminado
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </AccordionContent>
           </AccordionItem>
         </Card>

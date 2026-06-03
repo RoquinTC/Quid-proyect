@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const appVersion = '1.0.6';
+const appVersion = '1.0.8';
 // Build ID changes every time the server starts (Docker container restart)
 // This allows the client to detect when a new version is deployed.
 const buildId = Date.now().toString(36);

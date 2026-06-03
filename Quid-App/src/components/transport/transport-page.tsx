@@ -12,6 +12,7 @@ import {
   Activity, RefreshCw, ChevronRight, RotateCcw, Wallet, CalendarClock,
 } from "lucide-react";
 import { VehicleForm } from "./vehicle-form";
+
 import { FuelLogForm } from "./fuel-log-form";
 import { MaintenanceForm } from "./maintenance-form";
 import { VehicleDocumentForm } from "./vehicle-document-form";
@@ -19,6 +20,7 @@ import { VehicleReminderForm } from "./vehicle-reminder-form";
 import { MaintenanceRulesDialog } from "./maintenance-rules-dialog";
 import { FuelPriceWidget } from "./fuel-price-widget";
 import { QuickKmUpdate } from "./quick-km-update";
+import { AuraQuickLog } from "./aura-quick-log";
 import { VehicleIcon } from "./vehicle-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -831,6 +833,10 @@ export function TransportPage() {
             )}
           </div>
         )}
+
+        <div className="mt-3">
+          <AuraQuickLog onSuccess={handleDataRefresh} />
+        </div>
 
         <div className="mt-3 flex gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
           {transportTabs.map((tab) => {
