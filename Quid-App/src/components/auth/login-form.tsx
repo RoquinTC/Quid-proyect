@@ -252,6 +252,11 @@ export function LoginForm() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
+      try {
+        sessionStorage.setItem("quid-just-logged-in", "true");
+        sessionStorage.removeItem("quid-just-logged-out");
+      } catch {}
+
       const result = await signIn("google", {
         callbackUrl: "/",
         redirect: true,

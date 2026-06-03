@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-const APP_VERSION = 'B1.0.5';
+const APP_VERSION = '1.0.6';
 const CACHE_NAME = `quid-${APP_VERSION}`;
 const STATIC_CACHE = `quid-static-${APP_VERSION}`;
 const DYNAMIC_CACHE = `quid-dynamic-${APP_VERSION}`;

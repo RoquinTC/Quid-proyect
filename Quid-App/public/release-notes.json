@@ -1,8 +1,18 @@
 {
-  "currentVersion": "B1.0.5",
+  "currentVersion": "1.0.6",
   "releases": [
     {
-      "version": "B1.0.5",
+      "version": "1.0.6",
+      "date": "2026-06-02",
+      "title": "Ingreso con Google corregido en la PWA",
+      "changes": [
+        "Al volver de Google, Quid ya no conserva el estado interno de cierre de sesion.",
+        "La PWA queda preparada para entrar correctamente despues de escoger una cuenta de Google.",
+        "La version visible queda mas limpia: solo el numero de Quid, sin prefijos tecnicos."
+      ]
+    },
+    {
+      "version": "1.0.5",
       "date": "2026-06-02",
       "title": "Ingreso con Google mas estable en la PWA",
       "changes": [
@@ -12,7 +22,7 @@
       ]
     },
     {
-      "version": "B1.0.4",
+      "version": "1.0.4",
       "date": "2026-06-02",
       "title": "Ingreso con Google listo en Android",
       "changes": [
@@ -23,7 +33,7 @@
       ]
     },
     {
-      "version": "B1.0.3",
+      "version": "1.0.3",
       "date": "2026-06-01",
       "title": "Acceso rápido y citas mejor organizadas",
       "changes": [
@@ -34,7 +44,7 @@
       ]
     },
     {
-      "version": "B1.0.2",
+      "version": "1.0.2",
       "date": "2026-05-21",
       "title": "Recordatorios reales y metricas de transporte",
       "changes": [
@@ -45,7 +55,7 @@
       ]
     },
     {
-      "version": "B1.0.1",
+      "version": "1.0.1",
       "date": "2026-05-21",
       "title": "Login offline y ajustes de transporte",
       "changes": [
@@ -56,7 +66,7 @@
       ]
     },
     {
-      "version": "B1.0.0",
+      "version": "1.0.0",
       "date": "2026-05-21",
       "title": "Personalizacion visual",
       "changes": [
@@ -67,7 +77,7 @@
       ]
     },
     {
-      "version": "B0.9.2",
+      "version": "0.9.2",
       "date": "2026-05-20",
       "title": "Seguridad y sincronizacion offline",
       "changes": [
@@ -78,7 +88,7 @@
       ]
     },
     {
-      "version": "B0.9.1",
+      "version": "0.9.1",
       "date": "2026-05-20",
       "title": "Estabilidad de la PWA",
       "changes": [
