@@ -54,7 +54,7 @@ export function SettingsPage() {
   const [accentColor, setAccentColor] = useState<AccentColor>("emerald");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentBuildId, setCurrentBuildId] = useState<string>("...");
+  const [appVersion, setAppVersion] = useState<string>("B1.0.4");
 
   const mountedRef = useRef(true);
   const [saving, setSaving] = useState(false);
@@ -69,12 +69,12 @@ export function SettingsPage() {
   const [linkingAura, setLinkingAura] = useState(false);
   const [auraLinked, setAuraLinked] = useState(false);
 
-  // Fetch current build ID
+  // Fetch the user-facing app version from release notes.
   useEffect(() => {
-    fetch("/api/health")
+    fetch("/release-notes.json?" + Date.now())
       .then((res) => res.json())
-      .then((data) => setCurrentBuildId(data.buildId))
-      .catch(() => setCurrentBuildId("Error"));
+      .then((data) => setAppVersion(data.currentVersion || "B1.0.4"))
+      .catch(() => setAppVersion("B1.0.4"));
   }, []);
 
   useEffect(() => {
@@ -392,7 +392,7 @@ export function SettingsPage() {
           saving={saving}
           accentColor={accentColor}
           setAccentColor={setAccentColor}
-          currentBuildId={currentBuildId}
+          appVersion={appVersion}
           setResetResult={setResetResult}
         />
       )}

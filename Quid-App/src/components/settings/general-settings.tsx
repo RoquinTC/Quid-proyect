@@ -71,7 +71,7 @@ type GeneralSettingsProps = {
   saving: boolean;
   accentColor: AccentColor;
   setAccentColor: (accent: AccentColor) => void;
-  currentBuildId: string;
+  appVersion: string;
   setResetResult: (msg: string | null) => void;
 };
 
@@ -109,7 +109,7 @@ export function GeneralSettings({
   saving,
   accentColor,
   setAccentColor,
-  currentBuildId,
+  appVersion,
   setResetResult,
 }: GeneralSettingsProps) {
   const { setTheme: applyTheme } = useTheme();
@@ -499,10 +499,10 @@ export function GeneralSettings({
           </div>
           <p className="text-[11px] font-semibold text-gray-900 dark:text-white">Quid</p>
           <div className="flex flex-col gap-0.5">
-            <p className="text-[11px] text-gray-400">v1.1.0</p>
-            <div className="flex items-center justify-center gap-1.5 opacity-60">
+            <p className="text-[11px] text-gray-400">Versión {appVersion}</p>
+            <div className="flex items-center justify-center gap-1.5 opacity-70">
               <div className="size-1 rounded-full bg-emerald-500 animate-pulse" />
-              <p className="text-[11px] font-mono text-gray-500">Build: {currentBuildId}</p>
+              <p className="text-[11px] text-gray-500">Canal beta Android/PWA</p>
             </div>
           </div>
         </CardContent>

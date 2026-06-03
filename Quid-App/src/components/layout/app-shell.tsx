@@ -27,7 +27,6 @@ import { ModuleErrorBoundary } from "@/components/layout/module-error-boundary";
 import { DiscoveryCoach } from "@/components/discovery/discovery-coach";
 import { AppDeepLinkHandler } from "@/components/layout/app-deep-link-handler";
 import { AchievementsProvider } from "@/hooks/use-achievements";
-import { useUpdateChecker } from "@/hooks/use-update-checker";
 import { motion, AnimatePresence } from "framer-motion";
 
 function ModuleContent() {
@@ -81,9 +80,6 @@ export function AppShell() {
       setActiveModule("dashboard");
     }
   }, [session?.user?.id, setActiveModule]);
-
-  // Check for app updates every 60 seconds
-  useUpdateChecker(60000);
 
   // Track whether the user just logged in (vs page reload with existing session)
   // On page reload with existing session → show lock screen

@@ -1,10 +1,21 @@
 {
-  "currentVersion": "quid-v7-native-android-ready",
+  "currentVersion": "B1.0.4",
   "releases": [
     {
-      "version": "quid-v7-native-android-ready",
+      "version": "B1.0.4",
+      "date": "2026-06-02",
+      "title": "Ingreso con Google listo en Android",
+      "changes": [
+        "Ya puedes iniciar sesión en la APK usando la cuenta de Google configurada en tu teléfono.",
+        "Si tu correo de Google ya existía en Quid, ahora entra a esa misma cuenta sin duplicarla.",
+        "Las cuentas nuevas creadas con Google quedan listas con foto de perfil y sesión móvil persistente.",
+        "El aviso de actualización ahora muestra una versión clara y novedades útiles, sin códigos internos del servidor."
+      ]
+    },
+    {
+      "version": "B1.0.3",
       "date": "2026-06-01",
-      "title": "Acceso más rápido y citas mejor organizadas",
+      "title": "Acceso rápido y citas mejor organizadas",
       "changes": [
         "En Android, ahora puedes desbloquear Quid más rápido usando directamente la huella de tu teléfono.",
         "Al guardar una cita médica puedes añadirla también al calendario sincronizado de tu celular.",
@@ -13,7 +24,7 @@
       ]
     },
     {
-      "version": "quid-v6-server-reminders",
+      "version": "B1.0.2",
       "date": "2026-05-21",
       "title": "Recordatorios reales y metricas de transporte",
       "changes": [
@@ -24,7 +35,7 @@
       ]
     },
     {
-      "version": "quid-v5-offline-login-transport",
+      "version": "B1.0.1",
       "date": "2026-05-21",
       "title": "Login offline y ajustes de transporte",
       "changes": [
@@ -35,7 +46,7 @@
       ]
     },
     {
-      "version": "quid-v4-personalization",
+      "version": "B1.0.0",
       "date": "2026-05-21",
       "title": "Personalizacion visual",
       "changes": [
@@ -46,7 +57,7 @@
       ]
     },
     {
-      "version": "quid-v3-security-sync",
+      "version": "B0.9.2",
       "date": "2026-05-20",
       "title": "Seguridad y sincronizacion offline",
       "changes": [
@@ -57,7 +68,7 @@
       ]
     },
     {
-      "version": "quid-v2-stability",
+      "version": "B0.9.1",
       "date": "2026-05-20",
       "title": "Estabilidad de la PWA",
       "changes": [

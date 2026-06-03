@@ -1,10 +1,11 @@
 /// <reference lib="webworker" />
 
-const CACHE_NAME = 'quid-v7-native-android-ready';
-const STATIC_CACHE = 'quid-static-v7-native-android-ready';
-const DYNAMIC_CACHE = 'quid-dynamic-v7-native-android-ready';
-const API_CACHE = 'quid-api-v7-native-android-ready';
-const AUTH_CACHE = 'quid-auth-v7-native-android-ready';
+const APP_VERSION = 'B1.0.4';
+const CACHE_NAME = `quid-${APP_VERSION}`;
+const STATIC_CACHE = `quid-static-${APP_VERSION}`;
+const DYNAMIC_CACHE = `quid-dynamic-${APP_VERSION}`;
+const API_CACHE = `quid-api-${APP_VERSION}`;
+const AUTH_CACHE = `quid-auth-${APP_VERSION}`;
 
 // Assets to cache on install (app shell)
 const APP_SHELL = [
@@ -347,7 +348,7 @@ self.addEventListener('message', (event) => {
   }
 
   if (event.data?.type === 'GET_VERSION') {
-    event.ports?.[0]?.postMessage({ version: CACHE_NAME });
+    event.ports?.[0]?.postMessage({ version: APP_VERSION });
   }
 
   if (event.data?.type === 'CLEAR_CACHE') {
