@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(QuidBiometricPlugin.class);
         registerPlugin(QuidCalendarPlugin.class);
+        registerPlugin(QuidGoogleAuthPlugin.class);
         super.onCreate(savedInstanceState);
 
         CookieManager cookieManager = CookieManager.getInstance();

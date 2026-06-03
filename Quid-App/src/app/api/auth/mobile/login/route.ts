@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compare } from "bcryptjs";
-import { encode } from "next-auth/jwt";
 import { db } from "@/lib/db";
-
-const MOBILE_SESSION_MAX_AGE = 30 * 24 * 60 * 60;
+import { createMobileSession } from "@/lib/mobile-session";
 
 export async function POST(req: NextRequest) {
   const secret = process.env.NEXTAUTH_SECRET;
@@ -25,32 +23,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Correo o contraseña incorrectos" }, { status: 401 });
   }
 
-  const tokenPayload = {
-    id: user.id,
-    sub: user.id,
-    email: user.email,
-    name: user.name,
-    picture: user.avatar,
-    currency: user.currency,
-    onboardingCompleted: Boolean(user.onboardingCompleted),
-    onboardingStep: user.onboardingStep,
-    pinEnabled: user.settings?.pinEnabled ?? false,
-    biometricEnabled: user.settings?.biometricEnabled ?? false,
-  };
-  const token = await encode({
-    secret,
-    token: tokenPayload,
-    maxAge: MOBILE_SESSION_MAX_AGE,
-  });
-
-  return NextResponse.json({
-    token,
-    session: {
-      user: {
-        ...tokenPayload,
-        image: user.avatar,
-      },
-      expires: new Date(Date.now() + MOBILE_SESSION_MAX_AGE * 1000).toISOString(),
-    },
-  });
+  return NextResponse.json(await createMobileSession(user));
 }

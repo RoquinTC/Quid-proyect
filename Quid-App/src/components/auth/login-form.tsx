@@ -253,6 +253,11 @@ export function LoginForm() {
     const result = await signIn("google");
     if (result?.error === "GoogleNativeUnavailable") {
       toast.info("El ingreso con Google estará disponible cuando terminemos la integración nativa de Android.");
+    } else if (result?.error) {
+      toast.error(result.error);
+    } else if (result?.ok) {
+      await cacheCurrentSessionForOffline();
+      finishSuccessfulLogin("¡Sesión iniciada con Google!");
     }
   };
 

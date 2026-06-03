@@ -4,6 +4,7 @@ import {
   clearMobileSessionToken,
   setMobileSessionToken,
 } from "@/lib/api-url";
+import { signInWithNativeGoogle, signOutFromNativeGoogle } from "@/lib/native/google-auth";
 
 const SessionContext = createContext<any>({ data: null, status: "loading" });
 
@@ -92,15 +93,33 @@ export async function signIn(provider: string, options: any) {
       return { error: String(err) };
     }
   } else if (provider === "google") {
-    // A WebView redirect ends inside the production PWA. Native Google OAuth
-    // needs an Android client, deep link callback and session hand-off first.
-    return { error: "GoogleNativeUnavailable" };
+    try {
+      const googleAccount = await signInWithNativeGoogle();
+      const res = await apiRequest("/api/auth/mobile/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken: googleAccount.idToken }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) {
+        return { error: data.error || "No se pudo iniciar sesion con Google" };
+      }
+
+      setMobileSessionToken(data.token);
+      window.dispatchEvent(new Event("quid-session-refresh"));
+      return { error: null, ok: true, status: res.status, url: data.url };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { error: message || "GoogleNativeUnavailable" };
+    }
   }
 }
 
 export async function signOut(options?: any) {
   console.log("Mock signOut called");
   clearMobileSessionToken();
+  await signOutFromNativeGoogle().catch(() => undefined);
 
   if (options?.redirect !== false) {
     if (typeof window !== "undefined") {
