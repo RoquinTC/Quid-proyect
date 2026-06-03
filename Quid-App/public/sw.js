@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-const APP_VERSION = 'B1.0.4';
+const APP_VERSION = 'B1.0.5';
 const CACHE_NAME = `quid-${APP_VERSION}`;
 const STATIC_CACHE = `quid-static-${APP_VERSION}`;
 const DYNAMIC_CACHE = `quid-dynamic-${APP_VERSION}`;
@@ -146,7 +146,9 @@ self.addEventListener('fetch', (event) => {
 
   // Auth routes need special handling for offline support
   if (strategy === 'auth') {
-    event.respondWith(handleAuthRequest(event.request));
+    if (url.pathname === '/api/auth/session' || url.pathname === '/api/auth/csrf') {
+      event.respondWith(handleAuthRequest(event.request));
+    }
     return;
   }
 

@@ -1,6 +1,16 @@
 {
-  "currentVersion": "B1.0.4",
+  "currentVersion": "B1.0.5",
   "releases": [
+    {
+      "version": "B1.0.5",
+      "date": "2026-06-02",
+      "title": "Ingreso con Google mas estable en la PWA",
+      "changes": [
+        "El boton de Google en la PWA ahora completa mejor el regreso a Quid despues de escoger la cuenta.",
+        "La actualizacion de la app evita mostrar codigos internos y mantiene una version clara en Ajustes.",
+        "La APK queda preparada para mostrar esta misma version al instalar la nueva compilacion."
+      ]
+    },
     {
       "version": "B1.0.4",
       "date": "2026-06-02",

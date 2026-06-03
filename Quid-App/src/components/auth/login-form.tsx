@@ -250,14 +250,23 @@ export function LoginForm() {
   }, []);
 
   const handleGoogleLogin = async () => {
-    const result = await signIn("google");
-    if (result?.error === "GoogleNativeUnavailable") {
-      toast.info("El ingreso con Google estará disponible cuando terminemos la integración nativa de Android.");
-    } else if (result?.error) {
-      toast.error(result.error);
-    } else if (result?.ok) {
-      await cacheCurrentSessionForOffline();
-      finishSuccessfulLogin("¡Sesión iniciada con Google!");
+    setLoading(true);
+    try {
+      const result = await signIn("google", {
+        callbackUrl: "/",
+        redirect: true,
+      });
+
+      if (result?.error === "GoogleNativeUnavailable") {
+        toast.info("El ingreso con Google estará disponible cuando terminemos la integración nativa de Android.");
+      } else if (result?.error) {
+        toast.error(result.error);
+      } else if (result?.ok) {
+        await cacheCurrentSessionForOffline();
+        finishSuccessfulLogin("¡Sesión iniciada con Google!");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

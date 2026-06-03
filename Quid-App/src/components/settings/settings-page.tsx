@@ -54,7 +54,7 @@ export function SettingsPage() {
   const [accentColor, setAccentColor] = useState<AccentColor>("emerald");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [appVersion, setAppVersion] = useState<string>("B1.0.4");
+  const [appVersion, setAppVersion] = useState<string>("B1.0.5");
 
   const mountedRef = useRef(true);
   const [saving, setSaving] = useState(false);
@@ -73,8 +73,8 @@ export function SettingsPage() {
   useEffect(() => {
     fetch("/release-notes.json?" + Date.now())
       .then((res) => res.json())
-      .then((data) => setAppVersion(data.currentVersion || "B1.0.4"))
-      .catch(() => setAppVersion("B1.0.4"));
+      .then((data) => setAppVersion(data.currentVersion || "B1.0.5"))
+      .catch(() => setAppVersion("B1.0.5"));
   }, []);
 
   useEffect(() => {
