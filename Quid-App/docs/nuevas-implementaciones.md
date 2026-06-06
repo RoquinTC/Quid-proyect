@@ -514,6 +514,14 @@ Falta para considerarlo 100%:
 - **Validar reversos financieros de copago en edición/eliminación.**
 - **Ampliar Aura Salud con base de conocimiento controlada y mensajes de seguridad.**
 - **Ampliar catálogo/autocompletado de medicamentos con una fuente más completa y controlada. No basta con agregar una lista manual corta: se necesita estrategia de dataset/API/cache local para nombres comerciales, principios activos y variantes difíciles de escribir.**
+- **Gestor de documentos clínicos y soportes locales/nube:**
+  - Permitir adjuntar o tomar foto/PDF desde el celular para: historias clínicas, órdenes médicas, órdenes de medicamentos, autorizaciones EPS, incapacidades y recibos de pendientes de medicamentos.
+  - Guardar cada archivo enlazado al registro que lo originó: cita, autorización, orden médica, pendiente de farmacia o medicamento.
+  - En primera fase, guardar usando almacenamiento local/app o selector nativo de archivos del teléfono, aprovechando que el usuario puede escoger una carpeta sincronizada por Drive/OneDrive si la tiene instalada en el dispositivo.
+  - Sugerir en la UI, de forma ligera y no invasiva: "Puedes escoger una carpeta sincronizada de Drive o OneDrive si quieres tener respaldo en la nube".
+  - Crear una estructura sugerida de carpetas: `Salud/Ordenes medicas`, `Salud/Ordenes de medicamentos`, `Salud/Autorizaciones`, `Salud/Historias clinicas`, `Salud/Incapacidades` y `Salud/Pendientes medicamentos/Recibos`.
+  - En fase posterior, añadir integración directa con Google Drive/OneDrive para sincronización explícita, selección de cuenta, permisos OAuth y respaldo automático.
+  - Criterio de éxito: desde una cita, autorización u orden se puede ver el documento adjunto, reemplazarlo, eliminarlo y conservar trazabilidad sin romper Finanzas ni inventario.
 
 ### B.3 Notificaciones proactivas / PWA / Oracle
 **Estado:** `70%`
@@ -581,3 +589,110 @@ Criterio de éxito:
 5. **Salud entregas parciales:** pendientes actuales/futuros, adjuntos y recordatorios.
 6. **Responsive QA:** capturas automatizadas y correcciones por viewport.
 7. **Despensa avanzada:** reversos, conversión de unidades y recetas con faltantes.
+
+## E. Snapshot de auditoría vigente - 2026-06-06
+
+Esta sección deja evidenciado el estado real revisado en código para no depender del historial del chat.
+
+### E.1 Salud
+
+Ya existe base real:
+- Medicamentos con inventario, dosis, horarios y recordatorios.
+- Citas médicas.
+- Copagos conectados a Finanzas.
+- Órdenes médicas con ítems, cantidad formulada, entregada y pendiente.
+- Autorizaciones EPS.
+- Pestaña de pendientes de farmacia.
+- Campo básico `receiptUrl`/`receiptThumbnail` para soporte o recibo.
+
+Falta complementar:
+- Gestor real de documentos clínicos con archivo/foto/PDF, vista previa, reemplazo, eliminación y enlace al registro origen.
+- Estructura de carpetas sugeridas: historias clínicas, órdenes médicas, órdenes de medicamentos, autorizaciones, incapacidades y recibos de pendientes.
+- Flujo más completo de entregas parciales de farmacia.
+- Recordatorios insistentes para citas, medicamentos, autorizaciones próximas a vencer y pendientes por reclamar.
+
+### E.2 Notificaciones
+
+Ya existe base real:
+- Modelo `PushSubscription`.
+- APIs de suscripción push.
+- Endpoint `/api/push/reminders`.
+- Servicio `server-reminders`.
+- Notificaciones internas y push.
+- Digest de Aura.
+
+Falta complementar:
+- Validación real en Android con app cerrada.
+- Registro de último cron exitoso.
+- Panel admin con estado de cron/push/digest.
+- Integrar hidratación a recordatorios.
+- Sonidos personalizados nativos en APK para medicamentos y otros recordatorios.
+
+### E.3 Aura
+
+Ya existe base real:
+- Chat interno.
+- Vinculación Telegram por `telegramId`.
+- Digest.
+- Lectura parcial de contexto de Quid.
+- Herramientas iniciadas en `src/lib/aura/tools`, incluyendo registro de transacciones y tanqueo.
+
+Falta complementar:
+- Gateway formal de herramientas.
+- JSON Schemas para cada tool.
+- Máquina de estados de confirmación con botones.
+- Herramientas de lectura/escritura para finanzas, transporte, salud, despensa, hidratación y recordatorios.
+- Recordatorios o avisos por Telegram cuando corresponda.
+
+### E.4 Despensa
+
+Ya existe base real:
+- Inventario.
+- Listas de mercado.
+- Confirmación de compras.
+- Integración con Finanzas.
+- Perfiles de salud.
+- Recetas.
+- Conversor de unidades en UI.
+
+Falta complementar:
+- Conversión real con historial de precios.
+- Reversar compras confirmadas restaurando inventario, saldo/deuda y presupuesto.
+- Recetas más inteligentes con stock, faltantes y restricciones.
+- Comparativos de precios por producto y periodo.
+
+### E.5 Transporte
+
+Ya existe base real:
+- Vehículos, imagen/foto, documentos, combustible, mantenimiento y recordatorios.
+- Pago predeterminado por vehículo.
+- Aura Quick Log para tanqueos.
+- Recordatorios por fecha, kilometraje o híbridos.
+- Historial y tabs por resumen, combustible, mantenimiento y recordatorios.
+
+Falta complementar:
+- QA visual en móviles pequeños.
+- Validación de notificaciones con app cerrada.
+- Historial compacto y más consultable.
+- Lectura de recibos/fotos con Aura en una fase posterior.
+
+### E.6 Local-first / Offline
+
+Ya existe base real:
+- Dexie/IndexedDB en `src/lib/local/db.ts`.
+- Cola de mutaciones.
+- Motor de sincronización.
+- APIs `/api/sync/initial` y `/api/sync/pull`.
+
+Falta complementar:
+- Auditar qué formularios y vistas usan realmente el flujo local-first.
+- Migrar escrituras críticas a cola offline.
+- Probar conflictos, reintentos y reconciliación.
+- Activarlo por fases porque toca saldos, deudas y presupuesto.
+
+### E.7 Recomendación de siguiente bloque
+
+El siguiente bloque recomendado es **Salud documentos + recordatorios reales**:
+- Aprovecha bases existentes de salud, órdenes, autorizaciones, pendientes, push y Aura.
+- Aporta valor diario sin abrir una migración riesgosa.
+- Permite primera fase local con selector nativo del celular y, más adelante, integración directa con Drive/OneDrive.
