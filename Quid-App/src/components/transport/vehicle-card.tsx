@@ -22,6 +22,7 @@ interface VehicleCardProps {
     currentKm: number;
     icon?: string | null;
     plate?: string | null;
+    photoUrl?: string | null;
     fuelLogs: Array<{
       id: string;
       date: string;
@@ -160,12 +161,21 @@ export function VehicleCard({ vehicle, onClick, onKmUpdated, currentFuelPrice }:
         whileTap={{ scale: 0.98 }}
         whileHover={{ scale: 1.01 }}
       >
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="quid-theme-card overflow-hidden rounded-2xl border shadow-md">
           {/* Header with gradient */}
           <div
-            className={`bg-gradient-to-r ${isLowFuel ? "from-red-500 to-orange-500" : gradient} p-4 relative overflow-hidden cursor-pointer`}
+            className={`relative cursor-pointer overflow-hidden p-4 ${vehicle.photoUrl ? "bg-slate-950" : `bg-gradient-to-r ${isLowFuel ? "from-red-500 to-orange-500" : gradient}`}`}
             onClick={onClick}
           >
+            {vehicle.photoUrl && (
+              <>
+                <div
+                  className="absolute inset-0 bg-cover bg-center opacity-75"
+                  style={{ backgroundImage: `url(${vehicle.photoUrl})` }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/86 via-slate-950/52 to-slate-950/20" />
+              </>
+            )}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-3">

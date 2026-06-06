@@ -478,6 +478,7 @@ export const vehicleCreateSchema = z.object({
   currentKm: z.number().optional().default(0),
   icon: z.string().nullable().optional(),
   plate: z.string().nullable().optional(),
+  photoUrl: z.string().nullable().optional(),
 });
 
 export const vehicleUpdateSchema = z.object({
@@ -492,6 +493,7 @@ export const vehicleUpdateSchema = z.object({
   currentKm: z.number().optional(),
   icon: z.string().nullable().optional(),
   plate: z.string().nullable().optional(),
+  photoUrl: z.string().nullable().optional(),
 });
 
 const vehicleReminderBaseObject = z.object({

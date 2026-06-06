@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useAppSession } from "@/lib/use-app-session";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +32,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { isNativeAndroid, isNativeBiometricAvailable } from "@/lib/native/biometric";
 
 export function SecuritySettings() {
+  const { session } = useAppSession();
+  const userId = session?.user?.id;
   const [status, setStatus] = useState<SecurityStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -49,16 +52,19 @@ export function SecuritySettings() {
   const [deletingCredentialId, setDeletingCredentialId] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
+    if (!userId) return;
     setLoading(true);
     try {
-      const data = await apiFetch<SecurityStatus>("/api/auth/security/status");
+      const data = await apiFetch<SecurityStatus>("/api/auth/security/status", {
+        headers: { "x-user-id": userId },
+      });
       setStatus(data);
     } catch (err) {
       console.error("Error fetching security status:", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     fetchStatus();
@@ -84,6 +90,7 @@ export function SecuritySettings() {
     try {
       await apiFetch("/api/auth/pin/setup", {
         method: "POST",
+        headers: userId ? { "x-user-id": userId } : undefined,
         body: JSON.stringify({ pin }),
       });
       toast.success("PIN configurado exitosamente");
@@ -97,13 +104,14 @@ export function SecuritySettings() {
     } finally {
       setSaving(false);
     }
-  }, [pinStep, firstPin, fetchStatus]);
+  }, [pinStep, firstPin, userId, fetchStatus]);
 
   const handlePinDisable = useCallback(async (pin: string) => {
     setSaving(true);
     try {
       const result = await apiFetch<{ success: boolean; error?: string }>("/api/auth/pin/disable", {
         method: "POST",
+        headers: userId ? { "x-user-id": userId } : undefined,
         body: JSON.stringify({ pin }),
       });
       if (result.success) {
@@ -119,7 +127,7 @@ export function SecuritySettings() {
     } finally {
       setSaving(false);
     }
-  }, [fetchStatus]);
+  }, [userId, fetchStatus]);
 
   // ── Biometric ──
 
@@ -133,6 +141,7 @@ export function SecuritySettings() {
         }
         await apiFetch("/api/settings", {
           method: "PUT",
+          headers: userId ? { "x-user-id": userId } : undefined,
           body: JSON.stringify({ biometricEnabled: true }),
         });
         toast.success("Biometría nativa activada");
@@ -141,7 +150,9 @@ export function SecuritySettings() {
       }
 
       // Step 1: Get registration options
-      const options = await apiFetch<any>("/api/auth/webauthn/register-options");
+      const options = await apiFetch<any>("/api/auth/webauthn/register-options", {
+        headers: userId ? { "x-user-id": userId } : undefined,
+      });
 
       // Step 2: Call browser WebAuthn API
       const regResp = await startRegistration({ optionsJSON: options });
@@ -149,6 +160,7 @@ export function SecuritySettings() {
       // Step 3: Verify and save
       await apiFetch("/api/auth/webauthn/register-verify", {
         method: "POST",
+        headers: userId ? { "x-user-id": userId } : undefined,
         body: JSON.stringify({
           credential: regResp,
           name: "Mi huella",
@@ -167,13 +179,14 @@ export function SecuritySettings() {
     } finally {
       setSaving(false);
     }
-  }, [fetchStatus]);
+  }, [userId, fetchStatus]);
 
   const handleDeleteCredential = useCallback(async (credentialId: string) => {
     setSaving(true);
     try {
       await apiFetch("/api/auth/webauthn/delete-credential", {
         method: "DELETE",
+        headers: userId ? { "x-user-id": userId } : undefined,
         body: JSON.stringify({ credentialId }),
       });
       toast.success("Dispositivo eliminado");
@@ -184,7 +197,7 @@ export function SecuritySettings() {
     } finally {
       setSaving(false);
     }
-  }, [fetchStatus]);
+  }, [userId, fetchStatus]);
 
   // ── Lock on resume ──
 
@@ -193,6 +206,7 @@ export function SecuritySettings() {
     try {
       await apiFetch("/api/settings", {
         method: "PUT",
+        headers: userId ? { "x-user-id": userId } : undefined,
         body: JSON.stringify({ lockOnResume: value }),
       });
       fetchStatus();
@@ -201,7 +215,7 @@ export function SecuritySettings() {
     } finally {
       setSaving(false);
     }
-  }, [fetchStatus]);
+  }, [userId, fetchStatus]);
 
   // ── Toggle PIN ──
 
@@ -227,6 +241,7 @@ export function SecuritySettings() {
         setSaving(true);
         apiFetch("/api/settings", {
           method: "PUT",
+          headers: userId ? { "x-user-id": userId } : undefined,
           body: JSON.stringify({ biometricEnabled: false }),
         })
           .then(() => {
@@ -246,6 +261,7 @@ export function SecuritySettings() {
           status.credentials.map((c) =>
             apiFetch("/api/auth/webauthn/delete-credential", {
               method: "DELETE",
+              headers: userId ? { "x-user-id": userId } : undefined,
               body: JSON.stringify({ credentialId: c.id }),
             })
           )
@@ -258,7 +274,7 @@ export function SecuritySettings() {
           .finally(() => setSaving(false));
       }
     }
-  }, [status, handleBiometricRegister, fetchStatus]);
+  }, [userId, status, handleBiometricRegister, fetchStatus]);
 
   if (loading) {
     return (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSession } from "next-auth/react";
+import { useAppSession } from "@/lib/use-app-session";
 import { PinPad } from "./pin-pad";
 import { BiometricPrompt } from "./biometric-prompt";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,7 +18,7 @@ interface LockScreenProps {
 type AuthMethod = "choose" | "biometric" | "pin";
 
 export function LockScreen({ onUnlock }: LockScreenProps) {
-  const { data: session } = useSession();
+  const { session } = useAppSession();
   const [method, setMethod] = useState<AuthMethod>("choose");
   const [pinError, setPinError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -47,6 +47,7 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
       // Try online verification first
       const result = await apiFetch<{ success: boolean; error?: string }>("/api/auth/pin/verify", {
         method: "POST",
+        headers: userId ? { "x-user-id": userId } : undefined,
         body: JSON.stringify({ pin }),
       });
 
@@ -54,7 +55,9 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
         // Online verification succeeded — cache the pin hash for offline use
         if (userId) {
           try {
-            const settings = await apiFetch<{ pinHash?: string }>("/api/settings");
+            const settings = await apiFetch<{ pinHash?: string }>("/api/settings", {
+              headers: { "x-user-id": userId }
+            });
             if (settings.pinHash) {
               cacheOfflinePinHash(userId, settings.pinHash);
             }

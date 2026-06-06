@@ -1,7 +1,7 @@
 "use client";
 
 import { useAppStore, type ModuleType } from "@/lib/store";
-import { Wallet, Bike, Heart, ShoppingBasket } from "lucide-react";
+import { Wallet, Car, Heart, ShoppingBasket } from "lucide-react";
 import { motion } from "framer-motion";
 import { QuickActionFab } from "@/components/layout/quick-action-fab";
 
@@ -11,7 +11,7 @@ const navItems: {
   icon: typeof Wallet;
 }[] = [
   { id: "finance", label: "Finanzas", icon: Wallet },
-  { id: "transport", label: "Transporte", icon: Bike },
+  { id: "transport", label: "Transporte", icon: Car },
   { id: "health", label: "Salud", icon: Heart },
   { id: "pantry", label: "Despensa", icon: ShoppingBasket },
 ];

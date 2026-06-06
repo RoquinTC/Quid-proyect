@@ -102,6 +102,8 @@ interface AppState {
   setSyncStatus: (syncing: boolean) => void;
   pendingCount: number;
   setPendingCount: (count: number) => void;
+
+
   lastSyncAt: number | null;
   setLastSyncAt: (date: number) => void;
 
@@ -110,6 +112,10 @@ interface AppState {
   // Cleared automatically when next-auth session is restored
   offlineSession: CachedSession | null;
   setOfflineSession: (session: CachedSession | null) => void;
+
+  // Dashboard Widgets layout
+  dashboardWidgets: string[];
+  setDashboardWidgets: (widgets: string[]) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -197,17 +203,30 @@ export const useAppStore = create<AppState>()(
       // Offline session
       offlineSession: null,
       setOfflineSession: (session) => set({ offlineSession: session }),
+
+      // Dashboard Widgets Layout
+      dashboardWidgets: ["finance", "stats", "transport", "water", "aura", "actions"],
+      setDashboardWidgets: (widgets) => set({ dashboardWidgets: widgets }),
     }),
     {
       name: "quid-store",
       storage: createJSONStorage(() => localStorage),
-      // Only persist notifications and user preferences — not transient UI state
       partialize: (state) => ({
         notifications: state.notifications,
         theme: state.theme,
         currency: state.currency,
         offlineSession: state.offlineSession,
+        dashboardWidgets: state.dashboardWidgets,
       }),
+      version: 1,
+      migrate: (persistedState: any, version: number) => {
+        if (version === 0 || !version) {
+          if (persistedState && persistedState.dashboardWidgets && !persistedState.dashboardWidgets.includes("water")) {
+            persistedState.dashboardWidgets.push("water");
+          }
+        }
+        return persistedState;
+      },
     }
   )
 );

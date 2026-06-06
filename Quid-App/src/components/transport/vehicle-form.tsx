@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
 import { VehicleIcon, availableIconKeys, iconLabels } from "./vehicle-icon";
 
@@ -35,6 +35,10 @@ const fuelTypes = [
   { value: "diesel", label: "Diésel" },
   { value: "electric", label: "Eléctrico" },
 ];
+
+const MAX_PHOTO_INPUT_MB = 12;
+const MAX_PHOTO_EDGE = 1400;
+const PHOTO_QUALITY = 0.78;
 
 interface VehicleFormProps {
   open: boolean;
@@ -52,6 +56,7 @@ interface VehicleFormProps {
     currentKm: number;
     icon?: string | null;
     plate?: string | null;
+    photoUrl?: string | null;
   } | null;
   onSuccess?: () => void;
 }
@@ -70,6 +75,7 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
   const [fuelType, setFuelType] = useState(vehicle?.fuelType || "gasoline");
   const [currentKm, setCurrentKm] = useState(vehicle?.currentKm?.toString() || "0");
   const [icon, setIcon] = useState(vehicle?.icon || "");
+  const [photoUrl, setPhotoUrl] = useState(vehicle?.photoUrl || "");
 
   // Sync form state when vehicle prop changes (e.g., editing a different vehicle)
   useEffect(() => {
@@ -85,11 +91,65 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
       setFuelType(vehicle?.fuelType || "gasoline");
       setCurrentKm(vehicle?.currentKm?.toString() || "0");
       setIcon(vehicle?.icon || "");
+      setPhotoUrl(vehicle?.photoUrl || "");
       setError(null);
     }
   }, [vehicle, open]);
 
   const isEditing = !!vehicle;
+
+  const compressVehiclePhoto = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const image = new Image();
+        image.onload = () => {
+          const scale = Math.min(1, MAX_PHOTO_EDGE / Math.max(image.width, image.height));
+          const width = Math.max(1, Math.round(image.width * scale));
+          const height = Math.max(1, Math.round(image.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const context = canvas.getContext("2d");
+          if (!context) {
+            reject(new Error("No se pudo preparar la imagen"));
+            return;
+          }
+          context.drawImage(image, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", PHOTO_QUALITY));
+        };
+        image.onerror = () => reject(new Error("No se pudo leer la imagen"));
+        if (typeof reader.result === "string") image.src = reader.result;
+      };
+      reader.onerror = () => reject(new Error("No se pudo cargar la foto"));
+      reader.readAsDataURL(file);
+    });
+
+  const handlePhotoFile = async (file?: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Archivo no válido", {
+        description: "Selecciona una imagen en formato JPG, PNG o WebP.",
+      });
+      return;
+    }
+    if (file.size > MAX_PHOTO_INPUT_MB * 1024 * 1024) {
+      toast.error("Imagen muy pesada", {
+        description: `Usa una imagen de máximo ${MAX_PHOTO_INPUT_MB} MB.`,
+      });
+      return;
+    }
+
+    try {
+      const compressed = await compressVehiclePhoto(file);
+      setPhotoUrl(compressed);
+      toast.success("Foto optimizada", {
+        description: "La imagen se redujo para que Quid siga liviana.",
+      });
+    } catch (photoError) {
+      toast.error(photoError instanceof Error ? photoError.message : "No se pudo cargar la foto");
+    }
+  };
 
   const handleSubmit = async () => {
     if (!name) return;
@@ -108,6 +168,7 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
         fuelType,
         currentKm: currentKm ? Number(currentKm) : 0,
         icon: icon || null,
+        photoUrl: photoUrl || null,
       };
 
       if (isEditing) {
@@ -155,6 +216,7 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
       setFuelType("gasoline");
       setCurrentKm("0");
       setIcon("");
+      setPhotoUrl("");
     }
   };
 
@@ -223,6 +285,57 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Photo */}
+          <div className="space-y-2">
+            <Label>Foto del vehículo</Label>
+            <div className="overflow-hidden rounded-2xl border border-dashed border-cyan-300/70 bg-cyan-50/40 dark:border-cyan-700/50 dark:bg-cyan-950/20">
+              {photoUrl ? (
+                <div className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photoUrl}
+                    alt="Vista previa del vehículo"
+                    className="h-36 w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPhotoUrl("")}
+                    className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur transition hover:bg-black/75"
+                    aria-label="Quitar foto"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 px-4 py-6 text-center">
+                  <span className="flex size-12 items-center justify-center rounded-2xl bg-cyan-500/12 text-cyan-600 dark:text-cyan-300">
+                    <ImagePlus className="size-6" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">Cargar desde tu dispositivo</span>
+                  <span className="text-[11px] text-gray-500">
+                    JPG, PNG o WebP. Hasta {MAX_PHOTO_INPUT_MB} MB; Quid la optimiza.
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(event) => handlePhotoFile(event.target.files?.[0])}
+                  />
+                </label>
+              )}
+            </div>
+            <Input
+              id="vehicle-photo"
+              placeholder="O pega una URL de imagen"
+              value={photoUrl.startsWith("data:") ? "" : photoUrl}
+              onChange={(e) => setPhotoUrl(e.target.value)}
+              className="rounded-xl"
+            />
+            <p className="text-[10px] text-gray-500">
+              La foto se verá en el detalle y en tarjetas destacadas del módulo.
+            </p>
           </div>
 
           {/* Brand & Model */}

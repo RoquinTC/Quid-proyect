@@ -40,6 +40,7 @@ import {
   Palette,
   Check,
   Trophy,
+  Sparkles,
 } from "lucide-react";
 import { BackupManager } from "@/components/settings/backup-manager";
 import { AchievementsView } from "@/components/settings/achievements-view";
@@ -63,6 +64,15 @@ import {
   storeAccent,
   type AccentColor,
 } from "@/lib/personalization";
+import {
+  readStoredTheme,
+  storeTheme,
+  applyTheme as applyThemeConfig,
+  getRecommendedThemeModeForPalette,
+  type ThemeConfig,
+  type ThemeFinish,
+  type ThemePalette,
+} from "@/lib/theme-engine";
 import type { UserSettings } from "@/lib/types";
 
 type GeneralSettingsProps = {
@@ -114,6 +124,7 @@ export function GeneralSettings({
 }: GeneralSettingsProps) {
   const { setTheme: applyTheme } = useTheme();
   const push = usePushNotifications();
+  const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme());
 
   // Dialog states
   const [showResetFinanceDialog, setShowResetFinanceDialog] = useState(false);
@@ -130,6 +141,24 @@ export function GeneralSettings({
     storeAccent(accent);
     applyAccent(accent);
     setResetResult("Color de acento actualizado");
+    setTimeout(() => setResetResult(null), 2000);
+  };
+
+  const updateVisualTheme = async (palette: ThemePalette) => {
+    const recommendedMode = getRecommendedThemeModeForPalette(palette);
+    const newConfig = { ...themeConfig, palette };
+
+    setThemeConfig(newConfig);
+    storeTheme(newConfig);
+    applyThemeConfig(newConfig);
+    applyTheme(recommendedMode);
+    await updateSetting("theme", recommendedMode);
+
+    setResetResult(
+      recommendedMode === "oled"
+        ? "Tema visual aplicado en modo OLED"
+        : "Tema visual aplicado en modo claro"
+    );
     setTimeout(() => setResetResult(null), 2000);
   };
 
@@ -220,6 +249,83 @@ export function GeneralSettings({
                         <SelectItem value="dark">Oscuro</SelectItem>
                         <SelectItem value="oled">OLED</SelectItem>
                         <SelectItem value="system">Sistema</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tema visual */}
+              <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="size-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                        <Palette className="size-3.5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">Tema visual</p>
+                        <p className="text-xs text-gray-400">Ambiente completo de la app</p>
+                      </div>
+                    </div>
+                    <Select
+                      value={themeConfig.palette}
+                      onValueChange={(val: ThemePalette) => {
+                        void updateVisualTheme(val);
+                      }}
+                    >
+                      <SelectTrigger className="w-32 rounded-xl text-xs h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Quid</SelectItem>
+                        <SelectItem value="dracula">Drácula nocturno</SelectItem>
+                        <SelectItem value="cyberpunk">Punk neón OLED</SelectItem>
+                        <SelectItem value="romantic">Romántico</SelectItem>
+                        <SelectItem value="ocean">Océano</SelectItem>
+                        <SelectItem value="forest">Bosque</SelectItem>
+                        <SelectItem value="sunset">Atardecer</SelectItem>
+                        <SelectItem value="aurora">Aurora</SelectItem>
+                        <SelectItem value="zen">Zen</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Acabado del Tema */}
+              <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="size-8 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center">
+                        <Sparkles className="size-3.5 text-pink-600 dark:text-pink-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">Estilo de Acabado</p>
+                        <p className="text-xs text-gray-400">Materiales y profundidad visual</p>
+                      </div>
+                    </div>
+                    <Select
+                      value={themeConfig.finish}
+                      onValueChange={(val: ThemeFinish) => {
+                        const newConfig = { ...themeConfig, finish: val };
+                        setThemeConfig(newConfig);
+                        storeTheme(newConfig);
+                        applyThemeConfig(newConfig);
+                        setResetResult("Estilo de acabado actualizado");
+                        setTimeout(() => setResetResult(null), 2000);
+                      }}
+                    >
+                      <SelectTrigger className="w-32 rounded-xl text-xs h-8">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="flat">Mate</SelectItem>
+                        <SelectItem value="glass">Cristal</SelectItem>
+                        <SelectItem value="neon">Neón</SelectItem>
+                        <SelectItem value="soft3d">3D suave</SelectItem>
+                        <SelectItem value="liquid">Líquido</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

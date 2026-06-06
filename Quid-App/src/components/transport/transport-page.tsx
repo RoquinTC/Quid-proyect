@@ -139,6 +139,7 @@ type VehicleWithDetails = Vehicle & {
   isLowFuel?: boolean;
   isLearning?: boolean;
   lastPricePerGallon?: number;
+  photoUrl?: string | null;
 };
 
 type TimelineEntry = {
@@ -219,6 +220,7 @@ export function TransportPage() {
   // Reminders expanded state
   const [showReminderDetails, setShowReminderDetails] = useState(false);
   const [transportTab, setTransportTab] = useState<TransportTab>("summary");
+  const [visibleMainCount, setVisibleMainCount] = useState(15);
 
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<{ type: "fuel" | "maintenance" | "vehicle" | "document" | "reminder"; id: string; vehicleId?: string } | null>(null);
@@ -313,7 +315,7 @@ export function TransportPage() {
   const groupedTimeline = useCallback(() => {
     const groups: { month: string; entries: TimelineEntry[] }[] = [];
     let currentMonth = "";
-    for (const entry of visibleTimeline) {
+    for (const entry of visibleTimeline.slice(0, visibleMainCount)) {
       const d = new Date(entry.date);
       const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
       const monthLabel = d.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
@@ -324,7 +326,7 @@ export function TransportPage() {
       groups[groups.length - 1].entries.push(entry);
     }
     return groups;
-  }, [visibleTimeline]);
+  }, [visibleTimeline, visibleMainCount]);
 
   // ─── Sidebar quick-action listener ──────────────────────────────
   useEffect(() => {
@@ -691,13 +693,13 @@ export function TransportPage() {
   return (
     <div className="flex flex-col h-full">
       {/* ─── Header: Vehicle Selector ──────────────────────────── */}
-      <div className="px-4 pt-3 pb-2 bg-white dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800">
+      <div className="px-4 pt-3 pb-3 border-b border-border/45 bg-background/35 backdrop-blur-xl">
         <div className="flex items-center gap-2">
           <Select
             value={selectedVehicleId || ""}
             onValueChange={setSelectedVehicleId}
           >
-            <SelectTrigger className="rounded-xl border-0 bg-gray-100 dark:bg-gray-800 h-10 font-semibold text-sm flex-1">
+            <SelectTrigger className="rounded-xl border border-white/10 bg-background/45 h-10 font-semibold text-sm flex-1 backdrop-blur">
               <div className="flex items-center gap-2">
                 {selectedVehicle && (
                   <VehicleIcon icon={selectedVehicle.icon} type={selectedVehicle.type} className="size-4 text-cyan-500" />
@@ -756,6 +758,54 @@ export function TransportPage() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {selectedVehicle && (
+          <button
+            type="button"
+            onClick={() => setDetailVehicleId(selectedVehicle.id)}
+            className="group relative mt-3 w-full overflow-hidden rounded-[1.6rem] border border-white/15 text-left shadow-xl shadow-cyan-950/10"
+          >
+            <div
+              className={`absolute inset-0 ${selectedVehicle.photoUrl ? "bg-slate-950" : `bg-gradient-to-br ${vehicleGradients[selectedVehicle.type] || vehicleGradients.other}`}`}
+            />
+            {selectedVehicle.photoUrl && (
+              <>
+                <div
+                  className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+                  style={{ backgroundImage: `url(${selectedVehicle.photoUrl})` }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/86 via-slate-950/48 to-slate-950/18" />
+              </>
+            )}
+            {!selectedVehicle.photoUrl && (
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_86%_12%,rgba(255,255,255,0.28),transparent_34%),radial-gradient(circle_at_12%_80%,rgba(255,255,255,0.16),transparent_30%)]" />
+            )}
+            <div className="relative z-10 flex min-h-[132px] items-end justify-between gap-3 p-4 text-white">
+              <div className="min-w-0">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/16 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] backdrop-blur">
+                  <VehicleIcon icon={selectedVehicle.icon} type={selectedVehicle.type} className="size-3.5" />
+                  {vehicleTypeLabels[selectedVehicle.type] || selectedVehicle.type}
+                </div>
+                <h2 className="truncate text-2xl font-black tracking-tight">{selectedVehicle.name}</h2>
+                <p className="mt-1 text-xs font-medium text-white/76">
+                  {selectedVehicle.brand || selectedVehicle.model
+                    ? `${selectedVehicle.brand || ""} ${selectedVehicle.model || ""}`.trim()
+                    : "Perfil de vehículo"}
+                  {selectedVehicle.year ? ` · ${selectedVehicle.year}` : ""}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                {selectedVehicle.plate && (
+                  <div className="mb-2 rounded-xl bg-white/92 px-3 py-1 text-sm font-black uppercase tracking-wider text-slate-900 shadow-lg">
+                    {selectedVehicle.plate}
+                  </div>
+                )}
+                <p className="text-[11px] text-white/70">Kilometraje</p>
+                <p className="text-sm font-black">{(selectedVehicle.currentKm ?? 0).toLocaleString("es-CO")} km</p>
+              </div>
+            </div>
+          </button>
+        )}
 
         {/* ─── Compact Indicators Row ─────────────────────────── */}
         {selectedVehicle && (
@@ -838,7 +888,7 @@ export function TransportPage() {
           <AuraQuickLog onSuccess={handleDataRefresh} />
         </div>
 
-        <div className="mt-3 flex gap-1 overflow-x-auto rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
+        <div className="mt-3 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-background/35 p-1 backdrop-blur">
           {transportTabs.map((tab) => {
             const Icon = tab.icon;
             const active = transportTab === tab.id;
@@ -853,7 +903,7 @@ export function TransportPage() {
                 }}
                 className={`flex min-w-fit flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
                   active
-                    ? "bg-white text-cyan-700 shadow-sm dark:bg-gray-950 dark:text-cyan-300"
+                    ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
                 }`}
               >
@@ -890,18 +940,18 @@ export function TransportPage() {
                 className="overflow-hidden"
               >
                 <div className="px-4 pt-3 pb-2">
-                  <div className={`rounded-2xl bg-gradient-to-br ${getFuelGradientBg(fuelLevel)} border border-gray-100 dark:border-gray-700 p-4`}>
+                  <div className="quid-theme-widget rounded-[1.6rem] p-4">
                     {/* Header row */}
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <div className={`size-8 rounded-xl flex items-center justify-center ${getFuelColor(fuelLevel)}`}>
+                        <div className={`size-9 rounded-2xl flex items-center justify-center ${getFuelColor(fuelLevel)} shadow-lg`}>
                           <Fuel className="size-4 text-white" />
                         </div>
                         <div>
-                          <h3 className="text-sm font-bold text-gray-900 dark:text-white">Estado del Combustible</h3>
-                          {lastKmUpdateLabel && (
-                            <p className="text-xs text-gray-400">{lastKmUpdateLabel}</p>
-                          )}
+                          <h3 className="text-sm font-black text-foreground">Tanque inteligente</h3>
+                          <p className="text-xs text-muted-foreground">
+                            {lastKmUpdateLabel || "Nivel, autonomía y costo estimado"}
+                          </p>
                         </div>
                       </div>
                       {transportTab !== "summary" && (
@@ -925,7 +975,7 @@ export function TransportPage() {
                           </div>
                           <div className="flex-1">
                             {/* Fuel bar large */}
-                            <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-1.5">
+                            <div className="w-full h-4 bg-background/45 rounded-full overflow-hidden mb-1.5 border border-white/10 shadow-inner">
                               <motion.div
                                 className={`h-full rounded-full ${getFuelColor(fuelLevel)}`}
                                 initial={{ width: 0 }}
@@ -933,7 +983,7 @@ export function TransportPage() {
                                 transition={{ duration: 0.8, ease: "easeOut" }}
                               />
                             </div>
-                            <div className="flex justify-between text-[11px] text-gray-400">
+                            <div className="flex justify-between text-[11px] text-muted-foreground">
                               <span>0 gal</span>
                               <span>{tankCapacity} gal</span>
                             </div>
@@ -1665,6 +1715,19 @@ export function TransportPage() {
                 </div>
               </div>
             ))}
+            
+            {visibleMainCount < visibleTimeline.length && (
+              <div className="mt-4 flex justify-center pb-8">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="rounded-xl border-dashed bg-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white"
+                  onClick={() => setVisibleMainCount(v => v + 15)}
+                >
+                  Cargar más registros
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1851,7 +1914,7 @@ function TimelineCard({
   const DocIcon = isDoc ? (docTypeIcons[entry.docType || ""] || FileText) : FileText;
 
   return (
-    <div className="relative">
+    <motion.div layout layoutId={`timeline-card-${entry.id}`} className="relative">
       {/* Timeline dot */}
       <div className={`absolute -left-7 top-3 size-5 rounded-full flex items-center justify-center ${
         isFuel
@@ -1985,7 +2048,7 @@ function TimelineCard({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -2014,6 +2077,7 @@ function VehicleDetailView({
   const [showDocumentForm, setShowDocumentForm] = useState(false);
   const [editDocument, setEditDocument] = useState<VehicleDocument | null>(null);
   const [showKmUpdate, setShowKmUpdate] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(15);
 
   const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
   const fuelLevel = vehicle.fuelLevel ?? 0;
@@ -2122,26 +2186,50 @@ function VehicleDetailView({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className={`bg-gradient-to-r ${gradient} px-4 pt-3 pb-4`}>
-        <div className="flex items-center gap-2 mb-3">
-          <Button variant="ghost" size="icon" className="size-8 rounded-xl text-white/80 hover:bg-white/10" onClick={onBack}>
-            <ArrowLeft className="size-5" />
-          </Button>
-          <div className="flex-1">
-            <h2 className="text-lg font-bold text-white">{vehicle.name}</h2>
-            <p className="text-xs text-white/70">
+      {/* Header with Photo Support */}
+      <div 
+        className={`relative px-4 pt-3 pb-4 overflow-hidden ${!vehicle.photoUrl ? `bg-gradient-to-r ${gradient}` : "bg-gray-900"}`}
+        style={vehicle.photoUrl ? { minHeight: "220px" } : undefined}
+      >
+        {vehicle.photoUrl && (
+          <>
+            <div 
+              className="absolute inset-0 bg-cover bg-center z-0 opacity-70 mix-blend-overlay"
+              style={{ backgroundImage: `url(${vehicle.photoUrl})` }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent z-0" />
+            <div className="absolute inset-0 bg-gradient-to-b from-gray-900/50 to-transparent z-0" />
+          </>
+        )}
+
+        <div className="relative z-10 flex flex-col h-full justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <Button variant="ghost" size="icon" className="size-8 rounded-xl text-white/80 hover:bg-white/20 backdrop-blur-md" onClick={onBack}>
+              <ArrowLeft className="size-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="size-8 rounded-xl text-white/80 hover:bg-white/20 backdrop-blur-md" onClick={() => onEditVehicle(vehicle)}>
+              <Pencil className="size-4" />
+            </Button>
+          </div>
+
+          <div className={vehicle.photoUrl ? "mt-16 mb-4" : "flex-1 mb-3"}>
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-black text-white tracking-tight">{vehicle.name}</h2>
+              {vehicle.plate && (
+                <span className="rounded bg-white/25 backdrop-blur-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white">
+                  {vehicle.plate}
+                </span>
+              )}
+            </div>
+            <p className="text-sm font-medium text-white/80 mt-1">
               {vehicle.brand && vehicle.model ? `${vehicle.brand} ${vehicle.model}` : vehicleTypeLabels[vehicle.type]}
               {vehicle.year ? ` ${vehicle.year}` : ""}
             </p>
           </div>
-          <Button variant="ghost" size="icon" className="size-8 rounded-xl text-white/80 hover:bg-white/10" onClick={() => onEditVehicle(vehicle)}>
-            <Pencil className="size-4" />
-          </Button>
         </div>
 
         {/* Compact stats row */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative z-10 flex items-center gap-3 flex-wrap mt-auto pt-2">
           {/* KM */}
           <button
             className="flex items-center gap-1.5 bg-white/15 rounded-lg px-2.5 py-1.5 backdrop-blur-sm"
@@ -2480,7 +2568,7 @@ function VehicleDetailView({
             <div className="relative pl-7">
               <div className="absolute left-3 top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-700" />
               <div className="space-y-2">
-                {timeline.map((entry) => (
+                {timeline.slice(0, visibleCount).map((entry) => (
                   <TimelineCard
                     key={entry.id}
                     entry={entry}
@@ -2537,6 +2625,19 @@ function VehicleDetailView({
                   />
                 ))}
               </div>
+              
+              {visibleCount < timeline.length && (
+                <div className="mt-4 flex justify-center">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="rounded-xl border-dashed bg-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white"
+                    onClick={() => setVisibleCount(v => v + 15)}
+                  >
+                    Cargar más registros
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}

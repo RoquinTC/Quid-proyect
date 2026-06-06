@@ -268,6 +268,7 @@ model Debt {
   name            String
   color           String    @default("#EF4444")
   icon            String?
+  photoUrl        String?
   bank            String?
   totalAmount     Decimal   // CHANGED: Float -> Decimal
   currentBalance  Decimal   // CHANGED: Float -> Decimal
@@ -558,6 +559,7 @@ model Vehicle {
   currentKm       Float     @default(0) // distance (NOT money — stays Float)
   plate           String?
   icon            String?
+  photoUrl        String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

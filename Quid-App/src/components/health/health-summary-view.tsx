@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CalendarDays, ChevronRight, ClipboardList, FileClock, Pill, ShieldAlert, ShoppingBag, Stethoscope } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { MedicalAppointment, MedicalOrder, Medication } from "@/lib/types";
+import { WaterWidget } from "@/components/health/hydration/water-widget";
 
 interface Authorization {
   id: string;
@@ -184,6 +185,9 @@ export function HealthSummaryView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Hydration Widget */}
+      <WaterWidget />
 
       <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800">
         <CardContent className="p-4">

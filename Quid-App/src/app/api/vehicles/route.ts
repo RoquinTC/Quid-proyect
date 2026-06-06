@@ -137,7 +137,7 @@ export async function POST(req: Request) {
     }
 
     const body = await validateBody(req, vehicleCreateSchema);
-    const { name, type, brand, model, year, color, tankCapacity, fuelType, currentKm, icon, plate } = body;
+    const { name, type, brand, model, year, color, tankCapacity, fuelType, currentKm, icon, plate, photoUrl } = body;
 
     const vehicle = await db.vehicle.create({
       data: {
@@ -153,6 +153,7 @@ export async function POST(req: Request) {
         currentKm: currentKm ?? 0,
         icon: icon || null,
         plate: plate || null,
+        photoUrl: photoUrl || null,
       },
       include: {
         fuelLogs: true,

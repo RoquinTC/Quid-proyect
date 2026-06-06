@@ -179,11 +179,11 @@ export function AppSidebar() {
 
   return (
     <Sheet open={sidebarOpen} onOpenChange={handleSidebarOpenChange}>
-      <SheetContent side="left" className="flex h-dvh w-[min(300px,92vw)] flex-col gap-0 overflow-hidden rounded-r-2xl border-r border-border bg-white/95 p-0 text-gray-900 shadow-2xl backdrop-blur-xl dark:bg-gray-950/95 dark:text-gray-100">
+      <SheetContent side="left" className="quid-app-sidebar flex h-dvh w-[min(300px,92vw)] flex-col gap-0 overflow-hidden rounded-r-2xl border-r border-[color:var(--theme-panel-border)] p-0 text-foreground shadow-2xl backdrop-blur-xl">
         {/* User Profile Header */}
-        <div className="shrink-0 border-b border-gray-100 bg-white/80 p-4 pb-4 dark:border-gray-800 dark:bg-gray-950/80">
+        <div className="shrink-0 border-b border-[color:var(--theme-panel-border)] bg-[color:color-mix(in_srgb,var(--surface-floating)_82%,transparent)] p-4 pb-4">
           <SheetHeader className="mb-3 p-0 space-y-0">
-            <SheetTitle className="text-left text-lg text-gray-900 dark:text-gray-100">Menú</SheetTitle>
+            <SheetTitle className="text-left text-lg text-foreground">Menú</SheetTitle>
           </SheetHeader>
           <div className="flex items-center gap-3">
             <Avatar className="size-11 ring-2 ring-primary/25">
@@ -196,10 +196,10 @@ export function AppSidebar() {
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate dark:text-gray-100">
+              <p className="text-sm font-semibold text-foreground truncate">
                 {session?.user?.name || "Usuario"}
               </p>
-              <p className="text-[11px] text-gray-500 truncate dark:text-gray-400">
+              <p className="text-[11px] text-muted-foreground truncate">
                 {session?.user?.email}
               </p>
             </div>
@@ -207,10 +207,10 @@ export function AppSidebar() {
         </div>
 
         {/* Scrollable content */}
-        <div className="min-h-0 flex-1 overflow-y-auto bg-white/80 pb-3 dark:bg-gray-950/80">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[color:color-mix(in_srgb,var(--surface-floating)_76%,transparent)] pb-3">
           {/* Module Navigation with expandable actions */}
           <div className="p-3 space-y-1">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
               Módulos
             </p>
             {moduleItems.map((item) => {
@@ -228,12 +228,12 @@ export function AppSidebar() {
                         handleNavigate(item.id);
                       }
                     }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-primary/10 transition-colors text-left"
                   >
                     <div className={`size-9 rounded-lg ${item.bg} flex items-center justify-center shrink-0`}>
                       <Icon className={`size-4 ${item.color}`} />
                     </div>
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex-1">
+                    <span className="text-sm font-medium text-foreground flex-1">
                       {item.label}
                     </span>
                     {hasActions ? (
@@ -241,10 +241,10 @@ export function AppSidebar() {
                         animate={{ rotate: isExpanded ? 90 : 0 }}
                         transition={{ duration: 0.2 }}
                       >
-                        <ChevronRight className="size-4 text-gray-300 dark:text-gray-600" />
+                        <ChevronRight className="size-4 text-muted-foreground/55" />
                       </motion.div>
                     ) : (
-                      <ChevronRight className="size-4 text-gray-300 dark:text-gray-600" />
+                      <ChevronRight className="size-4 text-muted-foreground/55" />
                     )}
                   </button>
 
@@ -265,12 +265,12 @@ export function AppSidebar() {
                               <button
                                 key={action.id}
                                 onClick={() => handleQuickAction(item.id, action.id)}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left group"
+                                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-primary/10 transition-colors text-left group"
                               >
                                 <div className={`size-6 rounded-md ${item.bg} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
                                   <ActionIcon className={`size-3 ${item.color}`} />
                                 </div>
-                                <span className="text-[13px] text-gray-600 dark:text-gray-400 flex-1">
+                                <span className="text-[13px] text-muted-foreground flex-1">
                                   {action.label}
                                 </span>
                               </button>
@@ -286,25 +286,25 @@ export function AppSidebar() {
           </div>
 
           {/* Divider */}
-          <div className="mx-5 my-2 border-t dark:border-gray-800" />
+          <div className="mx-5 my-2 border-t border-[color:var(--theme-panel-border)]" />
 
           {/* Simuladores Section */}
           <div className="p-3 space-y-1">
             <button
               onClick={() => setSimulatorsOpen(!simulatorsOpen)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-primary/10 transition-colors text-left"
             >
               <div className="size-9 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center shrink-0">
                 <Calculator className="size-4 text-violet-600 dark:text-violet-400" />
               </div>
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex-1">
+              <span className="text-sm font-medium text-foreground flex-1">
                 Simuladores
               </span>
               <motion.div
                 animate={{ rotate: simulatorsOpen ? 90 : 0 }}
                 transition={{ duration: 0.2 }}
               >
-                <ChevronRight className="size-4 text-gray-300 dark:text-gray-600" />
+                <ChevronRight className="size-4 text-muted-foreground/55" />
               </motion.div>
             </button>
 
@@ -333,17 +333,17 @@ export function AppSidebar() {
                           className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors text-left ${
                             item.comingSoon
                               ? "opacity-50 cursor-default"
-                              : "hover:bg-gray-100 dark:hover:bg-gray-800"
+                              : "hover:bg-primary/10"
                           }`}
                         >
                           <div className={`size-7 rounded-lg ${item.bg} flex items-center justify-center shrink-0`}>
                             <Icon className={`size-3.5 ${item.color}`} />
                           </div>
-                          <span className="text-[13px] font-medium text-gray-600 dark:text-gray-400 flex-1">
+                          <span className="text-[13px] font-medium text-muted-foreground flex-1">
                             {item.label}
                           </span>
                           {item.comingSoon && (
-                            <span className="text-[11px] font-semibold bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                            <span className="text-[11px] font-semibold bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full whitespace-nowrap">
                               Próximamente
                             </span>
                           )}
@@ -357,7 +357,7 @@ export function AppSidebar() {
           </div>
 
           {/* Divider */}
-          <div className="mx-5 my-2 border-t dark:border-gray-800" />
+          <div className="mx-5 my-2 border-t border-[color:var(--theme-panel-border)]" />
 
           {/* Share / Invite */}
           <div className="px-3">
@@ -379,15 +379,15 @@ export function AppSidebar() {
           <div className="px-3">
             <button
               onClick={() => handleNavigate("settings")}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-primary/10 transition-colors text-left"
             >
-              <div className="size-9 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0">
-                <Settings className="size-4 text-gray-500 dark:text-gray-400" />
+              <div className="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                <Settings className="size-4 text-muted-foreground" />
               </div>
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex-1">
+              <span className="text-sm font-medium text-foreground flex-1">
                 Ajustes
               </span>
-              <ChevronRight className="size-4 text-gray-300 dark:text-gray-600" />
+              <ChevronRight className="size-4 text-muted-foreground/55" />
             </button>
           </div>
         </div>
@@ -395,7 +395,7 @@ export function AppSidebar() {
         {/* Sign Out - Fixed at bottom */}
         <ShareInvite open={shareOpen} onOpenChange={setShareOpen} />
 
-        <div className="shrink-0 border-t border-gray-100 bg-white/90 px-4 py-3 safe-area-bottom backdrop-blur dark:border-gray-800 dark:bg-gray-950/90">
+        <div className="shrink-0 border-t border-[color:var(--theme-panel-border)] bg-[color:color-mix(in_srgb,var(--surface-floating)_88%,transparent)] px-4 py-3 safe-area-bottom backdrop-blur">
           <Button
             variant="ghost"
             className="w-full justify-start text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-xl gap-3 text-sm"
