@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { AppointmentCard } from "./appointment-card";
 import { AppointmentForm } from "./appointment-form";
 import { Button } from "@/components/ui/button";
@@ -97,6 +98,10 @@ export function AppointmentsView() {
   useEffect(() => {
     fetchAppointments();
   }, [fetchAppointments]);
+
+  useDataEvent("appointments", fetchAppointments);
+  useDataEvent("medicalOrders", fetchAppointments);
+  useDataEvent("medicalAuthorizations", fetchAppointments);
 
   const now = new Date();
 

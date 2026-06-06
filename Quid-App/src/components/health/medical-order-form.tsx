@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch, toColombiaDateString } from "@/lib/api";
-import { Loader2, Plus, X } from "lucide-react";
+import { FileText, Loader2, Plus, X } from "lucide-react";
+import { ReceiptUpload } from "@/components/finance/receipt-upload";
 import type { MedicalOrder } from "@/lib/types";
 
 type DraftItem = {
@@ -45,6 +46,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
   const [issueDate, setIssueDate] = useState(order?.issueDate ? toColombiaDateString(order.issueDate) : "");
   const [nextClaimDate, setNextClaimDate] = useState(order?.nextClaimDate ? toColombiaDateString(order.nextClaimDate) : "");
   const [notes, setNotes] = useState(order?.notes || "");
+  const [receiptUrl, setReceiptUrl] = useState<string | null>(order?.receiptUrl || null);
   const [items, setItems] = useState<DraftItem[]>(() =>
     order?.items?.length
       ? order.items.map((item) => ({
@@ -58,6 +60,27 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
   );
 
   const isEditing = !!order;
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle(order?.title || "");
+    setOrderNumber(order?.orderNumber || "");
+    setIssueDate(order?.issueDate ? toColombiaDateString(order.issueDate) : "");
+    setNextClaimDate(order?.nextClaimDate ? toColombiaDateString(order.nextClaimDate) : "");
+    setNotes(order?.notes || "");
+    setReceiptUrl(order?.receiptUrl || null);
+    setItems(
+      order?.items?.length
+        ? order.items.map((item) => ({
+            name: item.name,
+            prescribedQty: String(item.prescribedQty),
+            deliveredQty: String(item.deliveredQty ?? 0),
+            unit: item.unit || "und",
+            monthlyDose: item.monthlyDose != null ? String(item.monthlyDose) : "",
+          }))
+        : [{ ...emptyItem }]
+    );
+  }, [open, order]);
 
   const updateItem = (index: number, field: keyof DraftItem, value: string) => {
     setItems((current) => current.map((item, idx) => (idx === index ? { ...item, [field]: value } : item)));
@@ -76,6 +99,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
       setIssueDate("");
       setNextClaimDate("");
       setNotes("");
+      setReceiptUrl(null);
       setItems([{ ...emptyItem }]);
     }
   };
@@ -98,9 +122,11 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
       const payload = {
         title: title.trim(),
         orderNumber: orderNumber || null,
-        issueDate: issueDate || null,
+        issueDate: issueDate || undefined,
         nextClaimDate: nextClaimDate || null,
         notes: notes || null,
+        receiptUrl,
+        receiptThumbnail: null,
         items: cleanItems,
       };
 
@@ -251,6 +277,21 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
               onChange={(e) => setNotes(e.target.value)}
               className="rounded-xl min-h-[80px] resize-none"
             />
+          </div>
+
+          <div className="space-y-2 rounded-2xl border border-dashed border-cyan-200 bg-cyan-50/50 p-3 dark:border-cyan-900/50 dark:bg-cyan-950/10">
+            <div className="flex items-start gap-2">
+              <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300">
+                <FileText className="size-4" />
+              </div>
+              <div className="min-w-0">
+                <Label className="text-sm font-bold">Soporte de la orden</Label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Adjunta una foto de la orden, fórmula o soporte. Si usas una carpeta sincronizada de Drive/OneDrive en el teléfono, puedes tener respaldo en la nube.
+                </p>
+              </div>
+            </div>
+            <ReceiptUpload value={receiptUrl} onChange={setReceiptUrl} />
           </div>
 
           <Button

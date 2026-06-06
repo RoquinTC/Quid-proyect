@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { useAppStore } from "@/lib/store";
 import { MedicationCard } from "./medication-card";
 import { MedicationForm } from "./medication-form";
@@ -50,6 +51,9 @@ export function MedicationsView() {
   useEffect(() => {
     fetchMedications();
   }, [fetchMedications]);
+
+  useDataEvent("medications", fetchMedications);
+  useDataEvent("medicalOrders", fetchMedications);
 
   const needsSetup = (med: Medication) => {
     const hasDose = Boolean(med.dosage && med.dosage.trim() && med.dosage !== "Por definir");

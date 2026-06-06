@@ -105,12 +105,27 @@ function getRelatedTables(url: string, tableName: string | null): string[] {
   const related = new Set<string>();
 
   if (tableName === "appointments") {
+    related.add("medicalOrders");
+    related.add("medicalAuthorizations");
     related.add("transactions");
     related.add("accounts");
     related.add("subAccounts");
     related.add("budgets");
     related.add("debts");
     related.add("installments");
+  }
+
+  if (tableName === "medicalOrders") {
+    related.add("medications");
+    related.add("appointments");
+  }
+
+  if (tableName === "medicalAuthorizations") {
+    related.add("appointments");
+  }
+
+  if (tableName === "medications") {
+    related.add("medicalOrders");
   }
 
   if (tableName === "transactions") {
@@ -151,6 +166,16 @@ function getRelatedTables(url: string, tableName: string | null): string[] {
     related.add("pantryItems");
   }
 
+  if (tableName === "shoppingLists") {
+    related.add("pantryItems");
+    related.add("transactions");
+    related.add("accounts");
+    related.add("subAccounts");
+    related.add("budgets");
+    related.add("debts");
+    related.add("installments");
+  }
+
   return Array.from(related).filter((name) => name !== tableName);
 }
 
@@ -167,6 +192,7 @@ function getTableFromUrl(url: string): string | null {
     "/api/vehicles": "vehicles",
     "/api/medications": "medications",
     "/api/appointments": "appointments",
+    "/api/medical-orders": "medicalOrders",
     "/api/pantry": "pantryItems",
     "/api/shopping-lists": "shoppingLists",
     "/api/health-profiles": "healthProfiles",
@@ -181,17 +207,20 @@ function getTableFromUrl(url: string): string | null {
 
   const basePath = `/api/${match[1]}`;
 
-  // Direct match
-  if (API_TABLE_MAP[basePath]) return API_TABLE_MAP[basePath];
-
-  // Sub-resource mapping
+  // Sub-resource mapping must run before direct matches so nested health routes
+  // like /api/health/authorizations do not collapse into a generic /api/health event.
   if (cleanUrl.includes("/fuel-logs")) return "fuelLogs";
   if (cleanUrl.includes("/maintenance")) return "maintenanceRecords";
   if (cleanUrl.includes("/reminders")) return "vehicleReminders";
   if (cleanUrl.includes("/documents")) return "vehicles"; // Documents are embedded in vehicles
+  if (cleanUrl.includes("/orders/claim")) return "medicalOrders";
+  if (cleanUrl.includes("/authorizations")) return "medicalAuthorizations";
   if (cleanUrl.includes("/sub-accounts")) return "subAccounts";
   if (cleanUrl.includes("/installments")) return "installments";
   if (cleanUrl.includes("/items")) return "shoppingListItems";
+
+  // Direct match
+  if (API_TABLE_MAP[basePath]) return API_TABLE_MAP[basePath];
 
   return null;
 }

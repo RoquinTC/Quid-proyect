@@ -127,6 +127,8 @@ export async function POST(req: NextRequest) {
         issueDate: body.issueDate ? createColombiaDate(body.issueDate.split("T")[0]) : new Date(),
         nextClaimDate: body.nextClaimDate ? createColombiaDate(body.nextClaimDate.split("T")[0]) : null,
         notes: body.notes || null,
+        receiptUrl: body.receiptUrl || null,
+        receiptThumbnail: body.receiptThumbnail || null,
         status: inferStatus(body.items),
         items: itemsData.length > 0
           ? {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { ShoppingListDetail } from "./shopping-list-detail";
 import { ShoppingListForm } from "./shopping-list-form";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,9 @@ export function ShoppingListsView() {
   useEffect(() => {
     fetchLists();
   }, [fetchLists]);
+
+  useDataEvent("shoppingLists", fetchLists);
+  useDataEvent("shoppingListItems", fetchLists);
 
   const handleGenerateFromPantry = async () => {
     setGenerating(true);

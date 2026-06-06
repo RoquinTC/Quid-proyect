@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -81,7 +82,7 @@ export function PendingClaimsTab() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"active" | "pending" | "partial" | "completed">("active");
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [ordersData, medsData] = await Promise.all([
@@ -95,11 +96,14 @@ export function PendingClaimsTab() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  useDataEvent("medicalOrders", fetchData);
+  useDataEvent("medications", fetchData);
 
   const handleOpenClaimDialog = (order: MedicalOrder) => {
     setActiveOrder(order);

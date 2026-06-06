@@ -301,13 +301,16 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
   const resolvedUrl = resolveApiUrl(url);
   const isCrossOrigin = resolvedUrl.startsWith("http://") || resolvedUrl.startsWith("https://");
   const isGet = isGetRequest(options);
+  const isFormData = typeof FormData !== "undefined" && options?.body instanceof FormData;
 
   const fetchOptions: RequestInit = {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
+    headers: isFormData
+      ? { ...options?.headers }
+      : {
+          "Content-Type": "application/json",
+          ...options?.headers,
+        },
   };
 
   if (isCrossOrigin) {
@@ -359,6 +362,9 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
   try {
     response = await apiRequest(resolvedUrl, fetchOptions);
   } catch {
+    if (isFormData) {
+      throw new Error("No se pudo subir el archivo porque el servidor no está disponible");
+    }
     // Server unreachable — queue mutation and apply optimistically
     console.log(`[Offline] Server unreachable, queuing ${options?.method} ${url}`);
     const optimistic = await applyOptimisticWrite(url, options!);
@@ -372,6 +378,9 @@ export async function apiFetch<T>(url: string, options?: RequestInit): Promise<T
 
   if (!response.ok) {
     if (isOfflineLikeStatus(response.status)) {
+      if (isFormData) {
+        throw new Error("No se pudo subir el archivo porque el servidor no está disponible");
+      }
       console.log(`[Offline] Server returned ${response.status}, queuing ${options?.method} ${url}`);
       const optimistic = await applyOptimisticWrite(url, options!);
       await queueOfflineMutation(url, options!, optimistic.recordId);

@@ -43,6 +43,8 @@ export async function PUT(
           ...(body.issueDate !== undefined && { issueDate: createColombiaDate(body.issueDate.split("T")[0]) }),
           ...(body.nextClaimDate !== undefined && { nextClaimDate: body.nextClaimDate ? createColombiaDate(body.nextClaimDate.split("T")[0]) : null }),
           ...(body.notes !== undefined && { notes: body.notes || null }),
+          ...(body.receiptUrl !== undefined && { receiptUrl: body.receiptUrl || null }),
+          ...(body.receiptThumbnail !== undefined && { receiptThumbnail: body.receiptThumbnail || null }),
         },
       });
 

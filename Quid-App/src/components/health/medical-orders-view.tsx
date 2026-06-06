@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, formatDate } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ClipboardList, Edit3, FileClock, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ClipboardList, Edit3, ExternalLink, FileClock, FileText, Plus, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 import type { MedicalOrder } from "@/lib/types";
 import { MedicalOrderForm } from "./medical-order-form";
@@ -39,6 +40,9 @@ export function MedicalOrdersView() {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  useDataEvent("medicalOrders", fetchOrders);
+  useDataEvent("medications", fetchOrders);
 
   const summary = useMemo(() => {
     const pendingItems = orders.flatMap((order) => order.items || []).filter((item) => item.pendingQty > 0).length;
@@ -172,6 +176,19 @@ export function MedicalOrdersView() {
                       <FileClock className="size-3.5" />
                       Próximo reclamo: {formatDate(order.nextClaimDate)}
                     </div>
+                  )}
+
+                  {order.receiptUrl && (
+                    <a
+                      href={order.receiptUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex w-fit items-center gap-1.5 rounded-xl bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 dark:bg-cyan-950/25 dark:text-cyan-300"
+                    >
+                      <FileText className="size-3.5" />
+                      Ver soporte adjunto
+                      <ExternalLink className="size-3" />
+                    </a>
                   )}
 
                   {isExpanded && <div className="space-y-1.5">

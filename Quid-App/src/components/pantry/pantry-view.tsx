@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency, formatDate } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { PantryItemCard } from "./pantry-item-card";
 import { PantryItemForm } from "./pantry-item-form";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,10 @@ export function PantryView() {
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  useDataEvent("pantryItems", fetchItems);
+  useDataEvent("shoppingLists", fetchItems);
+  useDataEvent("shoppingListItems", fetchItems);
 
   const filteredItems = items.filter((item) => {
     const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase());

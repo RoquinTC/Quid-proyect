@@ -17,6 +17,7 @@ db/
 next-env.d.ts
 skills/
 upload/
+public/uploads/
 download/
 agent-ctx/
 worklog.md

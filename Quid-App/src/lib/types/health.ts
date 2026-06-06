@@ -66,6 +66,8 @@ export interface MedicalOrder {
   issueDate: string;
   nextClaimDate?: string | null;
   notes?: string | null;
+  receiptUrl?: string | null;
+  receiptThumbnail?: string | null;
   items?: MedicalOrderItem[];
   appointment?: MedicalAppointment | null;
   createdAt?: string;

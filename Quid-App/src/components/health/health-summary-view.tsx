@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, formatDate } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { useAppStore } from "@/lib/store";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -46,30 +47,33 @@ export function HealthSummaryView() {
   const [medications, setMedications] = useState<Medication[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let mounted = true;
-    Promise.all([
+  const fetchSummary = useCallback(async () => {
+    try {
+      const [appointmentsData, ordersData, authorizationsData, medicationsData] = await Promise.all([
       apiFetch<MedicalAppointment[]>("/api/appointments"),
       apiFetch<MedicalOrder[]>("/api/medical-orders"),
       apiFetch<Authorization[]>("/api/health/authorizations"),
       apiFetch<Medication[]>("/api/medications"),
-    ])
-      .then(([appointmentsData, ordersData, authorizationsData, medicationsData]) => {
-        if (!mounted) return;
-        setAppointments(appointmentsData);
-        setOrders(ordersData);
-        setAuthorizations(authorizationsData);
-        setMedications(medicationsData);
-      })
-      .catch((error) => console.error("Error loading health summary:", error))
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
+      ]);
+      setAppointments(appointmentsData);
+      setOrders(ordersData);
+      setAuthorizations(authorizationsData);
+      setMedications(medicationsData);
+    } catch (error) {
+      console.error("Error loading health summary:", error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
+  useDataEvent("appointments", fetchSummary);
+  useDataEvent("medicalOrders", fetchSummary);
+  useDataEvent("medicalAuthorizations", fetchSummary);
+  useDataEvent("medications", fetchSummary);
 
   const today = new Date();
 

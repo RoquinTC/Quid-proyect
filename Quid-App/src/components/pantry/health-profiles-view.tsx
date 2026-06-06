@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { HealthProfileForm } from "./health-profile-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -57,6 +58,8 @@ export function HealthProfilesView() {
   useEffect(() => {
     fetchProfiles();
   }, [fetchProfiles]);
+
+  useDataEvent("healthProfiles", fetchProfiles);
 
   const handleDelete = async (id: string) => {
     setDeletingId(id);

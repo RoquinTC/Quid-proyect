@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { RecipeCard } from "./recipe-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -69,6 +70,8 @@ export function RecipesView() {
   useEffect(() => {
     fetchProfiles();
   }, [fetchProfiles]);
+
+  useDataEvent("healthProfiles", fetchProfiles);
 
   const handleGenerateRecipes = async () => {
     setLoading(true);

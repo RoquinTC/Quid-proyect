@@ -788,6 +788,8 @@ export const medicalOrderCreateSchema = z.object({
   issueDate: isoDateString.optional(),
   nextClaimDate: isoDateString.nullable().optional(),
   notes: z.string().nullable().optional(),
+  receiptUrl: z.string().nullable().optional(),
+  receiptThumbnail: z.string().nullable().optional(),
   items: z.array(medicalOrderItemSchema).min(1).optional(),
 });
 
@@ -799,6 +801,8 @@ export const medicalOrderUpdateSchema = z.object({
   issueDate: isoDateString.optional(),
   nextClaimDate: isoDateString.nullable().optional(),
   notes: z.string().nullable().optional(),
+  receiptUrl: z.string().nullable().optional(),
+  receiptThumbnail: z.string().nullable().optional(),
   items: z.array(medicalOrderItemSchema).optional(),
 });
 
