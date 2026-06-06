@@ -51,7 +51,7 @@ export function DebtCard({ debt, onClick }: DebtCardProps) {
   return (
     <motion.button
       onClick={onClick}
-      className="w-[285px] sm:w-[310px] shrink-0 snap-center text-left cursor-pointer"
+      className="w-[min(285px,calc(100vw-5.5rem))] text-left cursor-pointer sm:w-[310px]"
       whileTap={{ scale: 0.98 }}
     >
       <div

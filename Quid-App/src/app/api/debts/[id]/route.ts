@@ -5,6 +5,40 @@ import { db } from "@/lib/db";
 import { createColombiaDate } from "@/lib/api";
 import { validateBody, debtUpdateSchema } from "@/lib/validations";
 
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const { id } = await params;
+
+    const debt = await db.debt.findFirst({
+      where: { id, userId: session.user.id },
+      include: {
+        installments: { orderBy: { nextPaymentDate: "asc" } },
+        abonos: {
+          include: { details: true },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+
+    if (!debt) {
+      return NextResponse.json({ error: "Deuda no encontrada" }, { status: 404 });
+    }
+
+    return NextResponse.json(debt);
+  } catch (error) {
+    console.error("Get debt error:", error);
+    return NextResponse.json({ error: "Error al obtener deuda" }, { status: 500 });
+  }
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -43,7 +43,6 @@ import {
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -182,9 +181,9 @@ export function AppSidebar() {
       <SheetContent side="left" className="quid-app-sidebar flex h-dvh w-[min(300px,92vw)] flex-col gap-0 overflow-hidden rounded-r-2xl border-r border-[color:var(--theme-panel-border)] p-0 text-foreground shadow-2xl backdrop-blur-xl">
         {/* User Profile Header */}
         <div className="shrink-0 border-b border-[color:var(--theme-panel-border)] bg-[color:color-mix(in_srgb,var(--surface-floating)_82%,transparent)] p-4 pb-4">
-          <SheetHeader className="mb-3 p-0 space-y-0">
-            <SheetTitle className="text-left text-lg text-foreground">Menú</SheetTitle>
-          </SheetHeader>
+          <SheetTitle className="mb-3 text-left text-lg font-black tracking-tight text-foreground">
+            Menú
+          </SheetTitle>
           <div className="flex items-center gap-3">
             <Avatar className="size-11 ring-2 ring-primary/25">
               <AvatarImage

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency, formatDate, toColombiaDateString } from "@/lib/api";
 import { useLocalSingleQuery, useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { DebtCard } from "./debt-card";
 import { DebtForm } from "./debt-form";
 import { InstallmentPlan } from "./installment-plan";
@@ -156,6 +157,10 @@ export function DebtDetail() {
   const fetchData = useCallback(async () => {
     await Promise.all([refetchDebt(), refetchAccounts()]);
   }, [refetchDebt, refetchAccounts]);
+
+  useDataEvent("debts", fetchData);
+  useDataEvent("installments", fetchData);
+  useDataEvent("transactions", fetchData);
 
   // ── Auto-select all due installments when debt changes ──
   useEffect(() => {

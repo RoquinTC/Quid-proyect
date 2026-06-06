@@ -28,7 +28,7 @@ interface InstallmentFormProps {
   onOpenChange: (open: boolean) => void;
   debtId: string;
   editInstallment?: Installment | null;
-  onSuccess?: () => void;
+  onSuccess?: () => void | Promise<void>;
 }
 
 export function InstallmentForm({ open, onOpenChange, debtId, editInstallment, onSuccess }: InstallmentFormProps) {
@@ -143,7 +143,7 @@ export function InstallmentForm({ open, onOpenChange, debtId, editInstallment, o
         });
       }
 
-      onSuccess?.();
+      await onSuccess?.();
       onOpenChange(false);
       resetForm();
     } catch (error) {

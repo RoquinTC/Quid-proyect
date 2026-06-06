@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import { formatCurrency, calcPercentage } from "@/lib/api";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { DebtCard } from "./debt-card";
 import { DebtForm } from "./debt-form";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,10 @@ export function DebtsView() {
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [extraPayment, setExtraPayment] = useState(100000);
   const [payoffMethod, setPayoffMethod] = useState<"snowball" | "avalanche">("snowball");
+
+  useDataEvent("debts", fetchDebts);
+  useDataEvent("installments", fetchDebts);
+  useDataEvent("transactions", fetchDebts);
 
   const totalDebt = debts.reduce((sum, d) => sum + d.currentBalance, 0);
   const totalCredit = debts
@@ -293,14 +298,17 @@ export function DebtsView() {
           </Card>
         </motion.div>
       ) : (
-        <div className="flex overflow-x-auto snap-x snap-mandatory gap-3 no-scrollbar pb-3 pt-1 scroll-smooth">
+        <div
+          data-carousel
+          className="-mx-4 flex min-h-[205px] gap-3 overflow-x-auto overflow-y-visible px-4 pb-3 pt-1 no-scrollbar snap-x snap-mandatory scroll-smooth"
+        >
           {debts.map((debt) => (
-            <motion.div key={debt.id} variants={itemVariants} className="shrink-0 snap-center">
+            <div key={debt.id} className="shrink-0 snap-center opacity-100">
               <DebtCard
                 debt={debt}
                 onClick={() => handleDebtClick(debt.id)}
               />
-            </motion.div>
+            </div>
           ))}
         </div>
       )}

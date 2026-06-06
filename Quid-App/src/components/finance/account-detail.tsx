@@ -1730,9 +1730,12 @@ export function AccountDetail() {
         defaultType={cashbackMode ? "income" : undefined}
         defaultDescription={cashbackMode ? "Cashback" : undefined}
         editTransaction={editingTransaction}
-        onSuccess={() => {
-          fetchAccount();
-          fetchTransactions();
+        onSuccess={async () => {
+          await Promise.all([
+            fetchAccount(),
+            fetchTransactions(),
+            expandedSubAccount ? fetchSubTransactions(expandedSubAccount) : Promise.resolve(),
+          ]);
         }}
       />
 

@@ -100,46 +100,93 @@
 html.finish-flat {
   --card-bg-opacity: 1;
   --card-blur: 0px;
-  --border-opacity: 0.55;
-  --card-shadow: 0 10px 28px -24px oklch(0.18 0.02 155 / 45%);
+  --border-opacity: 0.48;
+  --card-shadow: 0 12px 28px -24px oklch(0.18 0.02 155 / 48%);
   --edge-lighting: none;
+  --finish-surface-filter: saturate(1);
   --finish-highlight: linear-gradient(180deg, transparent, transparent);
+  --finish-card-overlay: linear-gradient(180deg, transparent, transparent);
 }
 
 html.finish-glass {
-  --card-bg-opacity: 0.7;
-  --card-blur: 18px;
-  --border-opacity: 0.62;
-  --card-shadow: 0 18px 55px -35px oklch(0.12 0.03 250 / 55%);
-  --edge-lighting: inset 0 1px 0 oklch(1 0 0 / 48%), inset 0 -1px 0 oklch(1 0 0 / 10%);
-  --finish-highlight: linear-gradient(135deg, oklch(1 0 0 / 34%), transparent 42%);
+  --card-bg-opacity: 0.62;
+  --card-blur: 24px;
+  --border-opacity: 0.72;
+  --card-shadow:
+    0 24px 70px -42px oklch(0.12 0.03 250 / 58%),
+    inset 0 1px 0 oklch(1 0 0 / 52%),
+    inset 0 -1px 0 oklch(1 0 0 / 10%);
+  --edge-lighting:
+    inset 0 1px 0 oklch(1 0 0 / 55%),
+    inset 0 0 26px oklch(1 0 0 / 10%);
+  --finish-surface-filter: saturate(1.18);
+  --finish-highlight:
+    linear-gradient(135deg, oklch(1 0 0 / 44%), transparent 38%),
+    radial-gradient(circle at 88% 8%, oklch(1 0 0 / 24%), transparent 28%);
+  --finish-card-overlay:
+    linear-gradient(120deg, oklch(1 0 0 / 34%), transparent 28%, oklch(1 0 0 / 12%) 48%, transparent 72%);
 }
 
 html.finish-neon {
-  --card-bg-opacity: 0.92;
-  --card-blur: 6px;
-  --border-opacity: 0.82;
-  --card-shadow: 0 0 0 1px var(--theme-glow), 0 0 28px -10px var(--theme-glow-strong);
-  --edge-lighting: inset 0 0 18px oklch(1 0 0 / 4%);
-  --finish-highlight: radial-gradient(circle at top right, var(--theme-glow), transparent 34%);
+  --card-bg-opacity: 0.9;
+  --card-blur: 8px;
+  --border-opacity: 0.96;
+  --card-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary) 64%, transparent),
+    0 0 18px -7px var(--primary),
+    0 0 40px -16px var(--theme-glow-strong),
+    0 22px 70px -45px oklch(0 0 0 / 74%);
+  --edge-lighting:
+    inset 0 0 18px color-mix(in srgb, var(--primary) 18%, transparent),
+    inset 0 1px 0 oklch(1 0 0 / 18%);
+  --finish-surface-filter: saturate(1.26) contrast(1.04);
+  --finish-highlight:
+    radial-gradient(circle at top right, var(--theme-glow-strong), transparent 34%),
+    radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 30%);
+  --finish-card-overlay:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 42%, transparent), transparent);
 }
 
 html.finish-soft3d {
   --card-bg-opacity: 1;
   --card-blur: 0px;
-  --border-opacity: 0.42;
-  --card-shadow: 10px 12px 28px -22px oklch(0.18 0.02 155 / 48%), -8px -8px 22px -18px oklch(1 0 0 / 88%);
-  --edge-lighting: inset 1px 1px 0 oklch(1 0 0 / 44%), inset -1px -1px 0 oklch(0.12 0.02 155 / 6%);
-  --finish-highlight: linear-gradient(145deg, oklch(1 0 0 / 32%), transparent 52%);
+  --border-opacity: 0.36;
+  --card-shadow:
+    14px 16px 34px -24px oklch(0.12 0.02 155 / 56%),
+    -10px -10px 26px -22px oklch(1 0 0 / 82%),
+    inset 1px 1px 0 oklch(1 0 0 / 52%),
+    inset -1px -1px 0 oklch(0.12 0.02 155 / 10%);
+  --edge-lighting:
+    inset 1px 1px 0 oklch(1 0 0 / 56%),
+    inset -1px -1px 0 oklch(0.12 0.02 155 / 12%);
+  --finish-surface-filter: saturate(1);
+  --finish-highlight:
+    linear-gradient(145deg, oklch(1 0 0 / 34%), transparent 46%),
+    linear-gradient(315deg, oklch(0 0 0 / 7%), transparent 48%);
+  --finish-card-overlay:
+    radial-gradient(circle at 16% 12%, oklch(1 0 0 / 28%), transparent 28%);
 }
 
 html.finish-liquid {
-  --card-bg-opacity: 0.76;
-  --card-blur: 22px;
-  --border-opacity: 0.58;
-  --card-shadow: 0 22px 70px -42px var(--theme-glow-strong), inset 0 1px 0 oklch(1 0 0 / 30%);
-  --edge-lighting: inset 0 0 28px oklch(1 0 0 / 8%);
-  --finish-highlight: radial-gradient(circle at 18% 0%, oklch(1 0 0 / 38%), transparent 28%), radial-gradient(circle at 95% 16%, var(--theme-glow), transparent 34%);
+  --card-bg-opacity: 0.78;
+  --card-blur: 26px;
+  --border-opacity: 0.74;
+  --card-shadow:
+    0 30px 90px -48px var(--theme-glow-strong),
+    inset 0 1px 0 oklch(1 0 0 / 42%),
+    inset 0 -14px 40px -34px color-mix(in srgb, var(--primary) 42%, transparent);
+  --edge-lighting:
+    inset 0 0 36px oklch(1 0 0 / 10%),
+    inset 0 -18px 44px -34px color-mix(in srgb, var(--accent) 46%, transparent);
+  --finish-surface-filter: saturate(1.22);
+  --finish-highlight:
+    radial-gradient(circle at 18% 0%, oklch(1 0 0 / 42%), transparent 28%),
+    radial-gradient(circle at 95% 16%, var(--theme-glow), transparent 34%),
+    radial-gradient(ellipse at 42% 110%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 42%);
+  --finish-card-overlay:
+    radial-gradient(ellipse at 22% 12%, oklch(1 0 0 / 34%), transparent 24%),
+    radial-gradient(ellipse at 72% 4%, oklch(1 0 0 / 18%), transparent 18%),
+    linear-gradient(160deg, transparent 18%, oklch(1 0 0 / 16%) 38%, transparent 58%);
 }
 
 /* --- THEME PALETTES --- */
@@ -955,29 +1002,109 @@ html.theme-zen.oled {
   }
 
   .quid-theme-card {
-    background: var(--theme-card-gradient);
-    border-color: var(--theme-panel-border);
-    box-shadow: var(--card-shadow, 0 16px 50px -34px oklch(0 0 0 / 48%)), var(--theme-inner-glow);
+    position: relative;
+    isolation: isolate;
+    background:
+      var(--finish-highlight, none),
+      var(--theme-card-gradient);
+    border-color: color-mix(in srgb, var(--theme-panel-border) calc(var(--border-opacity, 0.6) * 100%), transparent);
+    box-shadow:
+      var(--card-shadow, 0 16px 50px -34px oklch(0 0 0 / 48%)),
+      var(--edge-lighting, none),
+      var(--theme-inner-glow);
+    backdrop-filter: blur(var(--card-blur, 0px)) var(--finish-surface-filter, none);
+    -webkit-backdrop-filter: blur(var(--card-blur, 0px)) var(--finish-surface-filter, none);
+    transition:
+      background 220ms ease,
+      border-color 220ms ease,
+      box-shadow 220ms ease,
+      filter 220ms ease,
+      transform 220ms ease;
   }
 
   .quid-theme-widget {
-    background: var(--theme-widget-gradient);
-    border: 1px solid var(--theme-panel-border);
-    box-shadow: 0 24px 70px -42px var(--theme-glow-strong), var(--theme-inner-glow);
+    position: relative;
+    isolation: isolate;
+    background:
+      var(--finish-highlight, none),
+      var(--theme-widget-gradient);
+    border: 1px solid color-mix(in srgb, var(--theme-panel-border) calc(var(--border-opacity, 0.72) * 100%), transparent);
+    box-shadow:
+      var(--card-shadow, 0 24px 70px -42px var(--theme-glow-strong)),
+      var(--edge-lighting, none),
+      var(--theme-inner-glow);
+    backdrop-filter: blur(var(--card-blur, 0px)) var(--finish-surface-filter, none);
+    -webkit-backdrop-filter: blur(var(--card-blur, 0px)) var(--finish-surface-filter, none);
+    transition:
+      background 220ms ease,
+      border-color 220ms ease,
+      box-shadow 220ms ease,
+      filter 220ms ease,
+      transform 220ms ease;
   }
 
   .quid-form-shell {
-    background: var(--finish-highlight, none), color-mix(in srgb, var(--surface-floating) 96%, transparent);
-    border: 1px solid var(--theme-panel-border);
-    box-shadow: 0 28px 90px -45px var(--theme-glow-strong), var(--theme-inner-glow);
-    backdrop-filter: blur(calc(var(--card-blur, 0px) + 6px));
-    -webkit-backdrop-filter: blur(calc(var(--card-blur, 0px) + 6px));
+    position: relative;
+    isolation: isolate;
+    background:
+      var(--finish-highlight, none),
+      color-mix(in srgb, var(--surface-floating) calc(var(--card-bg-opacity, 0.96) * 100%), transparent);
+    border: 1px solid color-mix(in srgb, var(--theme-panel-border) calc(var(--border-opacity, 0.7) * 100%), transparent);
+    box-shadow:
+      var(--card-shadow, 0 28px 90px -45px var(--theme-glow-strong)),
+      var(--edge-lighting, none),
+      var(--theme-inner-glow);
+    backdrop-filter: blur(calc(var(--card-blur, 0px) + 6px)) var(--finish-surface-filter, none);
+    -webkit-backdrop-filter: blur(calc(var(--card-blur, 0px) + 6px)) var(--finish-surface-filter, none);
+  }
+
+  .quid-theme-card::before,
+  .quid-theme-widget::before,
+  .quid-form-shell::before,
+  .quid-app-sidebar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--finish-card-overlay, transparent);
+    opacity: var(--finish-overlay-opacity, 1);
+  }
+
+  .quid-theme-card::after,
+  .quid-theme-widget::after,
+  .quid-form-shell::after,
+  .quid-app-sidebar::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    border: 1px solid color-mix(in srgb, oklch(1 0 0) 18%, transparent);
+    opacity: 0;
+  }
+
+  .quid-theme-card > *,
+  .quid-theme-widget > *,
+  .quid-form-shell > *,
+  .quid-app-sidebar > * {
+    position: relative;
+    z-index: 1;
   }
 
   .quid-app-sidebar {
+    position: relative;
+    isolation: isolate;
     background:
       var(--finish-highlight, none),
       color-mix(in srgb, var(--surface-floating) 97%, transparent) !important;
+    box-shadow:
+      var(--card-shadow, 0 28px 90px -45px var(--theme-glow-strong)),
+      var(--edge-lighting, none);
+    backdrop-filter: blur(calc(var(--card-blur, 0px) + 6px)) var(--finish-surface-filter, none);
+    -webkit-backdrop-filter: blur(calc(var(--card-blur, 0px) + 6px)) var(--finish-surface-filter, none);
     color: var(--foreground);
   }
 
@@ -1122,34 +1249,88 @@ html.theme-zen.oled {
     color: var(--theme-readable-accent) !important;
   }
 
-  html.finish-neon .quid-theme-card,
-  html.finish-neon .quid-theme-widget,
-  html.finish-neon .quid-form-shell {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--primary) 42%, transparent),
-      0 0 24px -8px var(--theme-glow-strong),
-      0 22px 60px -40px oklch(0 0 0 / 70%),
-      var(--theme-inner-glow);
+  html.finish-flat :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar)::before,
+  html.finish-flat :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar)::after {
+    opacity: 0;
   }
 
-  html.finish-soft3d .quid-theme-card,
-  html.finish-soft3d .quid-theme-widget,
-  html.finish-soft3d .quid-form-shell {
-    transform: translateZ(0);
+  html.finish-glass :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar) {
+    border-color: color-mix(in srgb, oklch(1 0 0) 28%, var(--theme-panel-border) 72%);
+  }
+
+  html.finish-glass .quid-theme-card {
+    background:
+      var(--finish-highlight, none),
+      radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 34%),
+      color-mix(in srgb, var(--surface-raised) 64%, transparent);
+  }
+
+  html.finish-glass .quid-theme-widget {
+    background:
+      var(--finish-highlight, none),
+      radial-gradient(circle at 14% 0%, color-mix(in srgb, var(--primary) 26%, transparent), transparent 34%),
+      radial-gradient(circle at 92% 14%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 32%),
+      color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  }
+
+  html.finish-glass :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar)::after {
+    opacity: 0.55;
+  }
+
+  html.finish-neon :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar) {
+    border-color: color-mix(in srgb, var(--primary) 72%, var(--accent) 28%);
+  }
+
+  html.finish-neon :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar)::before {
+    opacity: 0.72;
+    filter: blur(0.2px);
+  }
+
+  html.finish-neon :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar)::after {
+    border-color: color-mix(in srgb, var(--primary) 58%, transparent);
     box-shadow:
-      12px 14px 30px -24px oklch(0 0 0 / 58%),
-      -8px -8px 24px -20px oklch(1 0 0 / 72%),
-      var(--theme-inner-glow);
+      inset 0 0 14px color-mix(in srgb, var(--primary) 20%, transparent),
+      0 0 18px -8px var(--primary);
+    opacity: 0.88;
+  }
+
+  html.finish-soft3d :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar) {
+    transform: translateZ(0);
+  }
+
+  html.finish-soft3d :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar)::after {
+    border-color: oklch(1 0 0 / 22%);
+    opacity: 0.38;
+  }
+
+  html.finish-liquid :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar) {
+    border-color: color-mix(in srgb, oklch(1 0 0) 22%, var(--theme-panel-border) 78%);
   }
 
   html.finish-liquid .quid-theme-card,
-  html.finish-liquid .quid-theme-widget,
-  html.finish-liquid .quid-form-shell {
+  html.finish-liquid .quid-theme-widget {
     background:
-      radial-gradient(circle at 18% 0%, oklch(1 0 0 / 34%), transparent 26%),
-      radial-gradient(circle at 90% 12%, var(--theme-glow), transparent 32%),
+      var(--finish-highlight, none),
       var(--theme-card-gradient);
-    box-shadow: 0 30px 90px -48px var(--theme-glow-strong), inset 0 1px 0 oklch(1 0 0 / 34%);
+  }
+
+  html.finish-liquid .quid-theme-widget {
+    background:
+      var(--finish-highlight, none),
+      var(--theme-widget-gradient);
+  }
+
+  html.finish-liquid :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar)::before {
+    opacity: 0.85;
+    filter: saturate(1.2);
+  }
+
+  html.finish-liquid :is(.quid-theme-card, .quid-theme-widget, .quid-form-shell, .quid-app-sidebar)::after {
+    border-color: oklch(1 0 0 / 24%);
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 36%),
+      inset 0 -18px 38px -34px color-mix(in srgb, var(--accent) 52%, transparent);
+    opacity: 0.62;
   }
 }
 

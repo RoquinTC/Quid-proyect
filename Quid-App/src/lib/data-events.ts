@@ -120,6 +120,14 @@ function getRelatedTables(url: string, tableName: string | null): string[] {
     related.add("savingsGoals");
   }
 
+  if (tableName === "installments") {
+    related.add("debts");
+    related.add("accounts");
+    related.add("subAccounts");
+    related.add("budgets");
+    related.add("transactions");
+  }
+
   if (tableName === "maintenanceRecords" || tableName === "fuelLogs" || cleanUrl.includes("/documents") || cleanUrl.includes("/reminders")) {
     related.add("vehicles");
     related.add("transactions");

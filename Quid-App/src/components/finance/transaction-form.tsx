@@ -54,7 +54,7 @@ interface TransactionFormProps {
     excludeFromBudget?: boolean | null;
     receiptUrl?: string | null;
   } | null;
-  onSuccess?: () => void;
+  onSuccess?: () => void | Promise<void>;
 }
 
 export function TransactionForm({
@@ -238,7 +238,7 @@ export function TransactionForm({
         }
       }
 
-      onSuccess?.();
+      await onSuccess?.();
       onOpenChange(false);
       resetForm();
     } catch (error) {
