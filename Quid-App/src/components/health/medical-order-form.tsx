@@ -22,6 +22,7 @@ type DraftItem = {
   deliveredQty: string;
   unit: string;
   monthlyDose: string;
+  notes: string;
 };
 
 const emptyItem: DraftItem = {
@@ -30,7 +31,18 @@ const emptyItem: DraftItem = {
   deliveredQty: "",
   unit: "und",
   monthlyDose: "",
+  notes: "",
 };
+
+const SUPPORT_TYPES = [
+  "Orden medica",
+  "Formula de medicamentos",
+  "Autorizacion",
+  "Historia clinica",
+  "Incapacidad",
+  "Recibo o pendiente de farmacia",
+  "Otro soporte",
+];
 
 interface MedicalOrderFormProps {
   open: boolean;
@@ -47,6 +59,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
   const [nextClaimDate, setNextClaimDate] = useState(order?.nextClaimDate ? toColombiaDateString(order.nextClaimDate) : "");
   const [notes, setNotes] = useState(order?.notes || "");
   const [receiptUrl, setReceiptUrl] = useState<string | null>(order?.receiptUrl || null);
+  const [supportType, setSupportType] = useState(SUPPORT_TYPES[0]);
   const [items, setItems] = useState<DraftItem[]>(() =>
     order?.items?.length
       ? order.items.map((item) => ({
@@ -55,6 +68,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
           deliveredQty: String(item.deliveredQty ?? 0),
           unit: item.unit || "und",
           monthlyDose: item.monthlyDose != null ? String(item.monthlyDose) : "",
+          notes: item.notes || "",
         }))
       : [{ ...emptyItem }]
   );
@@ -69,6 +83,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
     setNextClaimDate(order?.nextClaimDate ? toColombiaDateString(order.nextClaimDate) : "");
     setNotes(order?.notes || "");
     setReceiptUrl(order?.receiptUrl || null);
+    setSupportType(SUPPORT_TYPES[0]);
     setItems(
       order?.items?.length
         ? order.items.map((item) => ({
@@ -77,6 +92,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
             deliveredQty: String(item.deliveredQty ?? 0),
             unit: item.unit || "und",
             monthlyDose: item.monthlyDose != null ? String(item.monthlyDose) : "",
+            notes: item.notes || "",
           }))
         : [{ ...emptyItem }]
     );
@@ -100,6 +116,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
       setNextClaimDate("");
       setNotes("");
       setReceiptUrl(null);
+      setSupportType(SUPPORT_TYPES[0]);
       setItems([{ ...emptyItem }]);
     }
   };
@@ -113,6 +130,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
         deliveredQty: item.deliveredQty ? Number(item.deliveredQty) : 0,
         unit: item.unit || "und",
         monthlyDose: item.monthlyDose ? Number(item.monthlyDose) : null,
+        notes: item.notes.trim() || null,
       }));
 
     if (!title.trim() || cleanItems.length === 0) return;
@@ -124,7 +142,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
         orderNumber: orderNumber || null,
         issueDate: issueDate || undefined,
         nextClaimDate: nextClaimDate || null,
-        notes: notes || null,
+        notes: [notes.trim(), receiptUrl ? `Tipo de soporte: ${supportType}` : ""].filter(Boolean).join("\n") || null,
         receiptUrl,
         receiptThumbnail: null,
         items: cleanItems,
@@ -207,7 +225,12 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Medicamentos/insumos</Label>
+              <div>
+                <Label>Medicamentos o insumos ordenados</Label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Registra cada medicamento, insumo o rubro por separado para controlar lo entregado y lo pendiente.
+                </p>
+              </div>
               <Button type="button" variant="outline" size="sm" className="rounded-xl h-8" onClick={addItem}>
                 <Plus className="size-3.5 mr-1" />
                 Agregar
@@ -216,13 +239,24 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
 
             {items.map((item, index) => (
               <div key={index} className="rounded-xl border border-gray-200 p-3 space-y-3 dark:border-gray-700">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-rose-600 dark:text-rose-300">
+                    Rubro {index + 1}
+                  </p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Un rubro puede ser un medicamento, un insumo, una terapia, una orden o un elemento pendiente por reclamar.
+                  </p>
+                </div>
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="Nombre"
-                    value={item.name}
-                    onChange={(e) => updateItem(index, "name", e.target.value)}
-                    className="rounded-xl"
-                  />
+                  <div className="flex-1 space-y-1.5">
+                    <Label className="text-xs">Nombre del rubro</Label>
+                    <Input
+                      placeholder="Ej: Losartán 50 mg, pañales, terapia física..."
+                      value={item.name}
+                      onChange={(e) => updateItem(index, "name", e.target.value)}
+                      className="rounded-xl"
+                    />
+                  </div>
                   {items.length > 1 && (
                     <Button type="button" variant="ghost" size="icon" className="rounded-xl shrink-0" onClick={() => removeItem(index)}>
                       <X className="size-4" />
@@ -230,40 +264,68 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
                   )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Ordenado"
-                    value={item.prescribedQty}
-                    onChange={(e) => updateItem(index, "prescribedQty", e.target.value)}
-                    className="rounded-xl"
-                  />
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="Entregado"
-                    value={item.deliveredQty}
-                    onChange={(e) => updateItem(index, "deliveredQty", e.target.value)}
-                    className="rounded-xl"
-                  />
-                  <Input
-                    placeholder="Unidad"
-                    value={item.unit}
-                    onChange={(e) => updateItem(index, "unit", e.target.value)}
-                    className="rounded-xl"
-                  />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Cantidad ordenada</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ej: 30"
+                      value={item.prescribedQty}
+                      onChange={(e) => updateItem(index, "prescribedQty", e.target.value)}
+                      className="rounded-xl"
+                    />
+                    <p className="text-[10px] text-gray-400">Total que aparece en la orden.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Cantidad entregada</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ej: 10"
+                      value={item.deliveredQty}
+                      onChange={(e) => updateItem(index, "deliveredQty", e.target.value)}
+                      className="rounded-xl"
+                    />
+                    <p className="text-[10px] text-gray-400">Lo que ya recibiste.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Unidad</Label>
+                    <Input
+                      placeholder="und, cajas, ml..."
+                      value={item.unit}
+                      onChange={(e) => updateItem(index, "unit", e.target.value)}
+                      className="rounded-xl"
+                    />
+                    <p className="text-[10px] text-gray-400">Cómo se mide el rubro.</p>
+                  </div>
                 </div>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Consumo mensual opcional"
-                  value={item.monthlyDose}
-                  onChange={(e) => updateItem(index, "monthlyDose", e.target.value)}
-                  className="rounded-xl"
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Consumo mensual</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Opcional, ej: 30"
+                      value={item.monthlyDose}
+                      onChange={(e) => updateItem(index, "monthlyDose", e.target.value)}
+                      className="rounded-xl"
+                    />
+                    <p className="text-[10px] text-gray-400">Ayuda a proyectar cuándo reclamar de nuevo.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Indicaciones del rubro</Label>
+                    <Input
+                      placeholder="Ej: entregar por cuotas, requiere autorización..."
+                      value={item.notes}
+                      onChange={(e) => updateItem(index, "notes", e.target.value)}
+                      className="rounded-xl"
+                    />
+                    <p className="text-[10px] text-gray-400">Notas propias de este medicamento o insumo.</p>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -287,9 +349,25 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
               <div className="min-w-0">
                 <Label className="text-sm font-bold">Soporte de la orden</Label>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Adjunta una foto de la orden, fórmula o soporte. Si usas una carpeta sincronizada de Drive/OneDrive en el teléfono, puedes tener respaldo en la nube.
+                  Adjunta una foto de la orden, fórmula o soporte general. Si el documento corresponde a un rubro específico, indícalo en las notas de ese rubro.
                 </p>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="support-type" className="text-xs">Clasificación del soporte</Label>
+              <select
+                id="support-type"
+                value={supportType}
+                onChange={(e) => setSupportType(e.target.value)}
+                className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-cyan-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              >
+                {SUPPORT_TYPES.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                Esta clasificación queda guardada en las notas de la orden para que luego sea fácil ubicar el soporte.
+              </p>
             </div>
             <ReceiptUpload value={receiptUrl} onChange={setReceiptUrl} />
           </div>
