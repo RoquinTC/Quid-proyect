@@ -1,5 +1,13 @@
 apply plugin: 'com.android.application'
 
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { stream ->
+        localProperties.load(stream)
+    }
+}
+
 android {
     namespace = "app.quid.finance"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,11 +15,12 @@ android {
         applicationId "app.quid.finance"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "1.0.8"
+        versionCode 10
+        versionName "1.0.9"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         resValue "string", "google_web_client_id", (
             project.findProperty("googleWebClientId")
+                ?: localProperties.getProperty("googleWebClientId")
                 ?: System.getenv("GOOGLE_WEB_CLIENT_ID")
                 ?: System.getenv("GOOGLE_CLIENT_ID")
                 ?: ""
