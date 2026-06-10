@@ -22,6 +22,10 @@ import { FuelPriceWidget } from "./fuel-price-widget";
 import { QuickKmUpdate } from "./quick-km-update";
 import { AuraQuickLog } from "./aura-quick-log";
 import { VehicleIcon } from "./vehicle-icon";
+import {
+  getVehicleGradient,
+  getVehicleTypeLabel,
+} from "@/lib/constants/vehicle-catalog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -55,17 +59,8 @@ const transportTabs: Array<{ id: TransportTab; label: string; icon: typeof Car }
 ];
 
 // ─── Constants ────────────────────────────────────────────────────
-const vehicleTypeLabels: Record<string, string> = {
-  motorcycle: "Moto", car: "Carro", truck: "Camión", other: "Otro",
-};
-const vehicleGradients: Record<string, string> = {
-  motorcycle: "from-cyan-500 to-blue-600",
-  car: "from-blue-500 to-indigo-600",
-  truck: "from-indigo-500 to-purple-600",
-  other: "from-slate-500 to-gray-600",
-};
 const fuelTypeLabels: Record<string, string> = {
-  gasoline: "Gasolina", diesel: "Diésel", electric: "Eléctrico",
+  gasoline: "Gasolina", diesel: "Diésel", electric: "Eléctrico", none: "No aplica",
 };
 const maintTypeIcons: Record<string, typeof Wrench> = {
   oil_change: Droplets, tire_change: CircleDot, brake_service: ShieldAlert,
@@ -646,16 +641,25 @@ export function TransportPage() {
   // ─── If viewing detail ──────────────────────────────────────────
   if (detailVehicleId && detailVehicle) {
     return (
-      <VehicleDetailView
-        vehicle={detailVehicle}
-        currentFuelPrice={fuelPrices.find((price) => price.fuelType === detailVehicle.fuelType)?.pricePerGallon ?? null}
-        onBack={() => setDetailVehicleId(null)}
-        onRefresh={refetchVehicles}
-        onEditVehicle={(v) => { setEditVehicle(v); setShowVehicleForm(true); }}
-        onEditFuelLog={(log) => { setEditFuelLog(log); setShowFuelLogForm(true); }}
-        onEditMaintenance={(rec) => { setEditMaintenance(rec); setShowMaintenanceForm(true); }}
-        onDelete={(target) => setDeleteTarget(target)}
-      />
+      <>
+        <VehicleDetailView
+          vehicle={detailVehicle}
+          currentFuelPrice={fuelPrices.find((price) => price.fuelType === detailVehicle.fuelType)?.pricePerGallon ?? null}
+          onBack={() => setDetailVehicleId(null)}
+          onRefresh={refetchVehicles}
+          onEditVehicle={(v) => { setEditVehicle(v); setShowVehicleForm(true); }}
+          onEditFuelLog={(log) => { setEditFuelLog(log); setShowFuelLogForm(true); }}
+          onEditMaintenance={(rec) => { setEditMaintenance(rec); setShowMaintenanceForm(true); }}
+          onDelete={(target) => setDeleteTarget(target)}
+        />
+
+        <VehicleForm
+          open={showVehicleForm}
+          onOpenChange={setShowVehicleForm}
+          vehicle={editVehicle}
+          onSuccess={refetchVehicles}
+        />
+      </>
     );
   }
 
@@ -724,7 +728,7 @@ export function TransportPage() {
                         </span>
                       )}
                       <span className="text-xs text-gray-400">
-                        {vehicleTypeLabels[v.type] || v.type}
+                  {getVehicleTypeLabel(v.type, true)}
                       </span>
                     </div>
                   </SelectItem>
@@ -766,7 +770,7 @@ export function TransportPage() {
             className="group relative mt-3 w-full overflow-hidden rounded-[1.6rem] border border-white/15 text-left shadow-xl shadow-cyan-950/10"
           >
             <div
-              className={`absolute inset-0 ${selectedVehicle.photoUrl ? "bg-slate-950" : `bg-gradient-to-br ${vehicleGradients[selectedVehicle.type] || vehicleGradients.other}`}`}
+              className={`absolute inset-0 ${selectedVehicle.photoUrl ? "bg-slate-950" : `bg-gradient-to-br ${getVehicleGradient(selectedVehicle.type)}`}`}
             />
             {selectedVehicle.photoUrl && (
               <>
@@ -784,7 +788,7 @@ export function TransportPage() {
               <div className="min-w-0">
                 <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/16 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] backdrop-blur">
                   <VehicleIcon icon={selectedVehicle.icon} type={selectedVehicle.type} className="size-3.5" />
-                  {vehicleTypeLabels[selectedVehicle.type] || selectedVehicle.type}
+                  {getVehicleTypeLabel(selectedVehicle.type, true)}
                 </div>
                 <h2 className="truncate text-2xl font-black tracking-tight">{selectedVehicle.name}</h2>
                 <p className="mt-1 text-xs font-medium text-white/76">
@@ -2079,7 +2083,7 @@ function VehicleDetailView({
   const [showKmUpdate, setShowKmUpdate] = useState(false);
   const [visibleCount, setVisibleCount] = useState(15);
 
-  const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
+  const gradient = getVehicleGradient(vehicle.type);
   const fuelLevel = vehicle.fuelLevel ?? 0;
   const currentFuel = vehicle.currentFuel ?? 0;
   const estimatedRange = vehicle.estimatedRange ?? 0;
@@ -2188,17 +2192,17 @@ function VehicleDetailView({
     <div className="flex flex-col h-full">
       {/* Header with Photo Support */}
       <div 
-        className={`relative px-4 pt-3 pb-4 overflow-hidden ${!vehicle.photoUrl ? `bg-gradient-to-r ${gradient}` : "bg-gray-900"}`}
-        style={vehicle.photoUrl ? { minHeight: "220px" } : undefined}
+        className={`relative px-4 pt-3 pb-4 overflow-hidden ${!vehicle.photoUrl ? `bg-gradient-to-r ${gradient}` : "bg-slate-950"}`}
+        style={vehicle.photoUrl ? { minHeight: "280px" } : undefined}
       >
         {vehicle.photoUrl && (
           <>
             <div 
-              className="absolute inset-0 bg-cover bg-center z-0 opacity-70 mix-blend-overlay"
+              className="absolute inset-0 bg-cover bg-center z-0 opacity-100"
               style={{ backgroundImage: `url(${vehicle.photoUrl})` }}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/60 to-transparent z-0" />
-            <div className="absolute inset-0 bg-gradient-to-b from-gray-900/50 to-transparent z-0" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/62 via-slate-950/12 to-transparent z-0" />
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/30 via-transparent to-transparent z-0" />
           </>
         )}
 
@@ -2212,7 +2216,7 @@ function VehicleDetailView({
             </Button>
           </div>
 
-          <div className={vehicle.photoUrl ? "mt-16 mb-4" : "flex-1 mb-3"}>
+          <div className={vehicle.photoUrl ? "mt-28 mb-4 drop-shadow-[0_2px_8px_rgba(0,0,0,0.65)]" : "flex-1 mb-3"}>
             <div className="flex items-center gap-2">
               <h2 className="text-2xl font-black text-white tracking-tight">{vehicle.name}</h2>
               {vehicle.plate && (
@@ -2222,7 +2226,7 @@ function VehicleDetailView({
               )}
             </div>
             <p className="text-sm font-medium text-white/80 mt-1">
-              {vehicle.brand && vehicle.model ? `${vehicle.brand} ${vehicle.model}` : vehicleTypeLabels[vehicle.type]}
+              {vehicle.brand && vehicle.model ? `${vehicle.brand} ${vehicle.model}` : getVehicleTypeLabel(vehicle.type)}
               {vehicle.year ? ` ${vehicle.year}` : ""}
             </p>
           </div>

@@ -349,7 +349,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
               <div className="min-w-0">
                 <Label className="text-sm font-bold">Soporte de la orden</Label>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Adjunta una foto de la orden, fórmula o soporte general. Si el documento corresponde a un rubro específico, indícalo en las notas de ese rubro.
+                  Adjunta un PDF escaneado o una foto de la orden, fórmula o soporte general. Si el documento corresponde a un rubro específico, indícalo en las notas de ese rubro.
                 </p>
               </div>
             </div>
@@ -369,7 +369,7 @@ export function MedicalOrderForm({ open, onOpenChange, order, onSuccess }: Medic
                 Esta clasificación queda guardada en las notas de la orden para que luego sea fácil ubicar el soporte.
               </p>
             </div>
-            <ReceiptUpload value={receiptUrl} onChange={setReceiptUrl} />
+            <ReceiptUpload value={receiptUrl} onChange={setReceiptUrl} uploadLabel="Subir soporte" />
           </div>
 
           <Button

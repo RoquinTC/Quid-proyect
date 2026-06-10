@@ -2,6 +2,8 @@
 // Used by both /api/vehicles GET and /api/vehicles/[id]/fuel-level GET
 // to compute the current fuel level for a vehicle based on its fuel logs.
 
+import { getVehicleDefaultEfficiency } from "@/lib/constants/vehicle-catalog";
+
 interface FuelLogInput {
   id: string;
   date: Date;
@@ -128,7 +130,7 @@ export function calculateFuelLevel(
 
   // Default efficiency if no data (conservative estimates by vehicle type)
   if (avgKmPerGallon === 0) {
-    avgKmPerGallon = vehicle.type === 'motorcycle' ? 35 : vehicle.type === 'car' ? 25 : 15;
+    avgKmPerGallon = getVehicleDefaultEfficiency(vehicle.type);
     isLearning = true;
   }
 

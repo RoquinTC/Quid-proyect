@@ -27,6 +27,8 @@ export async function PUT(
       issueDate,
       daysOfValidity,
       notes,
+      supportUrl,
+      supportType,
       appointmentId,
       isRenewal,
       newAuthorizationDate,
@@ -105,6 +107,8 @@ export async function PUT(
       if (status !== undefined) updatedData.status = status;
       if (resolvedCode !== undefined) updatedData.code = resolvedCode || null;
       if (notes !== undefined) updatedData.notes = notes || null;
+      if (supportUrl !== undefined) updatedData.supportUrl = supportUrl || null;
+      if (supportType !== undefined) updatedData.supportType = supportType || null;
       if (appointmentId !== undefined) updatedData.appointmentId = appointmentId || null;
       if (clearAuthorization) {
         updatedData.status = "pending_authorization";

@@ -800,6 +800,8 @@ model MedicalAppointment {
   debtId                String?
   financeSourceId       String?
   authorizationId       String?   @unique
+  supportUrl            String?
+  supportType           String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -822,6 +824,8 @@ model MedicalAuthorization {
   daysOfValidity      Int?      @default(30)
   expirationDate      DateTime?
   notes               String?
+  supportUrl          String?
+  supportType         String?
   appointmentId       String?   @unique
   originAppointmentId String?
   renewals            Json?     // Array of renewals history [{ fechaAnterior, diasAnteriores, fechaNueva, motivo, updatedAt }]

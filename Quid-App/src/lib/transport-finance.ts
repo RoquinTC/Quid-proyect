@@ -10,6 +10,7 @@
 import { db } from "@/lib/db";
 import { MAINTENANCE_SUBCATEGORY_MAP, DOCUMENT_SUBCATEGORY_MAP } from "@/lib/types/transport";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { getVehicleTypeLabel } from "@/lib/constants/vehicle-catalog";
 
 // ─── Types ───
 
@@ -395,9 +396,7 @@ export function getTransportDescription(
     case "fuel":
       return `Combustible - ${vehicleName}`;
     case "maintenance": {
-      const typeLabel = vehicleType === "motorcycle" ? "Moto" :
-                        vehicleType === "car" ? "Carro" :
-                        vehicleType === "truck" ? "Camión" : "Vehículo";
+      const typeLabel = getVehicleTypeLabel(vehicleType, true);
       return `Mantenimiento ${typeLabel} - ${vehicleName}`;
     }
     case "document":

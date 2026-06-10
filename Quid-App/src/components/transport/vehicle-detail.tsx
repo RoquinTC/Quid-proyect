@@ -60,30 +60,18 @@ import { QuickKmUpdate } from "./quick-km-update";
 import { VehicleIcon } from "./vehicle-icon";
 import { VehicleDocumentForm } from "./vehicle-document-form";
 import { toast } from "sonner";
+import { getVehicleGradient, getVehicleTypeLabel } from "@/lib/constants/vehicle-catalog";
 
 interface VehicleDetailProps {
   vehicleId: string;
   onBack: () => void;
 }
 
-const vehicleGradients: Record<string, string> = {
-  motorcycle: "from-cyan-500 to-blue-600",
-  car: "from-blue-500 to-indigo-600",
-  truck: "from-indigo-500 to-purple-600",
-  other: "from-slate-500 to-gray-600",
-};
-
-const vehicleTypeLabels: Record<string, string> = {
-  motorcycle: "Motocicleta",
-  car: "Carro",
-  truck: "Camión",
-  other: "Otro",
-};
-
 const fuelTypeLabels: Record<string, string> = {
   gasoline: "Gasolina",
   diesel: "Diésel",
   electric: "Eléctrico",
+  none: "No aplica",
 };
 
 const maintTypeIcons: Record<string, typeof Wrench> = {
@@ -278,7 +266,7 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
     );
   }
 
-  const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
+  const gradient = getVehicleGradient(vehicle.type);
 
   // Stats
   const totalFuelSpent = fuelLogs.reduce((s, l) => s + l.amount, 0);
@@ -359,7 +347,12 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setShowEditForm(true)}>
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                requestAnimationFrame(() => setShowEditForm(true));
+              }}
+            >
               <Pencil className="size-4 mr-2" />
               Editar
             </DropdownMenuItem>
@@ -373,9 +366,19 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
 
       {/* Vehicle Info Card with Fuel Gauge */}
       <Card className="border-0 shadow-lg rounded-2xl overflow-hidden">
-        <div className={`bg-gradient-to-r ${gradient} p-5 relative`}>
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
-          <div className="flex items-center gap-4 relative z-10">
+        <div className={`relative overflow-hidden p-5 ${vehicle.photoUrl ? "min-h-[280px] bg-slate-950" : `bg-gradient-to-r ${gradient}`}`}>
+          {vehicle.photoUrl && (
+            <>
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-100"
+                style={{ backgroundImage: `url(${vehicle.photoUrl})` }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/30 via-transparent to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/62 via-slate-950/12 to-transparent" />
+            </>
+          )}
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.18),transparent)] pointer-events-none" />
+          <div className={`relative z-10 flex items-center gap-4 ${vehicle.photoUrl ? "mt-36 drop-shadow-[0_2px_8px_rgba(0,0,0,0.65)]" : ""}`}>
             <div className="size-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
               <VehicleIcon icon={vehicle.icon} type={vehicle.type} className="size-7 text-white" />
             </div>
@@ -391,7 +394,7 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
               <p className="text-sm text-white/70">
                 {vehicle.brand && vehicle.model
                   ? `${vehicle.brand} ${vehicle.model}`
-                  : vehicleTypeLabels[vehicle.type]}
+                  : getVehicleTypeLabel(vehicle.type)}
                 {vehicle.year ? ` ${vehicle.year}` : ""}
               </p>
               <div className="flex items-center gap-2 mt-1">

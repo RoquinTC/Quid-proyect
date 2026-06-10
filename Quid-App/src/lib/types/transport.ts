@@ -4,7 +4,7 @@
 export interface Vehicle {
   id: string;
   name: string;
-  type: string; // motorcycle, car, truck, other
+  type: string; // motorcycle, electric_motorcycle, scooter, electric_scooter, bicycle, e_bike, car, electric_car, taxi, truck, electric_truck, bus, other
   brand?: string | null;
   model?: string | null;
   year?: number | null;

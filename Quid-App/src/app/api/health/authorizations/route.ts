@@ -42,6 +42,8 @@ export async function POST(req: NextRequest) {
       authorizationDate,
       daysOfValidity,
       notes,
+      supportUrl,
+      supportType,
       originAppointmentId,
       appointmentId,
     } = body;
@@ -68,6 +70,8 @@ export async function POST(req: NextRequest) {
         daysOfValidity: daysOfValidity ? Number(daysOfValidity) : 30,
         expirationDate,
         notes: notes || null,
+        supportUrl: supportUrl || null,
+        supportType: supportUrl ? supportType || "Autorizacion EPS" : null,
         originAppointmentId: originAppointmentId || null,
         appointmentId: appointmentId || null,
         renewals: [],

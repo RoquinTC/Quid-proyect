@@ -24,6 +24,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { hasNativeCalendarEvent, syncNativeAppointment } from "@/lib/native/device-integrations";
 import { isNativeAndroid } from "@/lib/native/biometric";
+import { ReceiptUpload } from "@/components/finance/receipt-upload";
 
 interface AppointmentFormProps {
   open: boolean;
@@ -38,6 +39,8 @@ interface AppointmentFormProps {
     reminderEnabled: boolean;
     status: string;
     copayAmount?: number | null;
+    supportUrl?: string | null;
+    supportType?: string | null;
   } | null;
   onSuccess?: () => void | Promise<void>;
 }
@@ -83,6 +86,15 @@ const specialtyOptions = [
   "Otra",
 ];
 
+const supportTypes = [
+  "Orden de cita",
+  "Historia clinica",
+  "Autorizacion",
+  "Resultado o examen",
+  "Indicaciones previas",
+  "Otro soporte",
+];
+
 function toLocalDateTimeInput(value: string) {
   const date = new Date(value);
   const offsetMs = date.getTimezoneOffset() * 60000;
@@ -104,6 +116,8 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
   const [copayAmount, setCopayAmount] = useState(
     appointment?.copayAmount != null ? String(appointment.copayAmount) : ""
   );
+  const [supportUrl, setSupportUrl] = useState<string | null>(appointment?.supportUrl || null);
+  const [supportType, setSupportType] = useState(appointment?.supportType || supportTypes[0]);
   const [reminderEnabled, setReminderEnabled] = useState(appointment?.reminderEnabled ?? true);
   const [calendarEnabled, setCalendarEnabled] = useState(() => hasNativeCalendarEvent(appointment?.id));
 
@@ -117,6 +131,8 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
     setDateStr(appointment?.date ? toLocalDateTimeInput(appointment.date) : "");
     setNotes(appointment?.notes || "");
     setCopayAmount(appointment?.copayAmount != null ? String(appointment.copayAmount) : "");
+    setSupportUrl(appointment?.supportUrl || null);
+    setSupportType(appointment?.supportType || supportTypes[0]);
     setReminderEnabled(appointment?.reminderEnabled ?? true);
     setCalendarEnabled(hasNativeCalendarEvent(appointment?.id));
   }, [appointment, open]);
@@ -133,6 +149,8 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
         notes: notes || null,
         copayAmount: copayAmount ? Number(copayAmount) : null,
         reminderEnabled,
+        supportUrl,
+        supportType: supportUrl ? supportType : null,
       };
 
       if (isEditing && appointment) {
@@ -192,6 +210,8 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
       setDateStr("");
       setNotes("");
       setCopayAmount("");
+      setSupportUrl(null);
+      setSupportType(supportTypes[0]);
       setReminderEnabled(true);
     }
   };
@@ -310,6 +330,29 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
               <Switch checked={calendarEnabled} onCheckedChange={setCalendarEnabled} />
             </div>
           )}
+
+          <div className="space-y-3 rounded-2xl border border-dashed border-rose-200 bg-rose-50/40 p-3 dark:border-rose-900/50 dark:bg-rose-950/10">
+            <div>
+              <Label className="text-sm font-bold">Soporte de la cita</Label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Adjunta PDF o foto de la orden, historia clínica, indicaciones o resultados relacionados con esta cita.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="apt-support-type" className="text-xs">Tipo de soporte</Label>
+              <select
+                id="apt-support-type"
+                value={supportType}
+                onChange={(e) => setSupportType(e.target.value)}
+                className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-rose-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+              >
+                {supportTypes.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
+            <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
+          </div>
 
           {/* Submit */}
           <Button

@@ -35,6 +35,7 @@ import {
   Wallet,
   Loader2,
   RotateCcw,
+  ExternalLink,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
@@ -1112,6 +1113,25 @@ function AppointmentDetail({
                 <p className="text-sm text-gray-700 dark:text-gray-300">{appointment.notes}</p>
               </div>
             </div>
+          )}
+          {appointment.supportUrl && (
+            <a
+              href={appointment.supportUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 rounded-xl border border-violet-100 bg-violet-50 p-3 transition hover:bg-violet-100 dark:border-violet-900/50 dark:bg-violet-950/20 dark:hover:bg-violet-950/35"
+            >
+              <div className="size-8 rounded-lg bg-white dark:bg-gray-950 flex items-center justify-center shrink-0">
+                <FileText className="size-4 text-violet-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-xs text-gray-500">Soporte</span>
+                <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
+                  {appointment.supportType || "Documento adjunto"}
+                </p>
+              </div>
+              <ExternalLink className="size-4 text-violet-500" />
+            </a>
           )}
           {appointment.copayAmount != null && Number(appointment.copayAmount) > 0 && (
             <div className="flex items-center gap-3">

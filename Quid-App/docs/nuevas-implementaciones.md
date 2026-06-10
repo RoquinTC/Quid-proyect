@@ -517,6 +517,15 @@ Falta para considerarlo 100%:
 - **Gestor de documentos clínicos y soportes locales/nube:**
   - Permitir adjuntar o tomar foto/PDF desde el celular para: historias clínicas, órdenes médicas, órdenes de medicamentos, autorizaciones EPS, incapacidades y recibos de pendientes de medicamentos.
   - Guardar cada archivo enlazado al registro que lo originó: cita, autorización, orden médica, pendiente de farmacia o medicamento.
+  - Crear una trazabilidad clínica bidireccional entre cita, historia clínica, incapacidad, orden médica, orden de medicamentos, autorización EPS y entregas/pendientes de farmacia. Desde cualquier registro se debe poder ver qué cita lo originó y qué otros documentos o trámites quedaron relacionados.
+  - Añadir registros específicos para **Historias clínicas**, **Incapacidades** y **Laboratorios/Resultados clínicos**, o un gestor común `DocumentoClinico` con tipo controlado (`historia_clinica`, `incapacidad`, `orden_medica`, `orden_medicamentos`, `autorizacion_eps`, `resultado_examen`, `laboratorio`, `recibo_pendiente`). La decisión técnica debe favorecer trazabilidad, historial y posibilidad de compartir el archivo original.
+  - En la vista de citas completadas, mostrar un histórico expandible: al tocar una cita debe verse todo lo generado por esa atención médica: historia clínica, incapacidades, órdenes de medicamentos, órdenes para especialista/procedimiento, autorizaciones derivadas, citas agendadas desde esas autorizaciones y pendientes de farmacia.
+  - En cada apartado de salud, mostrar la trazabilidad inversa. Ejemplo: al abrir una autorización, indicar la cita y orden médica que la originaron; al abrir una historia clínica, indicar la cita asociada y los demás documentos derivados; al abrir una orden médica, indicar si tiene autorización, incapacidad, historia clínica o entrega pendiente relacionada.
+  - Añadir una sección de **Laboratorios** para registrar exámenes solicitados, fecha de toma, laboratorio/entidad, estado (`pendiente`, `tomado`, `resultado_recibido`, `revisado_con_medico`) y soporte PDF/imagen. Si el laboratorio nace de una cita, debe quedar ligado a esa cita; si se carga después, debe permitir relacionarlo manualmente.
+  - Cuando un laboratorio quede como `resultado_recibido`, permitir que Aura lea el PDF o imagen y genere un resumen educativo: valores fuera de rango, señales que conviene preguntar al médico, posibles hábitos a revisar y preguntas sugeridas para la próxima consulta. Debe mostrar siempre el aviso de que no reemplaza diagnóstico médico ni modifica tratamientos.
+  - La interpretación de laboratorios también debe poder llegar por Telegram: el usuario puede enviar el PDF/foto a Aura, Aura lo analiza con el mismo criterio seguro y propone guardarlo en Quid como soporte de laboratorio relacionado con una cita u orden.
+  - Permitir crear primero el registro sin adjunto y adjuntar o reemplazar el soporte después, tanto desde la cita origen como desde el registro específico.
+  - Permitir abrir/ver el documento y, en fase APK/nativa, compartir el archivo original por WhatsApp, correo, Drive u otra app compatible. La vista interna puede usar previsualización liviana, pero la acción de compartir debe usar el archivo original cargado por el usuario.
   - En primera fase, guardar usando almacenamiento local/app o selector nativo de archivos del teléfono, aprovechando que el usuario puede escoger una carpeta sincronizada por Drive/OneDrive si la tiene instalada en el dispositivo.
   - Sugerir en la UI, de forma ligera y no invasiva: "Puedes escoger una carpeta sincronizada de Drive o OneDrive si quieres tener respaldo en la nube".
   - Crear una estructura sugerida de carpetas: `Salud/Ordenes medicas`, `Salud/Ordenes de medicamentos`, `Salud/Autorizaciones`, `Salud/Historias clinicas`, `Salud/Incapacidades` y `Salud/Pendientes medicamentos/Recibos`.
@@ -606,8 +615,13 @@ Ya existe base real:
 - Campo básico `receiptUrl`/`receiptThumbnail` para soporte o recibo.
 
 Falta complementar:
-- Gestor real de documentos clínicos con archivo/foto/PDF, vista previa, reemplazo, eliminación y enlace al registro origen.
+- Gestor real de documentos clínicos con archivo/foto/PDF, vista previa, reemplazo, eliminación, enlace al registro origen y trazabilidad bidireccional.
 - Estructura de carpetas sugeridas: historias clínicas, órdenes médicas, órdenes de medicamentos, autorizaciones, incapacidades y recibos de pendientes.
+- Histórico clínico expandible por cita completada y trazabilidad inversa desde órdenes, autorizaciones, historias clínicas e incapacidades.
+- Registro específico o documento clínico tipado para historias clínicas, incapacidades y laboratorios/resultados clínicos, con opción de crear sin adjunto y adjuntar soporte después.
+- Sección de laboratorios con estado, soporte PDF/imagen, vínculo a cita/orden y lectura segura por Aura.
+- Interpretación asistida de laboratorios por Aura: resumen educativo, valores fuera de rango, preguntas para el médico y recomendaciones generales no diagnósticas. Este flujo puede operar desde la app o desde Telegram, guardando el soporte en Quid si el usuario confirma.
+- Compartir el archivo original desde la app, especialmente en APK Android con integración nativa.
 - Flujo más completo de entregas parciales de farmacia.
 - Recordatorios insistentes para citas, medicamentos, autorizaciones próximas a vencer y pendientes por reclamar.
 
@@ -638,6 +652,9 @@ Ya existe base real:
 - Herramientas iniciadas en `src/lib/aura/tools`, incluyendo registro de transacciones y tanqueo.
 
 Falta complementar:
+- Integración de Odysseus como asistente operativo de Aura: Aura conserva la cara, personalidad y control del sistema, mientras Odysseus actúa por debajo como motor auxiliar para razonar, planear y preparar acciones complejas. Repo de referencia: `https://github.com/pewdiepie-archdaemon/odysseus`.
+- Ejecutar Odysseus como servicio aislado y seguro, sin acceso directo a la base de datos de Quid. Quid debe exponer herramientas controladas y Aura debe pedir confirmación antes de cualquier escritura.
+- Usar Odysseus como apoyo de razonamiento para tareas pesadas de Aura, especialmente lectura de documentos clínicos, laboratorios, trazabilidad de salud, planificación de recordatorios y preparación de acciones complejas. Aura sigue siendo la voz visible y la dueña de la confirmación final.
 - Gateway formal de herramientas.
 - JSON Schemas para cada tool.
 - Máquina de estados de confirmación con botones.
@@ -674,6 +691,11 @@ Falta complementar:
 - QA visual en móviles pequeños.
 - Validación de notificaciones con app cerrada.
 - Historial compacto y más consultable.
+- Pulir la vista de detalle del vehículo: imagen más visible, recorte/encuadre completo en ambos ejes cuando la relación de aspecto lo permita y edición directa sin tener que salir del detalle.
+- Rediseñar la tarjeta de resumen de transporte con indicadores más inmersivos y menos planos.
+- Rediseñar recordatorios de transporte para que sean más claros, compactos y accionables.
+- Evaluar renombrar visualmente el módulo de **Transporte** a **Movilidad**. "Movilidad" cubre mejor motos, carros, bicicletas, patines eléctricos, e-bikes y vehículos eléctricos; el cambio debe hacerse con cuidado porque Finanzas y categorías históricas todavía usan "Transporte".
+- Mantener íconos dinámicos por vehículo y estudiar animaciones sutiles por tipo: movimiento leve para moto/bici, pulso eléctrico para EV, vibración suave de tablero/combustible, siempre respetando rendimiento móvil.
 - Lectura de recibos/fotos con Aura en una fase posterior.
 
 ### E.6 Local-first / Offline

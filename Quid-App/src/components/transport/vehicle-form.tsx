@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,24 +21,25 @@ import {
 import { apiFetch } from "@/lib/api";
 import { Loader2, AlertCircle, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
-import { VehicleIcon, availableIconKeys, iconLabels } from "./vehicle-icon";
-
-const vehicleTypes = [
-  { value: "motorcycle", label: "Motocicleta" },
-  { value: "car", label: "Carro" },
-  { value: "truck", label: "Camión" },
-  { value: "other", label: "Otro" },
-];
+import { VehicleIcon, getAvailableIconKeys, iconLabels } from "./vehicle-icon";
+import {
+  ELECTRIC_VEHICLE_TYPES,
+  HUMAN_POWERED_VEHICLE_TYPES,
+  VEHICLE_TYPE_OPTIONS,
+  getVehicleDefaultIcon,
+} from "@/lib/constants/vehicle-catalog";
 
 const fuelTypes = [
   { value: "gasoline", label: "Gasolina" },
   { value: "diesel", label: "Diésel" },
   { value: "electric", label: "Eléctrico" },
+  { value: "none", label: "No aplica" },
 ];
 
 const MAX_PHOTO_INPUT_MB = 12;
 const MAX_PHOTO_EDGE = 1400;
 const PHOTO_QUALITY = 0.78;
+const VEHICLE_PHOTO_RATIO = 16 / 9;
 
 interface VehicleFormProps {
   open: boolean;
@@ -76,6 +77,11 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
   const [currentKm, setCurrentKm] = useState(vehicle?.currentKm?.toString() || "0");
   const [icon, setIcon] = useState(vehicle?.icon || "");
   const [photoUrl, setPhotoUrl] = useState(vehicle?.photoUrl || "");
+  const [photoSourceUrl, setPhotoSourceUrl] = useState(vehicle?.photoUrl || "");
+  const [photoFocusX, setPhotoFocusX] = useState(50);
+  const [photoFocusY, setPhotoFocusY] = useState(50);
+  const [photoMovableAxis, setPhotoMovableAxis] = useState<"horizontal" | "vertical" | "both" | "none">("none");
+  const iconKeys = useMemo(() => getAvailableIconKeys(type), [type]);
 
   // Sync form state when vehicle prop changes (e.g., editing a different vehicle)
   useEffect(() => {
@@ -92,11 +98,29 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
       setCurrentKm(vehicle?.currentKm?.toString() || "0");
       setIcon(vehicle?.icon || "");
       setPhotoUrl(vehicle?.photoUrl || "");
+      setPhotoSourceUrl(vehicle?.photoUrl || "");
+      setPhotoFocusX(50);
+      setPhotoFocusY(50);
+      setPhotoMovableAxis("none");
       setError(null);
     }
   }, [vehicle, open]);
 
   const isEditing = !!vehicle;
+
+  const handleTypeChange = (nextType: string) => {
+    setType(nextType);
+    setIcon("");
+    if (ELECTRIC_VEHICLE_TYPES.has(nextType)) {
+      setFuelType("electric");
+      setTankCapacity("");
+    } else if (HUMAN_POWERED_VEHICLE_TYPES.has(nextType)) {
+      setFuelType("none");
+      setTankCapacity("");
+    } else if (fuelType === "electric" || fuelType === "none") {
+      setFuelType("gasoline");
+    }
+  };
 
   const compressVehiclePhoto = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -105,6 +129,8 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
         const image = new Image();
         image.onload = () => {
           const scale = Math.min(1, MAX_PHOTO_EDGE / Math.max(image.width, image.height));
+          const ratio = image.width / image.height;
+          setPhotoMovableAxis(ratio > VEHICLE_PHOTO_RATIO ? "horizontal" : ratio < VEHICLE_PHOTO_RATIO ? "vertical" : "none");
           const width = Math.max(1, Math.round(image.width * scale));
           const height = Math.max(1, Math.round(image.height * scale));
           const canvas = document.createElement("canvas");
@@ -125,6 +151,46 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
       reader.readAsDataURL(file);
     });
 
+  const cropVehiclePhoto = (source: string) =>
+    new Promise<string>((resolve, reject) => {
+      if (!source.startsWith("data:image/")) {
+        resolve(source);
+        return;
+      }
+
+      const image = new Image();
+      image.onload = () => {
+        const targetWidth = Math.min(MAX_PHOTO_EDGE, image.width);
+        const targetHeight = Math.round(targetWidth / VEHICLE_PHOTO_RATIO);
+        const sourceRatio = image.width / image.height;
+        let cropWidth = image.width;
+        let cropHeight = image.height;
+
+        if (sourceRatio > VEHICLE_PHOTO_RATIO) {
+          cropWidth = image.height * VEHICLE_PHOTO_RATIO;
+        } else {
+          cropHeight = image.width / VEHICLE_PHOTO_RATIO;
+        }
+
+        const maxX = Math.max(0, image.width - cropWidth);
+        const maxY = Math.max(0, image.height - cropHeight);
+        const sourceX = maxX * (photoFocusX / 100);
+        const sourceY = maxY * (photoFocusY / 100);
+        const canvas = document.createElement("canvas");
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const context = canvas.getContext("2d");
+        if (!context) {
+          reject(new Error("No se pudo preparar el encuadre"));
+          return;
+        }
+        context.drawImage(image, sourceX, sourceY, cropWidth, cropHeight, 0, 0, targetWidth, targetHeight);
+        resolve(canvas.toDataURL("image/jpeg", PHOTO_QUALITY));
+      };
+      image.onerror = () => reject(new Error("No se pudo recortar la imagen"));
+      image.src = source;
+    });
+
   const handlePhotoFile = async (file?: File | null) => {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -143,6 +209,9 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
     try {
       const compressed = await compressVehiclePhoto(file);
       setPhotoUrl(compressed);
+      setPhotoSourceUrl(compressed);
+      setPhotoFocusX(50);
+      setPhotoFocusY(50);
       toast.success("Foto optimizada", {
         description: "La imagen se redujo para que Quid siga liviana.",
       });
@@ -156,6 +225,9 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
     setError(null);
     setLoading(true);
     try {
+      const finalPhotoUrl = photoSourceUrl
+        ? await cropVehiclePhoto(photoSourceUrl)
+        : photoUrl || null;
       const data = {
         name,
         type,
@@ -168,7 +240,7 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
         fuelType,
         currentKm: currentKm ? Number(currentKm) : 0,
         icon: icon || null,
-        photoUrl: photoUrl || null,
+        photoUrl: finalPhotoUrl,
       };
 
       if (isEditing) {
@@ -215,8 +287,12 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
       setTankCapacity("");
       setFuelType("gasoline");
       setCurrentKm("0");
-      setIcon("");
-      setPhotoUrl("");
+        setIcon("");
+        setPhotoUrl("");
+        setPhotoSourceUrl("");
+        setPhotoFocusX(50);
+        setPhotoFocusY(50);
+        setPhotoMovableAxis("none");
     }
   };
 
@@ -248,12 +324,12 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
           {/* Type */}
           <div className="space-y-2">
             <Label>Tipo</Label>
-            <Select value={type} onValueChange={setType}>
+            <Select value={type} onValueChange={handleTypeChange}>
               <SelectTrigger className="rounded-xl">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {vehicleTypes.map((t) => (
+                {VEHICLE_TYPE_OPTIONS.map((t) => (
                   <SelectItem key={t.value} value={t.value}>
                     {t.label}
                   </SelectItem>
@@ -266,7 +342,22 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
           <div className="space-y-2">
             <Label>Ícono</Label>
             <div className="grid grid-cols-6 gap-1.5">
-              {availableIconKeys.map((key) => (
+              <button
+                type="button"
+                onClick={() => setIcon("")}
+                className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${
+                  !icon
+                    ? "border-cyan-500 bg-cyan-50 dark:bg-cyan-900/30 shadow-sm"
+                    : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+                }`}
+                title="Automático"
+              >
+                <VehicleIcon icon={getVehicleDefaultIcon(type)} type={type} className={`size-5 ${!icon ? "text-cyan-600 dark:text-cyan-400" : "text-gray-500 dark:text-gray-400"}`} />
+                <span className="text-[11px] mt-1 text-gray-500 dark:text-gray-400 leading-tight truncate w-full text-center">
+                  Auto
+                </span>
+              </button>
+              {iconKeys.map((key) => (
                 <button
                   key={key}
                   type="button"
@@ -298,10 +389,17 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
                     src={photoUrl}
                     alt="Vista previa del vehículo"
                     className="h-36 w-full object-cover"
+                    style={{ objectPosition: `${photoFocusX}% ${photoFocusY}%` }}
                   />
                   <button
                     type="button"
-                    onClick={() => setPhotoUrl("")}
+                    onClick={() => {
+                      setPhotoUrl("");
+                      setPhotoSourceUrl("");
+                      setPhotoFocusX(50);
+                      setPhotoFocusY(50);
+                      setPhotoMovableAxis("none");
+                    }}
                     className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur transition hover:bg-black/75"
                     aria-label="Quitar foto"
                   >
@@ -326,11 +424,55 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
                 </label>
               )}
             </div>
+            {photoUrl && photoSourceUrl.startsWith("data:image/") && (
+              <div className="space-y-2 rounded-2xl border border-cyan-100 bg-white/70 p-3 dark:border-cyan-900/40 dark:bg-gray-950/40">
+                <div>
+                  <p className="text-xs font-semibold text-gray-900 dark:text-white">Acomodar encuadre</p>
+                  <p className="text-[10px] text-gray-500">
+                    {photoMovableAxis === "vertical"
+                      ? "Esta foto es vertical: puedes moverla arriba o abajo."
+                      : photoMovableAxis === "horizontal"
+                        ? "Esta foto es panorámica: puedes moverla a izquierda o derecha."
+                        : "La foto ya coincide casi con el recorte de la tarjeta."}
+                  </p>
+                </div>
+                {(photoMovableAxis === "horizontal" || photoMovableAxis === "both") && (
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-gray-500">Horizontal</Label>
+                  <Input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={photoFocusX}
+                    onChange={(e) => setPhotoFocusX(Number(e.target.value))}
+                    className="h-2 p-0 accent-cyan-500"
+                  />
+                </div>
+                )}
+                {(photoMovableAxis === "vertical" || photoMovableAxis === "both") && (
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-gray-500">Vertical</Label>
+                  <Input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={photoFocusY}
+                    onChange={(e) => setPhotoFocusY(Number(e.target.value))}
+                    className="h-2 p-0 accent-cyan-500"
+                  />
+                </div>
+                )}
+              </div>
+            )}
             <Input
               id="vehicle-photo"
               placeholder="O pega una URL de imagen"
               value={photoUrl.startsWith("data:") ? "" : photoUrl}
-              onChange={(e) => setPhotoUrl(e.target.value)}
+              onChange={(e) => {
+                setPhotoUrl(e.target.value);
+                setPhotoSourceUrl(e.target.value);
+                setPhotoMovableAxis("none");
+              }}
               className="rounded-xl"
             />
             <p className="text-[10px] text-gray-500">

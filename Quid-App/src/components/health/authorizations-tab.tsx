@@ -34,7 +34,9 @@ import {
   RotateCcw,
   CalendarX,
   ChevronDown,
+  ExternalLink,
 } from "lucide-react";
+import { ReceiptUpload } from "@/components/finance/receipt-upload";
 
 interface Authorization {
   id: string;
@@ -48,6 +50,8 @@ interface Authorization {
   daysOfValidity: number;
   notes?: string | null;
   renewals?: any;
+  supportUrl?: string | null;
+  supportType?: string | null;
   createdAt: string;
   originAppointment?: {
     id: string;
@@ -84,6 +88,8 @@ export function AuthorizationsTab() {
   const [authCode, setAuthCode] = useState("");
   const [issueDate, setIssueDate] = useState("");
   const [daysOfValidity, setDaysOfValidity] = useState("30");
+  const [supportUrl, setSupportUrl] = useState<string | null>(null);
+  const [supportType, setSupportType] = useState("Autorizacion EPS");
   const [submitting, setSubmitting] = useState(false);
 
   // Schedule Appointment Form states
@@ -120,6 +126,8 @@ export function AuthorizationsTab() {
           authorizationCode: authCode,
           issueDate: new Date(issueDate).toISOString(),
           daysOfValidity: Number(daysOfValidity) || 30,
+          supportUrl,
+          supportType: supportUrl ? supportType : null,
         }),
       });
       setShowApproveDialog(false);
@@ -143,6 +151,8 @@ export function AuthorizationsTab() {
           authorizationCode: authCode,
           issueDate: new Date(issueDate).toISOString(),
           daysOfValidity: Number(daysOfValidity) || 30,
+          supportUrl,
+          supportType: supportUrl ? supportType : null,
         }),
       });
       setShowRenewDialog(false);
@@ -217,6 +227,8 @@ export function AuthorizationsTab() {
           type: activeAuth.type,
           specialty: activeAuth.specialty,
           notes: activeAuth.notes || null,
+          supportUrl,
+          supportType: supportUrl ? supportType : null,
         }),
       });
       setShowEditDialog(false);
@@ -501,6 +513,20 @@ export function AuthorizationsTab() {
                               </span>
                             </div>
                           )}
+                          {auth.supportUrl && (
+                            <a
+                              href={auth.supportUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-2 flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/20 dark:text-indigo-300"
+                            >
+                              <span className="flex items-center gap-2 font-semibold">
+                                <FileText className="size-3.5" />
+                                {auth.supportType || "Soporte adjunto"}
+                              </span>
+                              <ExternalLink className="size-3.5" />
+                            </a>
+                          )}
                         </div>
                       )}
 
@@ -567,6 +593,8 @@ export function AuthorizationsTab() {
                           className="text-xs h-8 text-gray-500 rounded-xl"
                           onClick={() => {
                             setActiveAuth({ ...auth });
+                            setSupportUrl(auth.supportUrl || null);
+                            setSupportType(auth.supportType || "Autorizacion EPS");
                             setShowEditDialog(true);
                           }}
                         >
@@ -596,6 +624,8 @@ export function AuthorizationsTab() {
                               setAuthCode("");
                               setIssueDate(new Date().toISOString().split("T")[0]);
                               setDaysOfValidity("30");
+                              setSupportUrl(auth.supportUrl || null);
+                              setSupportType(auth.supportType || "Autorizacion EPS");
                               setShowApproveDialog(true);
                             }}
                           >
@@ -659,6 +689,8 @@ export function AuthorizationsTab() {
                               setAuthCode("");
                               setIssueDate(new Date().toISOString().split("T")[0]);
                               setDaysOfValidity("30");
+                              setSupportUrl(auth.supportUrl || null);
+                              setSupportType(auth.supportType || "Autorizacion EPS");
                               setShowRenewDialog(true);
                             }}
                           >
@@ -759,6 +791,11 @@ export function AuthorizationsTab() {
               />
             </div>
 
+            <div className="space-y-2 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 p-3 dark:border-indigo-900/50 dark:bg-indigo-950/10">
+              <Label className="text-xs font-bold text-indigo-700 dark:text-indigo-300">Soporte PDF o foto</Label>
+              <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
+            </div>
+
             <Button
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 font-medium"
               onClick={handleEditAuthorization}
@@ -813,6 +850,11 @@ export function AuthorizationsTab() {
                   className="rounded-xl h-10 text-sm"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 p-3 dark:border-indigo-900/50 dark:bg-indigo-950/10">
+              <Label className="text-xs font-bold text-indigo-700 dark:text-indigo-300">PDF o foto de la autorización</Label>
+              <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
             </div>
 
             <Button
@@ -870,6 +912,11 @@ export function AuthorizationsTab() {
                   className="rounded-xl h-10 text-sm"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2 rounded-2xl border border-dashed border-rose-200 bg-rose-50/40 p-3 dark:border-rose-900/50 dark:bg-rose-950/10">
+              <Label className="text-xs font-bold text-rose-700 dark:text-rose-300">PDF o foto de la renovación</Label>
+              <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
             </div>
 
             <Button

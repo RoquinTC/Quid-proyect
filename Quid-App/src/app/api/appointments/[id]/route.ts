@@ -45,6 +45,8 @@ export async function PUT(
     if (body.subAccountId !== undefined) updateData.subAccountId = body.subAccountId;
     if (body.debtId !== undefined) updateData.debtId = body.debtId;
     if (body.authorizationId !== undefined) updateData.authorizationId = body.authorizationId;
+    if (body.supportUrl !== undefined) updateData.supportUrl = body.supportUrl;
+    if (body.supportType !== undefined) updateData.supportType = body.supportType;
 
     // Lógica de Integración Financiera para Copagos
     const status = body.status !== undefined ? body.status : existing.status;

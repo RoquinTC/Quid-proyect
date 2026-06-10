@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FuelGauge } from "./Fuel-gauge";
 import { QuickKmUpdate } from "./quick-km-update";
 import { VehicleIcon } from "./vehicle-icon";
+import { getVehicleGradient, getVehicleTypeLabel } from "@/lib/constants/vehicle-catalog";
 
 interface VehicleCardProps {
   vehicle: {
@@ -58,30 +59,17 @@ interface VehicleCardProps {
   currentFuelPrice?: number | null;
 }
 
-const vehicleGradients: Record<string, string> = {
-  motorcycle: "from-cyan-500 to-blue-600",
-  car: "from-blue-500 to-indigo-600",
-  truck: "from-indigo-500 to-purple-600",
-  other: "from-slate-500 to-gray-600",
-};
-
-const vehicleTypeLabels: Record<string, string> = {
-  motorcycle: "Moto",
-  car: "Carro",
-  truck: "Camión",
-  other: "Otro",
-};
-
 const fuelTypeLabels: Record<string, string> = {
   gasoline: "Gasolina",
   diesel: "Diésel",
   electric: "Eléctrico",
+  none: "No aplica",
 };
 
 export function VehicleCard({ vehicle, onClick, onKmUpdated, currentFuelPrice }: VehicleCardProps) {
   const [showKmUpdate, setShowKmUpdate] = useState(false);
   const [showFuelHistory, setShowFuelHistory] = useState(false);
-  const gradient = vehicleGradients[vehicle.type] || vehicleGradients.other;
+  const gradient = getVehicleGradient(vehicle.type);
   const lastFuelLog = vehicle.fuelLogs?.[0];
   const recentFuelLogs = vehicle.fuelLogs?.slice(0, 5) || [];
   const nextMaintenance = vehicle.maintenanceRecords?.[0];
@@ -170,10 +158,10 @@ export function VehicleCard({ vehicle, onClick, onKmUpdated, currentFuelPrice }:
             {vehicle.photoUrl && (
               <>
                 <div
-                  className="absolute inset-0 bg-cover bg-center opacity-75"
+                  className="absolute inset-0 bg-cover bg-center opacity-90"
                   style={{ backgroundImage: `url(${vehicle.photoUrl})` }}
                 />
-                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/86 via-slate-950/52 to-slate-950/20" />
+                <div className="absolute inset-0 bg-gradient-to-r from-slate-950/82 via-slate-950/46 to-slate-950/10" />
               </>
             )}
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.15),transparent)] pointer-events-none" />
@@ -194,7 +182,7 @@ export function VehicleCard({ vehicle, onClick, onKmUpdated, currentFuelPrice }:
                   <span className="text-xs text-white/70">
                     {vehicle.brand && vehicle.model
                       ? `${vehicle.brand} ${vehicle.model}`
-                      : vehicleTypeLabels[vehicle.type] || vehicle.type}
+                      : getVehicleTypeLabel(vehicle.type, true)}
                     {vehicle.year ? ` ${vehicle.year}` : ""}
                   </span>
                 </div>

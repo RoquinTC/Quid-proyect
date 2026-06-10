@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
       subAccountId,
       debtId,
       authorizationId,
+      supportUrl,
+      supportType,
     } = body;
 
     if (!date) {
@@ -74,6 +76,8 @@ export async function POST(req: NextRequest) {
         subAccountId: subAccountId ?? null,
         debtId: debtId ?? null,
         authorizationId: authorizationId ?? null,
+        supportUrl: supportUrl ?? null,
+        supportType: supportType ?? null,
       },
     });
 

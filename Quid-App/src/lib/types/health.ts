@@ -37,6 +37,8 @@ export interface MedicalAppointment {
   debtId?: string | null;
   financeSourceId?: string | null;
   authorizationId?: string | null;
+  supportUrl?: string | null;
+  supportType?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

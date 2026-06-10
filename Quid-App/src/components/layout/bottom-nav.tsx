@@ -1,9 +1,11 @@
 "use client";
 
 import { useAppStore, type ModuleType } from "@/lib/store";
-import { Wallet, Car, Heart, ShoppingBasket } from "lucide-react";
+import { Wallet, Heart, ShoppingBasket } from "lucide-react";
 import { motion } from "framer-motion";
 import { QuickActionFab } from "@/components/layout/quick-action-fab";
+import { VehicleIcon } from "@/components/transport/vehicle-icon";
+import { useLocalQuery } from "@/lib/local/hooks/queries";
 
 const navItems: {
   id: ModuleType;
@@ -11,13 +13,15 @@ const navItems: {
   icon: typeof Wallet;
 }[] = [
   { id: "finance", label: "Finanzas", icon: Wallet },
-  { id: "transport", label: "Transporte", icon: Car },
+  { id: "transport", label: "Transporte", icon: Wallet },
   { id: "health", label: "Salud", icon: Heart },
   { id: "pantry", label: "Despensa", icon: ShoppingBasket },
 ];
 
 export function BottomNav() {
   const { activeModule, setActiveModule } = useAppStore();
+  const { data: vehiclesData } = useLocalQuery<{ id: string; type: string; icon?: string | null }>("/api/vehicles");
+  const primaryVehicle = vehiclesData?.[0];
   const leftItems = navItems.slice(0, 2);
   const rightItems = navItems.slice(2);
 
@@ -42,11 +46,27 @@ export function BottomNav() {
             }}
           />
         )}
-        <Icon
-          className={`relative z-10 size-[21px] transition-colors duration-200 ${
-            isActive ? "text-white" : "text-gray-400 dark:text-gray-500"
-          }`}
-        />
+        {item.id === "transport" ? (
+          <motion.span
+            className="relative z-10"
+            animate={isActive ? { y: [0, -1, 0] } : { y: 0 }}
+            transition={{ duration: 1.8, repeat: isActive ? Infinity : 0, ease: "easeInOut" }}
+          >
+            <VehicleIcon
+              type={primaryVehicle?.type || "motorcycle"}
+              icon={primaryVehicle?.icon}
+              className={`size-[21px] transition-colors duration-200 ${
+                isActive ? "text-white" : "text-gray-400 dark:text-gray-500"
+              }`}
+            />
+          </motion.span>
+        ) : (
+          <Icon
+            className={`relative z-10 size-[21px] transition-colors duration-200 ${
+              isActive ? "text-white" : "text-gray-400 dark:text-gray-500"
+            }`}
+          />
+        )}
         <span
           className={`relative z-10 mt-0.5 text-[11px] font-medium transition-colors duration-200 ${
             isActive ? "text-white" : "text-gray-400 dark:text-gray-500"

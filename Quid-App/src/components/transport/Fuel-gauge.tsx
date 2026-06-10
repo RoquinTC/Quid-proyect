@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Bike, Car } from "lucide-react";
+import { VehicleIcon } from "./vehicle-icon";
 
 interface FuelGaugeProps {
   fuelLevel: number; // 0-100 percentage
@@ -18,7 +18,7 @@ export function FuelGauge({
   currentFuel,
   showDetails = true 
 }: FuelGaugeProps) {
-  const isMotorcycle = vehicleType === "motorcycle";
+  const isCompactVehicle = ["motorcycle", "electric_motorcycle", "scooter", "electric_scooter", "bicycle", "e_bike"].includes(vehicleType);
   const normalizedLevel = Math.max(0, Math.min(100, fuelLevel));
   
   // Color based on level
@@ -61,15 +61,11 @@ export function FuelGauge({
   return (
     <div className="relative w-full">
       {/* Main Gauge Container */}
-      <div className="relative mx-auto" style={{ maxWidth: isMotorcycle ? '120px' : '180px' }}>
+      <div className="relative mx-auto" style={{ maxWidth: isCompactVehicle ? '120px' : '180px' }}>
         
         {/* Vehicle Icon Background */}
         <div className="absolute inset-0 flex items-center justify-center opacity-10">
-          {isMotorcycle ? (
-            <Bike className="w-16 h-16 text-gray-400" />
-          ) : (
-            <Car className="w-20 h-20 text-gray-400" />
-          )}
+          <VehicleIcon type={vehicleType} className={`${isCompactVehicle ? "h-16 w-16" : "h-20 w-20"} text-gray-400`} />
         </div>
 
         {/* Tank Container - Gas Pump Style */}
@@ -82,7 +78,7 @@ export function FuelGauge({
             <div 
               className="relative w-full"
               style={{ 
-                height: isMotorcycle ? '100px' : '140px',
+                height: isCompactVehicle ? '100px' : '140px',
                 borderRadius: '12px'
               }}
             >

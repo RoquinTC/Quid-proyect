@@ -49,6 +49,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ShareInvite } from "@/components/pwa/share-invite";
 import { motion, AnimatePresence } from "framer-motion";
+import { VehicleIcon } from "@/components/transport/vehicle-icon";
+import { useLocalQuery } from "@/lib/local/hooks/queries";
 
 // ─── Module definitions with quick actions ─────────────────────────
 
@@ -142,6 +144,8 @@ const simulatorItems = [
 export function AppSidebar() {
   const { session } = useAppSession();
   const { sidebarOpen, setSidebarOpen, setActiveModule, setFinanceSubView, setAuthView, setSidebarAction } = useAppStore();
+  const { data: vehiclesData } = useLocalQuery<{ id: string; type: string; icon?: string | null }>("/api/vehicles");
+  const primaryVehicle = vehiclesData?.[0];
   const [expandedModule, setExpandedModule] = useState<string | null>(null);
   const [simulatorsOpen, setSimulatorsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -230,7 +234,20 @@ export function AppSidebar() {
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-primary/10 transition-colors text-left"
                   >
                     <div className={`size-9 rounded-lg ${item.bg} flex items-center justify-center shrink-0`}>
-                      <Icon className={`size-4 ${item.color}`} />
+                      {item.id === "transport" ? (
+                        <motion.span
+                          animate={isExpanded ? { y: [0, -1, 0] } : { y: 0 }}
+                          transition={{ duration: 1.8, repeat: isExpanded ? Infinity : 0, ease: "easeInOut" }}
+                        >
+                          <VehicleIcon
+                            type={primaryVehicle?.type || "motorcycle"}
+                            icon={primaryVehicle?.icon}
+                            className={`size-4 ${item.color}`}
+                          />
+                        </motion.span>
+                      ) : (
+                        <Icon className={`size-4 ${item.color}`} />
+                      )}
                     </div>
                     <span className="text-sm font-medium text-foreground flex-1">
                       {item.label}
