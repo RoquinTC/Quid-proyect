@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateBody, recurringUpdateSchema } from "@/lib/validations";
+import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 
 export async function GET(
   _req: NextRequest,
@@ -102,6 +103,16 @@ export async function PUT(
         { status: 404 }
       );
     }
+
+    const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
+    if (body.accountId) entitiesToVerify.push({ type: "account", id: body.accountId });
+    if (body.subAccountId) entitiesToVerify.push({ type: "subAccount", id: body.subAccountId });
+    if (body.debtId) entitiesToVerify.push({ type: "debt", id: body.debtId });
+    if (body.destinationAccountId) entitiesToVerify.push({ type: "account", id: body.destinationAccountId });
+    if (body.destinationSubAccountId) entitiesToVerify.push({ type: "subAccount", id: body.destinationSubAccountId });
+
+    const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
+    if (accessError) return accessError;
 
     const updateData: Record<string, unknown> = {};
     if (body.description !== undefined) updateData.description = body.description;

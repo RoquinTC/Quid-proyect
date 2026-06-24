@@ -619,9 +619,13 @@ Falta complementar:
 - Estructura de carpetas sugeridas: historias clínicas, órdenes médicas, órdenes de medicamentos, autorizaciones, incapacidades y recibos de pendientes.
 - Histórico clínico expandible por cita completada y trazabilidad inversa desde órdenes, autorizaciones, historias clínicas e incapacidades.
 - Registro específico o documento clínico tipado para historias clínicas, incapacidades y laboratorios/resultados clínicos, con opción de crear sin adjunto y adjuntar soporte después.
+- Al completar una cita médica, permitir registrar **varias salidas clínicas a la vez**, no solo una orden. Debe comportarse como checklist/listado dinámico con tipos como: orden de medicamentos, incapacidad, historia clínica, laboratorio/examen, rayos X/imagenología, procedimiento, control, remisión a especialista, terapia u otro. Cada opción debe permitir detalle, notas, fecha estimada, soporte opcional y vínculo con la cita origen.
+- El flujo de completado debe preguntar de forma guiada: "¿El médico te envió medicamentos?", "¿generó control o especialista?", "¿ordenó laboratorio/procedimiento?", "¿hubo incapacidad o historia clínica?". El usuario debe poder crear varios registros derivados en una sola confirmación.
 - Sección de laboratorios con estado, soporte PDF/imagen, vínculo a cita/orden y lectura segura por Aura.
 - Interpretación asistida de laboratorios por Aura: resumen educativo, valores fuera de rango, preguntas para el médico y recomendaciones generales no diagnósticas. Este flujo puede operar desde la app o desde Telegram, guardando el soporte en Quid si el usuario confirma.
 - Compartir el archivo original desde la app, especialmente en APK Android con integración nativa.
+- Selector de carpeta raíz para soportes de salud en primera configuración. Quid debe crear subcarpetas por tipo y nombrar archivos con estrategia anti-duplicados: tipo legible + fecha + identificador corto, conservando el nombre original como metadato cuando aplique. Ejemplo: `historia-clinica-2026-06-24-a1b2.pdf`.
+- Adjuntos PDF o imagen con tamaño realista para cámara móvil/escáner. La app puede generar previsualización liviana, pero debe conservar y compartir el archivo original cargado.
 - Flujo más completo de entregas parciales de farmacia.
 - Recordatorios insistentes para citas, medicamentos, autorizaciones próximas a vencer y pendientes por reclamar.
 
@@ -660,6 +664,9 @@ Falta complementar:
 - Máquina de estados de confirmación con botones.
 - Herramientas de lectura/escritura para finanzas, transporte, salud, despensa, hidratación y recordatorios.
 - Recordatorios o avisos por Telegram cuando corresponda.
+- Aura debe usar Odysseus en Oracle como motor auxiliar cuando esté configurado, aunque Aura local/Oracle siga siendo la cara visible. Si Aura local se apaga, el contenedor de Aura en Oracle debe poder asumir el puente con Telegram.
+- Odysseus no debe escribir directamente en la base. Para acciones de Quid, Aura debe consultar datos reales mediante herramientas controladas, construir una propuesta concreta y pedir confirmación antes de guardar: tipo de movimiento, valor, cuenta/tarjeta, categoría, módulo origen y cualquier efecto financiero.
+- Para consultas generales como clima, explicación o investigación, Aura puede delegar a Odysseus/herramientas externas, diferenciando datos reales de Quid frente a inferencias o información externa.
 
 ### E.4 Despensa
 
@@ -712,9 +719,26 @@ Falta complementar:
 - Probar conflictos, reintentos y reconciliación.
 - Activarlo por fases porque toca saldos, deudas y presupuesto.
 
-### E.7 Recomendación de siguiente bloque
+### E.7 Backup / Restore / Sync / Borrado seguro
 
-El siguiente bloque recomendado es **Salud documentos + recordatorios reales**:
+Ya existe base real:
+- Export/import JSON.
+- Backup en servidor.
+- Restore desde servidor.
+- Dexie/local sync.
+- Borrado de cuenta y reset de datos.
+
+Falta complementar con prioridad crítica:
+- El backup, restore, server-save, server-restore, sync inicial, sync incremental y borrado definitivo deben cubrir **todas** las tablas relacionadas al usuario, incluyendo tablas nuevas de salud, transporte, Aura, notificaciones, credenciales, logros y futuras tablas.
+- Evitar listas manuales frágiles sin auditoría. Cada vez que se añada una tabla nueva al schema, debe existir una prueba/checklist técnico que falle si esa tabla no está clasificada para backup, restore, sync y delete.
+- Definir un registro central de modelos por dominio con dependencias y orden de borrado/restauración, para no repetir listas diferentes en cada endpoint.
+- El borrado definitivo de cuenta debe eliminar o anonimizar todo lo relacionado sin dejar huérfanos, respetando foreign keys y datos compartidos.
+- Antes de cualquier despliegue que toque datos, ejecutar verificación de cobertura: modelos Prisma vs contrato de backup/sync/delete.
+
+### E.8 Recomendación de siguiente bloque
+
+El siguiente bloque recomendado es **Blindaje de datos + Salud documentos**:
+- Primero blindar backup/restore/sync/delete para evitar pérdida de información al crecer el modelo.
 - Aprovecha bases existentes de salud, órdenes, autorizaciones, pendientes, push y Aura.
 - Aporta valor diario sin abrir una migración riesgosa.
 - Permite primera fase local con selector nativo del celular y, más adelante, integración directa con Drive/OneDrive.

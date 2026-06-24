@@ -119,6 +119,20 @@ export async function canEditAccount(accountId: string, userId: string): Promise
 }
 
 /**
+ * Check if a user can mutate a sub-account through ownership or editor access
+ * on the parent account.
+ */
+export async function canEditSubAccount(subAccountId: string, userId: string): Promise<boolean> {
+  const subAccount = await db.subAccount.findUnique({
+    where: { id: subAccountId },
+    select: { accountId: true },
+  });
+
+  if (!subAccount) return false;
+  return canEditAccount(subAccount.accountId, userId);
+}
+
+/**
  * Get all account IDs accessible by a user (owned + shared).
  */
 export async function getAccessibleAccountIds(userId: string): Promise<string[]> {
@@ -209,5 +223,35 @@ export async function verifyEntityOwnership(
       if (error) return error;
     }
   }
+  return null;
+}
+
+/**
+ * Verify entity write access. Accounts and sub-accounts can be mutated by the
+ * owner or by a shared editor; debts remain owner-only.
+ */
+export async function verifyEntityMutationAccess(
+  userId: string,
+  entities: { type: "account" | "subAccount" | "debt"; id: string }[]
+) {
+  for (const entity of entities) {
+    if (!entity.id) continue;
+
+    if (entity.type === "account") {
+      const canEdit = await canEditAccount(entity.id, userId);
+      if (!canEdit) {
+        return NextResponse.json({ error: "Cuenta no encontrada o sin permisos de edición" }, { status: 403 });
+      }
+    } else if (entity.type === "subAccount") {
+      const canEdit = await canEditSubAccount(entity.id, userId);
+      if (!canEdit) {
+        return NextResponse.json({ error: "Subcuenta no encontrada o sin permisos de edición" }, { status: 403 });
+      }
+    } else if (entity.type === "debt") {
+      const { error } = await verifyDebtOwnership(entity.id, userId);
+      if (error) return error;
+    }
+  }
+
   return null;
 }

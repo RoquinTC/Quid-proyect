@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow, createColombiaDate, getColombiaTodayString } from "@/lib/api";
-import { verifyEntityOwnership } from "@/lib/auth-guards";
+import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, transactionCreateSchema } from "@/lib/validations";
 import { createAndPushNotification } from "@/lib/push";
@@ -172,49 +172,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Tipo, monto y descripción son requeridos" }, { status: 400 });
     }
 
-    // Verify ownership or shared access of all referenced entities
-    // For shared accounts, editors can also create transactions
+    // Verify write access of all referenced entities. Accounts and sub-accounts
+    // can be owned by the user or shared with editor access.
     const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
     if (accountId) entitiesToVerify.push({ type: "account", id: accountId });
     if (subAccountId) entitiesToVerify.push({ type: "subAccount", id: subAccountId });
     if (transferToAccountId) entitiesToVerify.push({ type: "account", id: transferToAccountId });
     if (transferToSubAccountId) entitiesToVerify.push({ type: "subAccount", id: transferToSubAccountId });
 
-    // Check ownership first
-    const ownershipError = await verifyEntityOwnership(session.user.id, entitiesToVerify);
-
-    if (ownershipError) {
-      // If ownership check failed, check if user has editor access via shared accounts
-      const accountEntities = entitiesToVerify.filter(e => e.type === "account");
-      let hasSharedAccess = true;
-      for (const entity of accountEntities) {
-        const sharedUser = await db.sharedAccountUser.findFirst({
-          where: { accountId: entity.id, userId: session.user.id, role: "editor" },
-        });
-        if (!sharedUser) {
-          hasSharedAccess = false;
-          break;
-        }
-      }
-      // Also verify sub-accounts belong to accessible accounts
-      const subAccountEntities = entitiesToVerify.filter(e => e.type === "subAccount");
-      for (const entity of subAccountEntities) {
-        const sub = await db.subAccount.findUnique({
-          where: { id: entity.id },
-          select: { accountId: true },
-        });
-        if (sub) {
-          const sharedUser = await db.sharedAccountUser.findFirst({
-            where: { accountId: sub.accountId, userId: session.user.id, role: "editor" },
-          });
-          if (!sharedUser) {
-            hasSharedAccess = false;
-            break;
-          }
-        }
-      }
-      if (!hasSharedAccess) return ownershipError;
-    }
+    const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
+    if (accessError) return accessError;
 
     // Create transaction
     const transaction = await db.transaction.create({

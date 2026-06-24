@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { syncSavingsBudget } from "@/lib/savings-budget-sync";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
-import { verifyEntityOwnership } from "@/lib/auth-guards";
+import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, recurringConfirmSchema } from "@/lib/validations";
 import { createColombiaDate, getColombiaTodayString } from "@/lib/api";
@@ -165,7 +165,9 @@ export async function POST(
     const effectiveDestAccountId = isSavingsGoal ? (destinationAccountId || payment.destinationAccountId) : payment.destinationAccountId;
     const effectiveDestSubAccountId = isSavingsGoal ? (destinationSubAccountId !== undefined ? destinationSubAccountId : payment.destinationSubAccountId) : payment.destinationSubAccountId;
 
-    // Re-verify ownership of all referenced entities before mutating balances
+    // Re-verify write access of all referenced entities before mutating balances.
+    // This allows transfers from an owned account into a shared account where the
+    // user has editor access.
     const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
     if (payment.accountId) entitiesToVerify.push({ type: "account", id: payment.accountId });
     if (payment.subAccountId) entitiesToVerify.push({ type: "subAccount", id: payment.subAccountId });
@@ -173,8 +175,8 @@ export async function POST(
     if (effectiveDestAccountId) entitiesToVerify.push({ type: "account", id: effectiveDestAccountId });
     if (effectiveDestSubAccountId) entitiesToVerify.push({ type: "subAccount", id: effectiveDestSubAccountId });
 
-    const ownershipError = await verifyEntityOwnership(session.user.id, entitiesToVerify);
-    if (ownershipError) return ownershipError;
+    const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
+    if (accessError) return accessError;
 
     // 1. Mark payment as confirmed
     await db.recurringPayment.update({

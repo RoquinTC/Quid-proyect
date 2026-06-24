@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { verifyEntityOwnership } from "@/lib/auth-guards";
+import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 import { validateBody, recurringCreateSchema } from "@/lib/validations";
 import type { Prisma } from "@prisma/client";
 
@@ -113,7 +113,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify ownership of all referenced entities
+    // Verify write access of all referenced entities. Accounts and sub-accounts
+    // can be owned by the user or shared with editor access.
     const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
     if (accountId) entitiesToVerify.push({ type: "account", id: accountId });
     if (subAccountId) entitiesToVerify.push({ type: "subAccount", id: subAccountId });
@@ -121,8 +122,8 @@ export async function POST(req: NextRequest) {
     if (destinationAccountId) entitiesToVerify.push({ type: "account", id: destinationAccountId });
     if (destinationSubAccountId) entitiesToVerify.push({ type: "subAccount", id: destinationSubAccountId });
 
-    const ownershipError = await verifyEntityOwnership(session.user.id, entitiesToVerify);
-    if (ownershipError) return ownershipError;
+    const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
+    if (accessError) return accessError;
 
     const recurringPayment = await db.recurringPayment.create({
       data: {
