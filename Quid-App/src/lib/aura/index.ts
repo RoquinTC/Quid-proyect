@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { createFinanceEntry, getTransportDescription } from "@/lib/transport-finance";
 import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { calculateFuelLevel } from "@/lib/fuel-level";
 import {
   parsePreviousProposal,
   updateTransactionProposal,
@@ -17,6 +18,10 @@ export type CoreMessage = { role: "user" | "assistant" | "system" | "data"; cont
 
 export const AURA_MODEL = process.env.AURA_MODEL || "hermes3:8b";
 const OLLAMA_API_BASE = process.env.OLLAMA_URL || "http://localhost:11434/api";
+const ODYSSEUS_API_URL = process.env.ODYSSEUS_API_URL || "";
+const ODYSSEUS_API_TOKEN = process.env.ODYSSEUS_API_TOKEN || "";
+const ODYSSEUS_SESSION_ID = process.env.ODYSSEUS_SESSION_ID || "";
+const ODYSSEUS_ENABLED = (process.env.ODYSSEUS_ENABLED || "false").toLowerCase() === "true";
 const COP = new Intl.NumberFormat("es-CO", {
   style: "currency",
   currency: "COP",
@@ -35,6 +40,8 @@ type AuraAction =
   | "consultar_cdts"
   | "consultar_deudas"
   | "consultar_presupuestos"
+  | "consultar_radar_financiero"
+  | "consultar_radar_transporte"
   | "consultar_vehiculos"
   | "consultar_salud"
   | "consultar_despensa"
@@ -225,6 +232,8 @@ function inferAction(text: string): AuraAction {
     return "confirmar_recurrente";
   }
   if (/\b(cuanto tengo|saldo|saldos|balance|dinero disponible|plata)\b/.test(normalized)) return "consultar_saldos";
+  if (/\b(radar transporte|radar de transporte|transporte al dia|transporte al día|como esta mi moto|cómo está mi moto|como esta el carro|cómo está el carro|autonomia|autonomía|combustible restante)\b/.test(normalized)) return "consultar_radar_transporte";
+  if (/\b(radar financiero|radar|como voy|cómo voy|diagnostico|diagnóstico|analisis financiero|análisis financiero|revision financiera|revisión financiera|panorama financiero)\b/.test(normalized)) return "consultar_radar_financiero";
   if (/\b(cdt|cdts|certificado|certificados)\b/.test(normalized)) return "consultar_cdts";
   if (/\b(meta|metas|ahorro|ahorros|objetivo|objetivos)\b/.test(normalized)) return "consultar_metas";
   if (/\b(deuda|deudas|tarjeta|tarjetas|credito|crédito|prestamo|préstamo)\b/.test(normalized)) return "consultar_deudas";
@@ -315,14 +324,14 @@ function parseRecordDate(text: string) {
 function parseAmount(text: string) {
   const normalized = normalize(text);
   const moneyMatch =
-    text.match(/(?:\$|cop\s*)?\s*([\d.,\s]+)\s*(mil|k|millones|mill[oó]n|pesos?)?/i) ||
-    normalized.match(/(?:cop\s*)?\s*([\d\s]+)\s*(mil|k|millones|millon|pesos?)?/i);
+    text.match(/(?:\$|cop\s*)?\s*(\d[\d.,\s]*)\s*(mil|k|millones|mill[oó]n|pesos?)?/i) ||
+    normalized.match(/(?:cop\s*)?\s*(\d[\d\s]*)\s*(mil|k|millones|millon|pesos?)?/i);
   if (!moneyMatch) return null;
 
   const rawNumber = moneyMatch[1];
   const suffix = normalize(moneyMatch[2] || "");
   let amount = parseLocaleNumber(rawNumber);
-  if (amount == null || !Number.isFinite(amount)) return null;
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) return null;
   if ((suffix === "mil" || suffix === "k") && amount < 1000) amount *= 1000;
   if (suffix === "millon" || suffix === "millones") amount *= 1_000_000;
   return Math.round(amount);
@@ -769,52 +778,238 @@ async function getBudgetSnapshot(userId: string) {
   });
 }
 
+function daysInMonth(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth() + 1, 0).getDate();
+}
+
+function monthsUntil(value: Date) {
+  const today = dateOnly(new Date());
+  const target = dateOnly(value);
+  const years = target.getFullYear() - today.getFullYear();
+  const months = years * 12 + target.getMonth() - today.getMonth();
+  return Math.max(1, months + (target.getDate() > today.getDate() ? 1 : 0));
+}
+
+async function getFinancialRadar(userId: string) {
+  const today = dateOnly(new Date());
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  const elapsedDays = Math.max(1, today.getDate());
+  const monthDays = daysInMonth(today);
+
+  const [balance, expenses, income, budgets, goals, debts, planner] = await Promise.all([
+    getBalanceSnapshot(userId),
+    getMovementSnapshot(userId, "expense", { start: monthStart, end: addDays(today, 1), label: "este mes" }),
+    getMovementSnapshot(userId, "income", { start: monthStart, end: addDays(today, 1), label: "este mes" }),
+    getBudgetSnapshot(userId),
+    getSavingsSnapshot(userId),
+    getDebtSnapshot(userId),
+    getPlannerSnapshot(userId),
+  ]);
+
+  const projectedExpenses = Math.round((expenses.total / elapsedDays) * monthDays);
+  const netNow = income.total - expenses.total;
+  const projectedNet = income.total - projectedExpenses;
+  const riskyBudgets = budgets
+    .filter((budget) => budget.type === "expense" && budget.amount > 0 && budget.usage >= 80)
+    .sort((a, b) => b.usage - a.usage)
+    .slice(0, 3);
+  const savingsPressure = goals
+    .filter((goal) => goal.status !== "completada" && goal.targetAmount > goal.currentAmount)
+    .map((goal) => {
+      const missing = Math.max(0, goal.targetAmount - goal.currentAmount);
+      const months = goal.deadline ? monthsUntil(goal.deadline) : null;
+      const monthlyNeed = months ? Math.ceil(missing / months) : null;
+      return { ...goal, missing, months, monthlyNeed };
+    })
+    .sort((a, b) => (b.monthlyNeed || 0) - (a.monthlyNeed || 0))
+    .slice(0, 3);
+  const debtTotal = debts.reduce((sum, debt) => sum + debt.currentBalance, 0);
+  const heaviestDebt = [...debts].sort((a, b) => b.currentBalance - a.currentBalance)[0];
+  const upcomingPayments = planner.recurring
+    .filter((item) => daysUntil(item.scheduledDate) <= 10)
+    .slice(0, 4);
+
+  const alerts: string[] = [];
+  if (projectedNet < 0) {
+    alerts.push(`Ojo: al ritmo actual el mes cerraría ${COP.format(Math.abs(projectedNet))} por debajo.`);
+  } else if (projectedExpenses > income.total * 0.85 && income.total > 0) {
+    alerts.push(`Vas apretado: el gasto proyectado se come más del 85% del ingreso registrado este mes.`);
+  } else {
+    alerts.push(`El flujo no está en rojo: hoy vas ${COP.format(netNow)} ${netNow >= 0 ? "arriba" : "abajo"}.`);
+  }
+
+  for (const budget of riskyBudgets) {
+    alerts.push(`${budget.category} va al ${budget.usage}% (${COP.format(budget.remaining)} libres).`);
+  }
+
+  if (savingsPressure[0]?.monthlyNeed) {
+    alerts.push(`Para ${savingsPressure[0].name} necesitas cerca de ${COP.format(savingsPressure[0].monthlyNeed)} al mes.`);
+  }
+
+  if (heaviestDebt && debtTotal > 0) {
+    alerts.push(`Tu deuda más pesada es ${heaviestDebt.name}: ${COP.format(heaviestDebt.currentBalance)}.`);
+  }
+
+  if (upcomingPayments.length > 0) {
+    const totalUpcoming = upcomingPayments.reduce((sum, item) => sum + item.amount, 0);
+    alerts.push(`En 10 días veo ${upcomingPayments.length} pago(s) por ${COP.format(totalUpcoming)}.`);
+  }
+
+  const move =
+    riskyBudgets.length > 0
+      ? `Corta o pausa ${riskyBudgets[0].category} hasta el próximo corte.`
+      : savingsPressure[0]?.monthlyNeed
+        ? `Programa un aporte recurrente a ${savingsPressure[0].name}.`
+        : heaviestDebt
+          ? `Si te sobra caja, ataca primero ${heaviestDebt.name}.`
+          : "Sigue registrando movimientos para que el radar se vuelva más filoso.";
+
+  return {
+    balance,
+    income,
+    expenses,
+    projectedExpenses,
+    projectedNet,
+    debtTotal,
+    alerts: alerts.slice(0, 6),
+    move,
+  };
+}
+
 async function getVehicleSnapshot(userId: string) {
   const vehicles = await db.vehicle.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
     include: {
-      fuelLogs: { orderBy: { date: "desc" }, take: 1 },
+      fuelLogs: { orderBy: { date: "desc" } },
       maintenanceRecords: {
         where: { reminderEnabled: true },
         orderBy: [{ nextDueDate: "asc" }, { nextDueKm: "asc" }],
-        take: 3,
+        take: 5,
       },
       documents: {
         where: { reminderEnabled: true },
         orderBy: { expiryDate: "asc" },
-        take: 3,
+        take: 5,
       },
       reminders: {
         where: { isActive: true },
         orderBy: [{ dueDate: "asc" }, { dueKm: "asc" }],
-        take: 3,
+        take: 5,
       },
     },
   });
 
-  return vehicles.map((vehicle) => ({
-    name: vehicle.name,
-    plate: vehicle.plate,
-    currentKm: vehicle.currentKm,
-    lastFuelAmount: vehicle.fuelLogs[0] ? toNumber(vehicle.fuelLogs[0].amount) : null,
-    documents: vehicle.documents.map((doc) => ({
-      type: doc.type,
-      expiryDate: doc.expiryDate,
-      daysUntil: daysUntil(doc.expiryDate),
-    })),
-    maintenance: vehicle.maintenanceRecords.map((record) => ({
-      type: record.type,
-      description: record.description,
-      nextDueKm: record.nextDueKm,
-      nextDueDate: record.nextDueDate,
-    })),
-    reminders: vehicle.reminders.map((reminder) => ({
-      title: reminder.title,
-      dueDate: reminder.dueDate,
-      dueKm: reminder.dueKm,
-    })),
-  }));
+  return vehicles.map((vehicle) => {
+    const fuelLevel = calculateFuelLevel(
+      {
+        tankCapacity: vehicle.tankCapacity,
+        currentKm: vehicle.currentKm,
+        type: vehicle.type,
+      },
+      vehicle.fuelLogs.map((log) => ({
+        id: log.id,
+        date: log.date,
+        km: log.km,
+        amount: toNumber(log.amount),
+        pricePerGallon: toNumber(log.pricePerGallon),
+        gallons: log.gallons,
+        isFullTank: log.isFullTank,
+      })),
+    );
+
+    return {
+      name: vehicle.name,
+      type: vehicle.type,
+      plate: vehicle.plate,
+      currentKm: vehicle.currentKm,
+      tankCapacity: vehicle.tankCapacity,
+      lastFuelAmount: vehicle.fuelLogs[0] ? toNumber(vehicle.fuelLogs[0].amount) : null,
+      fuelLevel: Math.round(fuelLevel.fuelLevel),
+      estimatedRange: Math.round(fuelLevel.estimatedRange),
+      daysUntilRefuel: fuelLevel.daysUntilRefuel,
+      refuelByDate: fuelLevel.refuelByDate ? new Date(fuelLevel.refuelByDate) : null,
+      gallonsToRefuel: fuelLevel.gallonsToRefuel,
+      isLowFuel: fuelLevel.isLowFuel,
+      isLearningFuel: fuelLevel.isLearning,
+      anomalyDetected: fuelLevel.anomalyDetected,
+      documents: vehicle.documents.map((doc) => ({
+        type: doc.type,
+        expiryDate: doc.expiryDate,
+        daysUntil: daysUntil(doc.expiryDate),
+        cost: toNumber(doc.cost),
+      })),
+      maintenance: vehicle.maintenanceRecords.map((record) => ({
+        type: record.type,
+        description: record.description,
+        nextDueKm: record.nextDueKm,
+        nextDueDate: record.nextDueDate,
+        kmRemaining: record.nextDueKm ? Math.round(record.nextDueKm - vehicle.currentKm) : null,
+        cost: toNumber(record.cost),
+      })),
+      reminders: vehicle.reminders.map((reminder) => ({
+        title: reminder.title,
+        dueDate: reminder.dueDate,
+        dueKm: reminder.dueKm,
+        daysUntil: reminder.dueDate ? daysUntil(reminder.dueDate) : null,
+        kmRemaining: reminder.dueKm ? Math.round(reminder.dueKm - vehicle.currentKm) : null,
+      })),
+    };
+  });
+}
+
+async function getTransportRadar(userId: string) {
+  const vehicles = await getVehicleSnapshot(userId);
+  const alerts: string[] = [];
+
+  for (const vehicle of vehicles) {
+    const label = vehicle.plate ? `${vehicle.name} (${vehicle.plate})` : vehicle.name;
+
+    if (vehicle.isLowFuel) {
+      alerts.push(`${label}: combustible bajo, quedan aprox. ${vehicle.estimatedRange} km.`);
+    } else if (vehicle.daysUntilRefuel !== null && vehicle.daysUntilRefuel <= 5) {
+      alerts.push(`${label}: al ritmo actual toca tanquear en ${vehicle.daysUntilRefuel} día${vehicle.daysUntilRefuel === 1 ? "" : "s"}.`);
+    }
+
+    if (vehicle.anomalyDetected) {
+      alerts.push(`${label}: vi consumo raro de combustible; revisa presión de llantas o fuga.`);
+    }
+
+    for (const doc of vehicle.documents) {
+      if (doc.daysUntil <= 0) {
+        alerts.push(`${label}: ${doc.type.toUpperCase()} vencido o vence hoy.`);
+      } else if (doc.daysUntil <= 30) {
+        alerts.push(`${label}: ${doc.type.toUpperCase()} vence en ${doc.daysUntil} días.`);
+      }
+    }
+
+    for (const item of vehicle.maintenance) {
+      if (item.kmRemaining !== null && item.kmRemaining <= 0) {
+        alerts.push(`${label}: ${item.description} ya está pasado por km.`);
+      } else if (item.kmRemaining !== null && item.kmRemaining <= 300) {
+        alerts.push(`${label}: ${item.description} viene en ${item.kmRemaining} km.`);
+      } else if (item.nextDueDate && daysUntil(item.nextDueDate) <= 14) {
+        alerts.push(`${label}: ${item.description} cae en ${daysUntil(item.nextDueDate)} días.`);
+      }
+    }
+
+    for (const reminder of vehicle.reminders) {
+      if (reminder.daysUntil !== null && reminder.daysUntil <= 7) {
+        alerts.push(`${label}: recordatorio "${reminder.title}" en ${reminder.daysUntil <= 0 ? "hoy/vencido" : `${reminder.daysUntil} días`}.`);
+      } else if (reminder.kmRemaining !== null && reminder.kmRemaining <= 300) {
+        alerts.push(`${label}: recordatorio "${reminder.title}" en ${reminder.kmRemaining} km.`);
+      }
+    }
+  }
+
+  const move = alerts.length > 0
+    ? alerts[0]
+    : vehicles.length > 0
+      ? "Transporte se ve tranquilo. Mantén tanqueos con kilometraje para que Aura aprenda mejor tu consumo."
+      : "Aún no tienes vehículos registrados; sin vehículo no puedo presionarte con SOAT, combustible ni mantenimiento.";
+
+  return { vehicles, alerts: alerts.slice(0, 8), move };
 }
 
 async function getHealthSnapshot(userId: string) {
@@ -1270,13 +1465,35 @@ async function answerWithQuidData(userId: string, action: AuraAction, text: stri
     return rows.length > 0 ? `Esto aparece en tu radar cercano:\n${rows.join("\n")}` : "Tu radar cercano está tranquilo: no veo pagos, ingresos o citas próximas.";
   }
 
+  if (action === "consultar_radar_financiero") {
+    const radar = await getFinancialRadar(userId);
+    return [
+      "Radar financiero de Aura:",
+      `• Disponible visible: ${COP.format(radar.balance.totalBalance)}`,
+      `• Este mes: ingresos ${COP.format(radar.income.total)}, gastos ${COP.format(radar.expenses.total)}.`,
+      `• Si sigues igual, el gasto cerraría cerca de ${COP.format(radar.projectedExpenses)}.`,
+      ...radar.alerts.map((alert) => `• ${alert}`),
+      "",
+      `Mi jugada sugerida: ${radar.move}`,
+    ].join("\n");
+  }
+
   if (action === "consultar_metas") {
     const goals = await getSavingsSnapshot(userId);
     if (goals.length === 0) return "No tienes metas de ahorro registradas todavía.";
-    return goals
-      .slice(0, 8)
-      .map((goal) => `• ${goal.name}: ${COP.format(goal.currentAmount)} de ${COP.format(goal.targetAmount)} (${goal.progress}%)${goal.deadline ? `, vence ${formatDate(goal.deadline)}` : ""}`)
-      .join("\n");
+    const rows = goals
+      .slice(0, 5)
+      .map((goal) => {
+        const missing = Math.max(0, goal.targetAmount - goal.currentAmount);
+        const monthly = goal.deadline && missing > 0 ? Math.ceil(missing / monthsUntil(goal.deadline)) : null;
+        const advice = monthly
+          ? ` Necesitas aprox. ${COP.format(monthly)}/mes.`
+          : missing > 0
+            ? ` Faltan ${COP.format(missing)}; ponle fecha para que pueda presionarte bien.`
+            : " Meta completada: no la dejes dormida, decide si cierras o subes objetivo.";
+        return `• ${goal.name}: ${goal.progress}% (${COP.format(goal.currentAmount)} de ${COP.format(goal.targetAmount)}).${advice}`;
+      });
+    return `Así veo tus ahorros, sin endulzarlo:\n${rows.join("\n")}`;
   }
 
   if (action === "consultar_cdts") {
@@ -1294,21 +1511,27 @@ async function answerWithQuidData(userId: string, action: AuraAction, text: stri
     const debts = await getDebtSnapshot(userId);
     if (debts.length === 0) return "No tienes deudas o tarjetas registradas todavía.";
     const total = debts.reduce((sum, debt) => sum + debt.currentBalance, 0);
-    const rows = debts
+    const sortedDebts = [...debts].sort((a, b) => b.currentBalance - a.currentBalance);
+    const rows = sortedDebts
       .slice(0, 8)
-      .map((debt) => `• ${debt.name}: saldo ${COP.format(debt.currentBalance)}${debt.paymentDate ? `, pago día ${debt.paymentDate}` : ""}`)
+      .map((debt, index) => `• ${debt.name}: ${COP.format(debt.currentBalance)}${debt.paymentDate ? `, pago día ${debt.paymentDate}` : ""}${index === 0 ? " ← prioridad si vas a abonar extra" : ""}`)
       .join("\n");
-    return `Tu saldo total en deudas/tarjetas es ${COP.format(total)}.\n${rows}`;
+    return `Tu saldo total en deudas/tarjetas es ${COP.format(total)}.\n${rows}\n\nMi lectura: ataca primero la más pesada si buscas bajar estrés mensual; si quieres motivación rápida, paga una pequeña completa y la sacamos del tablero.`;
   }
 
   if (action === "consultar_presupuestos") {
     const budgets = await getBudgetSnapshot(userId);
     if (budgets.length === 0) return "No tienes presupuestos configurados todavía.";
-    const rows = budgets
+    const risky = budgets.filter((budget) => budget.type === "expense" && budget.amount > 0).sort((a, b) => b.usage - a.usage);
+    const rows = risky
       .slice(0, 10)
-      .map((budget) => `• ${budget.category}: ${COP.format(budget.spent)} de ${COP.format(budget.amount)} (${budget.usage}%)`)
+      .map((budget) => {
+        const tone = budget.usage >= 100 ? "pasado" : budget.usage >= 80 ? "en zona roja" : budget.usage >= 60 ? "vigílalo" : "tranquilo";
+        return `• ${budget.category}: ${COP.format(budget.spent)} de ${COP.format(budget.amount)} (${budget.usage}%, ${tone})`;
+      })
       .join("\n");
-    return `Así van tus presupuestos:\n${rows}`;
+    const worst = risky[0];
+    return `Así van tus presupuestos, ordenados por riesgo:\n${rows}${worst && worst.usage >= 80 ? `\n\nMi orden: pausa ${worst.category} hasta que entre más flujo o cambie el mes.` : ""}`;
   }
 
   if (action === "consultar_vehiculos") {
@@ -1320,12 +1543,35 @@ async function answerWithQuidData(userId: string, action: AuraAction, text: stri
         const docs = vehicle.documents.length > 0
           ? ` Documentos: ${vehicle.documents.map((doc) => `${doc.type.toUpperCase()} ${doc.daysUntil <= 0 ? "vencido/hoy" : `en ${doc.daysUntil}d`}`).join(", ")}.`
           : "";
+        const fuel = vehicle.tankCapacity
+          ? ` Combustible: ${vehicle.fuelLevel}% (${vehicle.estimatedRange} km aprox.${vehicle.daysUntilRefuel !== null ? `, tanqueo en ${vehicle.daysUntilRefuel}d` : ""}).`
+          : "";
+        const maintenance = vehicle.maintenance.length > 0
+          ? ` Mantenimiento: ${vehicle.maintenance.slice(0, 2).map((item) => item.kmRemaining !== null ? `${item.description} ${item.kmRemaining <= 0 ? "pasado" : `en ${item.kmRemaining} km`}` : item.description).join(", ")}.`
+          : "";
         const reminders = vehicle.reminders.length > 0
           ? ` Recordatorios: ${vehicle.reminders.map((reminder) => reminder.title).join(", ")}.`
           : "";
-        return `• ${vehicle.name}${vehicle.plate ? ` (${vehicle.plate})` : ""}: ${Math.round(vehicle.currentKm).toLocaleString("es-CO")} km.${docs}${reminders}`;
+        return `• ${vehicle.name}${vehicle.plate ? ` (${vehicle.plate})` : ""}: ${Math.round(vehicle.currentKm).toLocaleString("es-CO")} km.${fuel}${docs}${maintenance}${reminders}`;
       })
       .join("\n");
+  }
+
+  if (action === "consultar_radar_transporte") {
+    const radar = await getTransportRadar(userId);
+    if (radar.vehicles.length === 0) return "No tienes vehículos registrados todavía. Registra uno y Aura puede vigilar combustible, documentos y mantenimiento.";
+    const rows = radar.vehicles.slice(0, 4).map((vehicle) => {
+      const docRisk = vehicle.documents.find((doc) => doc.daysUntil <= 30);
+      const maintenanceRisk = vehicle.maintenance.find((item) => (item.kmRemaining !== null && item.kmRemaining <= 300) || (item.nextDueDate && daysUntil(item.nextDueDate) <= 14));
+      return `• ${vehicle.name}${vehicle.plate ? ` (${vehicle.plate})` : ""}: ${Math.round(vehicle.currentKm).toLocaleString("es-CO")} km, combustible ${vehicle.fuelLevel}% (${vehicle.estimatedRange} km)${docRisk ? `, ${docRisk.type.toUpperCase()} ${docRisk.daysUntil <= 0 ? "vencido/hoy" : `en ${docRisk.daysUntil}d`}` : ""}${maintenanceRisk ? `, ${maintenanceRisk.description} ${maintenanceRisk.kmRemaining !== null ? (maintenanceRisk.kmRemaining <= 0 ? "pasado" : `en ${maintenanceRisk.kmRemaining} km`) : ""}` : ""}.`;
+    });
+    return [
+      "Radar de transporte de Aura:",
+      ...rows,
+      ...(radar.alerts.length > 0 ? ["", "Alertas:", ...radar.alerts.map((alert) => `• ${alert}`)] : []),
+      "",
+      `Mi orden: ${radar.move}`,
+    ].join("\n");
   }
 
   if (action === "consultar_salud") {
@@ -1389,6 +1635,52 @@ No menciones herramientas internas ni detalles técnicos.`;
       completionTokens: result.eval_count,
       promptTokens: result.prompt_eval_count,
     },
+  };
+}
+
+async function askOdysseus(messages: CoreMessage[], context: unknown) {
+  if (!ODYSSEUS_ENABLED || !ODYSSEUS_API_URL || !ODYSSEUS_API_TOKEN || !ODYSSEUS_SESSION_ID) {
+    return null;
+  }
+
+  const recentConversation = messages
+    .slice(-10)
+    .filter((message) => message.role === "user" || message.role === "assistant" || message.role === "system")
+    .map((message) => `${message.role}: ${message.content}`)
+    .join("\n");
+
+  const prompt = `Eres Aura, la asistente conversacional de Quid. Responde en español latinoamericano, cálida, breve y útil.
+Puedes conversar, explicar, orientar, planear y usar las capacidades disponibles en Odysseus cuando aplique.
+No inventes datos financieros, médicos ni de salud guardados en Quid. Si el usuario pregunta por saldos, gastos, compras, citas, medicamentos o registros exactos, indica que eso debe revisarse en Quid.
+
+Contexto resumido de Quid, solo para orientar conversación general:
+${JSON.stringify(context)}
+
+Conversación reciente:
+${recentConversation}`;
+
+  const response = await fetch(`${ODYSSEUS_API_URL.replace(/\/$/, "")}/api/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${ODYSSEUS_API_TOKEN}`,
+    },
+    signal: AbortSignal.timeout(45000),
+    body: JSON.stringify({
+      session: ODYSSEUS_SESSION_ID,
+      message: prompt,
+      use_web: false,
+      use_research: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Odysseus respondió con estado ${response.status}: ${await response.text()}`);
+  }
+
+  const result = (await response.json()) as { response?: string };
+  return {
+    text: result.response?.trim() || "No pude generar una respuesta clara.",
   };
 }
 
@@ -1492,6 +1784,28 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
       };
     }
 
+    const [balance, expenses, planner] = await Promise.all([
+      getBalanceSnapshot(userId),
+      getExpenseSnapshot(userId),
+      getPlannerSnapshot(userId),
+    ]);
+    const quidContext = { balance, expenses, planner };
+
+    if (action === "chat") {
+      try {
+        const odysseus = await askOdysseus(messages, quidContext);
+        if (odysseus?.text) {
+          return {
+            ...odysseus,
+            action,
+            responseMessages: [...messages, { role: "assistant" as const, content: odysseus.text }],
+          };
+        }
+      } catch (error) {
+        console.error("Error conectando con Odysseus desde Aura:", error);
+      }
+    }
+
     const conversationFallback = getBasicConversationFallback(lastUserMsg);
     if (conversationFallback) {
       return {
@@ -1501,12 +1815,7 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
       };
     }
 
-    const [balance, expenses, planner] = await Promise.all([
-      getBalanceSnapshot(userId),
-      getExpenseSnapshot(userId),
-      getPlannerSnapshot(userId),
-    ]);
-    const llm = await askOllama(messages, { balance, expenses, planner });
+    const llm = await askOllama(messages, quidContext);
 
     return {
       ...llm,

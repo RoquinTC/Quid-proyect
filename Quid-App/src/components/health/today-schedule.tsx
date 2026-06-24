@@ -5,6 +5,7 @@ import { apiFetch, getColombiaTodayString } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Pill, Check } from "lucide-react";
+import { isMedicationDueToday } from "@/lib/medication-schedule";
 import type { Medication } from "@/lib/types";
 
 interface TodayScheduleProps {
@@ -36,7 +37,7 @@ export function TodaySchedule({ medications, onTaken }: TodayScheduleProps) {
   });
 
   const schedule: ScheduleItem[] = medications
-    .filter((m) => m.reminderTimes)
+    .filter((m) => m.reminderTimes && isMedicationDueToday(m))
     .flatMap((med) => {
       try {
         const times: string[] = JSON.parse(med.reminderTimes!);
@@ -133,7 +134,9 @@ export function TodaySchedule({ medications, onTaken }: TodayScheduleProps) {
                   <span className={`text-sm ${isTaken ? "line-through text-gray-400" : "text-gray-900 dark:text-white"}`}>
                     {item.medication.name}
                   </span>
-                  <span className="text-xs text-gray-400 ml-1.5">{item.medication.dosage}</span>
+                  {item.medication.dosage && (
+                    <span className="text-xs text-gray-400 ml-1.5">{item.medication.dosage}</span>
+                  )}
                 </div>
 
                 {/* Check */}

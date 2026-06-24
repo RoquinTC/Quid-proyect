@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch, toColombiaDateString } from "@/lib/api";
-import { Loader2, Sparkles, Plus, X, Pill, AlertTriangle, AlertCircle, Info, Clock, RefreshCw } from "lucide-react";
+import { Loader2, Sparkles, Plus, X, Pill, AlertTriangle, AlertCircle, Info, Clock, RefreshCw, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Medication } from "@/lib/types";
 
@@ -77,6 +77,8 @@ const COMMON_MEDICATIONS = [
   "Meloxicam",
   "Celecoxib",
   "Tramadol",
+  "Hidrocodona",
+  "Hydrocodone",
   "Deflazacort",
   "Prednisona",
   "Metotrexato",
@@ -381,6 +383,16 @@ const LOCAL_CLINICAL_DATABASE: Record<string, { diseases: string[]; recommendedD
     recommendedDosage: "50mg a 100mg según dolor (máximo 400mg al día)",
     howToTake: "with_food",
   },
+  "hidrocodona": {
+    diseases: ["Dolor moderado a severo", "Dolor agudo bajo control médico"],
+    recommendedDosage: "Opioide de prescripción. Sigue exactamente la receta médica; no ajustes la dosis sin consultar a un profesional.",
+    howToTake: "with_food",
+  },
+  "hydrocodone": {
+    diseases: ["Dolor moderado a severo", "Dolor agudo bajo control médico"],
+    recommendedDosage: "Opioide de prescripción. Sigue exactamente la receta médica; no ajustes la dosis sin consultar a un profesional.",
+    howToTake: "with_food",
+  },
   "deflazacort": {
     diseases: ["Inflamación severa", "Alergias graves", "Artritis"],
     recommendedDosage: "6mg a 30mg al día según indicación médica",
@@ -442,6 +454,7 @@ const frequencyOptions = [
   { value: "daily", label: "Diario" },
   { value: "twice_daily", label: "Dos veces al día" },
   { value: "three_times_daily", label: "Tres veces al día" },
+  { value: "every_n_days", label: "Cada N días" },
   { value: "weekly", label: "Semanal" },
   { value: "as_needed", label: "Según necesidad" },
   { value: "custom", label: "Personalizado" },
@@ -649,11 +662,25 @@ interface MedicationFormProps {
   onSuccess?: () => void;
 }
 
+const getInitialIntervalDays = (customSchedule?: string | null) => {
+  if (!customSchedule) return "2";
+  try {
+    const parsed = JSON.parse(customSchedule) as { type?: string; everyDays?: number };
+    if (parsed.type === "interval_days" && parsed.everyDays && parsed.everyDays >= 2) {
+      return String(parsed.everyDays);
+    }
+  } catch {
+    return "2";
+  }
+  return "2";
+};
+
 export function MedicationForm({ open, onOpenChange, medication, onSuccess }: MedicationFormProps) {
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(medication?.name || "");
   const [dosage, setDosage] = useState(medication?.dosage || "");
   const [frequency, setFrequency] = useState(medication?.frequency || "daily");
+  const [intervalDays, setIntervalDays] = useState(getInitialIntervalDays(medication?.customSchedule));
   const [disease, setDisease] = useState(medication?.disease || "");
   const [howToTake, setHowToTake] = useState(medication?.howToTake || "");
   const [startDate, setStartDate] = useState(
@@ -731,7 +758,6 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
   const [aiInfo, setAiInfo] = useState<MedicationInfo | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiSuggestions, setShowAiSuggestions] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const isEditing = !!medication;
 
@@ -762,6 +788,7 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
         setName(medication.name || "");
         setDosage(medication.dosage || "");
         setFrequency(medication.frequency || "daily");
+        setIntervalDays(getInitialIntervalDays(medication.customSchedule));
         setDisease(medication.disease || "");
         setHowToTake(medication.howToTake || "");
         setStartDate(medication.startDate ? toColombiaDateString(medication.startDate) : "");
@@ -782,6 +809,7 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
         setName("");
         setDosage("");
         setFrequency("daily");
+        setIntervalDays("2");
         setDisease("");
         setHowToTake("");
         setStartDate("");
@@ -958,6 +986,13 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
       setDisease(localMatch.diseases.join(" / "));
       setDosage(localMatch.recommendedDosage);
       setHowToTake(localMatch.howToTake);
+      setAiInfo({
+        diseases: localMatch.diseases,
+        recommendedDosage: localMatch.recommendedDosage,
+        howToTake: localMatch.howToTake,
+        sideEffects: [],
+      });
+      setShowAiSuggestions(true);
     }
   };
 
@@ -984,6 +1019,8 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
 
   const handleNameChange = (value: string) => {
     setName(value);
+    setAiInfo(null);
+    setShowAiSuggestions(false);
     
     // Autocomplete predictions
     if (value.trim().length > 0) {
@@ -996,10 +1033,13 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
       setMedSuggestions([]);
       setShowMedDropdown(false);
     }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      fetchAiInfo(value);
-    }, 800);
+  };
+
+  const handleMedicationLookup = () => {
+    const cleanName = name.trim();
+    if (cleanName.length < 3 || aiLoading) return;
+    setShowMedDropdown(false);
+    fetchAiInfo(cleanName);
   };
 
   const addReminderTime = () => {
@@ -1034,13 +1074,17 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
   };
 
   const handleSubmit = async () => {
-    if (!name || !dosage || isDuplicate) return;
+    if (!name || isDuplicate) return;
     setLoading(true);
     try {
+      const everyDays = Math.max(2, Math.floor(Number(intervalDays) || 2));
       const data = {
         name,
-        dosage,
+        dosage: dosage.trim(),
         frequency,
+        customSchedule: frequency === "every_n_days"
+          ? { type: "interval_days", everyDays }
+          : null,
         disease: disease || null,
         howToTake: howToTake || null,
         startDate: startDate || null,
@@ -1081,6 +1125,7 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
       setName("");
       setDosage("");
       setFrequency("daily");
+      setIntervalDays("2");
       setDisease("");
       setHowToTake("");
       setStartDate("");
@@ -1120,14 +1165,32 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
                 placeholder="Ej: Omeprazol"
                 value={name}
                 onChange={(e) => handleNameChange(e.target.value)}
-                className="rounded-xl pr-9"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleMedicationLookup();
+                  }
+                }}
+                className="rounded-xl pr-20"
               />
               {aiLoading && (
-                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-4 animate-spin text-rose-500" />
+                <Loader2 className="absolute right-12 top-1/2 -translate-y-1/2 size-4 animate-spin text-rose-500" />
               )}
               {!aiLoading && aiInfo && (
-                <Sparkles className="absolute right-3 top-1/2 -translate-y-1/2 size-4 text-rose-500" />
+                <Sparkles className="absolute right-12 top-1/2 -translate-y-1/2 size-4 text-rose-500" />
               )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                title="Consultar medicamento"
+                aria-label="Consultar medicamento"
+                onClick={handleMedicationLookup}
+                disabled={aiLoading || name.trim().length < 3}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 size-7 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 disabled:opacity-40"
+              >
+                <Search className="size-4" />
+              </Button>
               {/* Autocomplete Dropdown */}
               {showMedDropdown && medSuggestions.length > 0 && (
                 <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-lg max-h-48 overflow-y-auto">
@@ -1152,22 +1215,6 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
             )}
           </div>
 
-          {/* AI Manual Query and Loading feedback */}
-          {!aiInfo && !aiLoading && name.trim().length >= 3 && (
-            <div className="flex justify-start">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => fetchAiInfo(name)}
-                className="text-[11px] h-7 rounded-xl border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 flex items-center gap-1.5 font-medium cursor-pointer"
-              >
-                <Sparkles className="size-3" />
-                <span>Consultar sugerencias con IA Quid</span>
-              </Button>
-            </div>
-          )}
-
           {aiLoading && (
             <div className="p-3 bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-900/10 dark:to-pink-900/10 border border-rose-100/50 dark:border-rose-900/20 rounded-xl flex items-center gap-2.5 animate-pulse">
               <Loader2 className="size-4 animate-spin text-rose-500 shrink-0" />
@@ -1175,17 +1222,17 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
             </div>
           )}
 
-          {/* AI Suggestions */}
+          {/* Medication diagnosis */}
           {showAiSuggestions && aiInfo && !aiLoading && (
             <motion.div
               initial={{ opacity: 0, y: -5 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-3 bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20 rounded-xl space-y-2 border border-rose-100 dark:border-rose-800"
+              className="p-3.5 bg-rose-50 dark:bg-rose-950/20 rounded-xl space-y-3 border border-rose-200 dark:border-rose-800"
             >
               <div className="flex items-center justify-between w-full">
-                <div className="flex items-center gap-1">
-                  <Sparkles className="size-3 text-rose-500" />
-                  <span className="text-xs font-medium text-rose-600">Sugerencias IA</span>
+                <div className="flex items-center gap-1.5">
+                  <Info className="size-3.5 text-rose-500" />
+                  <span className="text-xs font-semibold text-rose-700 dark:text-rose-300">Diagnóstico del medicamento</span>
                 </div>
                 <Button
                   type="button"
@@ -1199,10 +1246,9 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
                 </Button>
               </div>
 
-              {/* AI diseases */}
               {aiInfo.diseases.length > 0 && (
                 <div>
-                  <span className="text-xs text-gray-500">Enfermedades que trata:</span>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Enfermedades que trata</span>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {aiInfo.diseases.map((d) => (
                       <Badge
@@ -1218,12 +1264,11 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
                 </div>
               )}
 
-              {/* AI dosage */}
               {aiInfo.recommendedDosage && (
                 <div>
-                  <span className="text-xs text-gray-500">Dosis recomendada:</span>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">{aiInfo.recommendedDosage}</p>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Referencia de dosis</span>
+                  <div className="flex items-start justify-between gap-2 mt-1">
+                    <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">{aiInfo.recommendedDosage}</p>
                     <Button
                       type="button"
                       variant="outline"
@@ -1237,14 +1282,14 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
                 </div>
               )}
 
-              {/* AI how to take */}
               {aiInfo.howToTake && (
                 <div>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Recomendación de toma</span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="text-xs h-auto p-0 text-rose-600 hover:text-rose-700 cursor-pointer"
+                    className="mt-1 text-xs h-auto p-0 text-rose-600 hover:text-rose-700 cursor-pointer"
                     onClick={() => applyAiHowToTake(aiInfo.howToTake)}
                   >
                     <Pill className="size-3 mr-1" />
@@ -1253,22 +1298,23 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
                 </div>
               )}
 
-              {/* Side effects */}
-              {aiInfo.sideEffects.length > 0 && (
-                <div>
-                  <span className="text-xs text-gray-500">Efectos secundarios:</span>
-                  <p className="text-xs text-gray-500 mt-0.5">{aiInfo.sideEffects.join(", ")}</p>
-                </div>
-              )}
+              <div>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-200">Efectos secundarios</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                  {aiInfo.sideEffects.length > 0
+                    ? aiInfo.sideEffects.join(", ")
+                    : "No hay efectos secundarios sugeridos todavía para este medicamento."}
+                </p>
+              </div>
             </motion.div>
           )}
 
           {/* Dosage */}
           <div className="space-y-2">
-            <Label htmlFor="med-dosage">Dosis</Label>
+            <Label htmlFor="med-dosage">Dosis o concentración <span className="text-gray-400 font-normal">(opcional)</span></Label>
             <Input
               id="med-dosage"
-              placeholder="Ej: 20mg"
+              placeholder="Ej: 20mg, 5ml, 1 tableta"
               value={dosage}
               onChange={(e) => setDosage(e.target.value)}
               className="rounded-xl"
@@ -1290,6 +1336,27 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
                 ))}
               </SelectContent>
             </Select>
+            {frequency === "every_n_days" && (
+              <div className="grid grid-cols-[1fr_auto] items-end gap-2 pt-1">
+                <div className="space-y-2">
+                  <Label htmlFor="med-interval-days" className="text-xs">Repetir cada</Label>
+                  <Input
+                    id="med-interval-days"
+                    type="number"
+                    min="2"
+                    max="30"
+                    step="1"
+                    value={intervalDays}
+                    onChange={(e) => setIntervalDays(e.target.value)}
+                    className="rounded-xl"
+                  />
+                </div>
+                <span className="pb-2 text-xs text-gray-500">días</span>
+                <p className="col-span-2 text-[11px] text-gray-500">
+                  Ej: cada 2 días significa hoy sí, mañana no.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Disease */}
@@ -1581,7 +1648,7 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
           {/* Submit */}
           <Button
             onClick={handleSubmit}
-            disabled={loading || !name || !dosage || isDuplicate}
+            disabled={loading || !name || isDuplicate}
             className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-pink-500 hover:from-rose-700 hover:to-pink-600"
           >
             {loading ? (

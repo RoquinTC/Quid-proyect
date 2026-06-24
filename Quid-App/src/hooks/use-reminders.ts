@@ -2,11 +2,17 @@
 
 import { useEffect, useCallback, useRef } from "react";
 import { getColombiaTodayString } from "@/lib/api";
+import { isMedicationDueToday } from "@/lib/medication-schedule";
 
 interface MedicationReminder {
   id: string;
   name: string;
   dosage: string;
+  frequency: string;
+  customSchedule: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  createdAt?: string | null;
   reminderTimes: string | null;
   isActive: boolean;
   reminderEnabled: boolean;
@@ -129,6 +135,7 @@ export function useReminders() {
 
       for (const med of medications) {
         if (!med.isActive || !med.reminderEnabled || !med.reminderTimes) continue;
+        if (!isMedicationDueToday(med, now)) continue;
 
         try {
           const times: string[] = JSON.parse(med.reminderTimes);
@@ -140,7 +147,7 @@ export function useReminders() {
 
               if ("Notification" in window && Notification.permission === "granted") {
                 new Notification("💊 Hora de tu medicamento", {
-                  body: `${med.name} - ${med.dosage}`,
+                  body: med.dosage ? `${med.name} - ${med.dosage}` : med.name,
                   icon: "/favicon.ico",
                   tag: notifKey,
                 });

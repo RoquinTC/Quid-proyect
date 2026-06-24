@@ -4,6 +4,19 @@ import { authOptions } from "@/lib/auth";
 
 const AURA_MODEL = process.env.AURA_MODEL || "hermes3:8b";
 const OLLAMA_API_BASE = process.env.OLLAMA_URL || "http://localhost:11434/api";
+const ODYSSEUS_ENABLED = (process.env.ODYSSEUS_ENABLED || "false").toLowerCase() === "true";
+const ODYSSEUS_API_URL = process.env.ODYSSEUS_API_URL || "";
+const ODYSSEUS_API_TOKEN = process.env.ODYSSEUS_API_TOKEN || "";
+const ODYSSEUS_SESSION_ID = process.env.ODYSSEUS_SESSION_ID || "";
+
+type MedicationInfo = {
+  diseases: string[];
+  recommendedDosage: string;
+  howToTake: string;
+  sideEffects: string[];
+};
+
+const VALID_HOW_TO_TAKE = ["with_food", "without_food", "morning", "night", "custom"];
 
 // Diccionario de Fallback Clínico para medicamentos comunes
 const CLINICAL_FALLBACKS: Record<string, { diseases: string[]; recommendedDosage: string; howToTake: string; sideEffects: string[] }> = {
@@ -91,6 +104,18 @@ const CLINICAL_FALLBACKS: Record<string, { diseases: string[]; recommendedDosage
     howToTake: "with_food",
     sideEffects: ["Náuseas", "Mareo", "Somnolencia", "Estreñimiento", "Sequedad de boca"],
   },
+  hidrocodona: {
+    diseases: ["Dolor moderado a severo", "Dolor agudo bajo control médico"],
+    recommendedDosage: "Opioide de prescripción. La dosis depende de la presentación y debe seguir exactamente la receta médica; no ajuste la dosis sin consultar a un profesional.",
+    howToTake: "with_food",
+    sideEffects: ["Somnolencia", "Mareo", "Náuseas", "Estreñimiento", "Depresión respiratoria", "Riesgo de dependencia"],
+  },
+  hydrocodone: {
+    diseases: ["Dolor moderado a severo", "Dolor agudo bajo control médico"],
+    recommendedDosage: "Opioide de prescripción. La dosis depende de la presentación y debe seguir exactamente la receta médica; no ajuste la dosis sin consultar a un profesional.",
+    howToTake: "with_food",
+    sideEffects: ["Somnolencia", "Mareo", "Náuseas", "Estreñimiento", "Depresión respiratoria", "Riesgo de dependencia"],
+  },
   sertralina: {
     diseases: ["Depresión", "Trastorno de pánico", "Ansiedad social"],
     recommendedDosage: "50mg una vez al día por la mañana o la noche",
@@ -139,6 +164,91 @@ function getLocalFallback(name: string) {
   return null;
 }
 
+function cleanJsonResponse(content: string) {
+  let cleanJson = content.trim();
+  if (cleanJson.startsWith("```json")) {
+    cleanJson = cleanJson.substring(7);
+  }
+  if (cleanJson.startsWith("```")) {
+    cleanJson = cleanJson.substring(3);
+  }
+  if (cleanJson.endsWith("```")) {
+    cleanJson = cleanJson.substring(0, cleanJson.length - 3);
+  }
+
+  const firstBrace = cleanJson.indexOf("{");
+  const lastBrace = cleanJson.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    cleanJson = cleanJson.slice(firstBrace, lastBrace + 1);
+  }
+
+  return cleanJson.trim();
+}
+
+function normalizeMedicationInfo(parsed: unknown): MedicationInfo | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  const data = parsed as Partial<MedicationInfo>;
+  if (
+    !Array.isArray(data.diseases) ||
+    typeof data.recommendedDosage !== "string" ||
+    typeof data.howToTake !== "string" ||
+    !Array.isArray(data.sideEffects)
+  ) {
+    return null;
+  }
+
+  return {
+    diseases: data.diseases.filter((item): item is string => typeof item === "string").slice(0, 6),
+    recommendedDosage: data.recommendedDosage,
+    howToTake: VALID_HOW_TO_TAKE.includes(data.howToTake) ? data.howToTake : "custom",
+    sideEffects: data.sideEffects.filter((item): item is string => typeof item === "string").slice(0, 8),
+  };
+}
+
+async function askOdysseusForMedication(medicationName: string): Promise<MedicationInfo | null> {
+  if (!ODYSSEUS_ENABLED || !ODYSSEUS_API_URL || !ODYSSEUS_API_TOKEN || !ODYSSEUS_SESSION_ID) {
+    return null;
+  }
+
+  const prompt = `Eres Aura, asistente de salud educativa dentro de Quid. Investiga y resume el medicamento "${medicationName}" para ayudar al usuario a entender qué está registrando.
+No reemplazas a un médico. No diagnostiques al usuario, no ajustes tratamientos y no afirmes que una dosis aplica a su caso personal.
+
+Responde únicamente con JSON válido, sin markdown ni texto adicional:
+{
+  "diseases": ["enfermedad o condición que suele tratar", "otra condición"],
+  "recommendedDosage": "referencia educativa de dosis habitual o indicación de seguir exactamente la receta; incluye advertencia breve de consultar profesional",
+  "howToTake": "with_food" | "without_food" | "morning" | "night" | "custom",
+  "sideEffects": ["efecto secundario frecuente", "señal de alarma si aplica"]
+}
+
+Si el nombre no parece un medicamento real o no hay información fiable, devuelve enfermedades como ["No identificado con seguridad"] y recomienda consultar al médico o farmacéutico.`;
+
+  const response = await fetch(`${ODYSSEUS_API_URL.replace(/\/$/, "")}/api/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${ODYSSEUS_API_TOKEN}`,
+    },
+    signal: AbortSignal.timeout(45000),
+    body: JSON.stringify({
+      session: ODYSSEUS_SESSION_ID,
+      message: prompt,
+      use_web: false,
+      use_research: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Odysseus respondió con estado ${response.status}: ${await response.text()}`);
+  }
+
+  const result = (await response.json()) as { response?: string };
+  const content = result.response?.trim() || "";
+  if (!content) return null;
+
+  return normalizeMedicationInfo(JSON.parse(cleanJsonResponse(content)));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -157,7 +267,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(localMatch);
     }
 
-    // 2. Intentar llamar a Ollama para medicamentos más complejos o específicos
+    // 2. Usar Odysseus como investigador principal para medicamentos no cubiertos por Quid
+    try {
+      const odysseusInfo = await askOdysseusForMedication(medicationName);
+      if (odysseusInfo) {
+        return NextResponse.json(odysseusInfo);
+      }
+    } catch (odysseusErr) {
+      console.error("Error llamando a Odysseus para medicamento:", odysseusErr);
+    }
+
+    // 3. Intentar llamar a Ollama como respaldo local si Odysseus no está disponible
     try {
       const systemPrompt = `Eres un asistente de salud inteligente. Analiza el medicamento "${medicationName}" y responde estrictamente con un objeto JSON en español con la estructura detallada abajo.
 REGLA CRÍTICA: Debes responder únicamente con el bloque JSON. No incluyas explicaciones, saludos ni bloques de código de markdown. Solo el texto JSON limpio.
@@ -187,31 +307,8 @@ Estructura requerida:
         const result = await response.json();
         const content = result.message?.content?.trim() || "";
 
-        // Intentar limpiar posibles etiquetas de markdown
-        let cleanJson = content;
-        if (cleanJson.startsWith("```json")) {
-          cleanJson = cleanJson.substring(7);
-        }
-        if (cleanJson.startsWith("```")) {
-          cleanJson = cleanJson.substring(3);
-        }
-        if (cleanJson.endsWith("```")) {
-          cleanJson = cleanJson.substring(0, cleanJson.length - 3);
-        }
-        cleanJson = cleanJson.trim();
-
-        const parsed = JSON.parse(cleanJson);
-        if (
-          Array.isArray(parsed.diseases) &&
-          typeof parsed.recommendedDosage === "string" &&
-          typeof parsed.howToTake === "string" &&
-          Array.isArray(parsed.sideEffects)
-        ) {
-          // Validar que howToTake esté en las opciones permitidas
-          const validOptions = ["with_food", "without_food", "morning", "night", "custom"];
-          if (!validOptions.includes(parsed.howToTake)) {
-            parsed.howToTake = "custom";
-          }
+        const parsed = normalizeMedicationInfo(JSON.parse(cleanJsonResponse(content)));
+        if (parsed) {
           return NextResponse.json(parsed);
         }
       }
@@ -219,7 +316,7 @@ Estructura requerida:
       console.error("Error llamando a Ollama para medicamento:", ollamaErr);
     }
 
-    // 3. Fallback genérico si Ollama falla o no responde con el formato adecuado
+    // 4. Fallback genérico si ningún motor responde con el formato adecuado
     return NextResponse.json({
       diseases: ["Consulte a su médico", "Tratamiento general"],
       recommendedDosage: "Según indicación médica en la receta",

@@ -56,9 +56,9 @@ export async function POST(req: NextRequest) {
       lowStockThreshold,
     } = body;
 
-    if (!name || !dosage) {
+    if (!name) {
       return NextResponse.json(
-        { error: "El nombre y la dosis son requeridos" },
+        { error: "El nombre del medicamento es requerido" },
         { status: 400 }
       );
     }
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       data: {
         userId: session.user.id,
         name,
-        dosage,
+        dosage: dosage || "",
         frequency: frequency || "daily",
         customSchedule: customSchedule ? JSON.stringify(customSchedule) : null,
         disease,

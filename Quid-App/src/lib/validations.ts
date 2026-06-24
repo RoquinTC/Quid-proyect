@@ -698,7 +698,7 @@ export const fuelPriceCreateSchema = z.object({
 
 export const medicationCreateSchema = z.object({
   name: z.string().min(1, "El nombre es obligatorio"),
-  dosage: z.string().min(1, "La dosis es obligatoria"),
+  dosage: z.string().optional().default(""),
   frequency: z.string().optional().default("daily"),
   customSchedule: z.any().nullable().optional(),
   disease: z.string().nullable().optional(),
