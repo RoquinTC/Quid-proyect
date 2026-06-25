@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.0.11",
+  "currentVersion": "1.0.12",
   "releases": [
+    {
+      "version": "1.0.12",
+      "date": "2026-06-25",
+      "title": "Citas medicas con varias ordenes",
+      "changes": [
+        "Al completar una cita medica ahora puedes registrar varias ordenes a la vez, como control, rayos X, laboratorios, procedimientos o especialista.",
+        "Cada orden queda como un tramite separado y ligado a la cita que la origino, para dar mejor seguimiento en salud.",
+        "Puedes guardar las ordenes aunque aun no tengas el soporte, y adjuntar el documento despues cuando lo tengas disponible."
+      ]
+    },
     {
       "version": "1.0.11",
       "date": "2026-06-24",
