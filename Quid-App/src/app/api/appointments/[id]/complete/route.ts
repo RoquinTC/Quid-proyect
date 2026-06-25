@@ -28,6 +28,11 @@ type CompleteAppointmentPayload = {
     specialty: string;
     notes?: string | null;
   };
+  createAuthorizations?: Array<{
+    type: string;
+    specialty: string;
+    notes?: string | null;
+  }>;
 };
 
 async function getFinanceSyncPayload(params: {
@@ -234,18 +239,29 @@ export async function POST(
       });
     }
 
-    if (body.createAuthorization?.specialty) {
-      created.authorization = await db.medicalAuthorization.create({
-        data: {
-          userId: session.user.id,
-          originAppointmentId: id,
-          type: body.createAuthorization.type || "specialist",
-          specialty: body.createAuthorization.specialty,
-          status: "pending_authorization",
-          notes: body.createAuthorization.notes || null,
-          renewals: [],
-        },
-      });
+    const authorizationDrafts = [
+      ...(body.createAuthorizations || []),
+      ...(body.createAuthorization ? [body.createAuthorization] : []),
+    ].filter((authorization) => authorization.specialty?.trim());
+
+    if (authorizationDrafts.length > 0) {
+      const authorizations = await Promise.all(
+        authorizationDrafts.map((authorization) =>
+          db.medicalAuthorization.create({
+            data: {
+              userId: session.user.id,
+              originAppointmentId: id,
+              type: authorization.type || "specialist",
+              specialty: authorization.specialty.trim(),
+              status: "pending_authorization",
+              notes: authorization.notes || null,
+              renewals: [],
+            },
+          })
+        )
+      );
+      created.authorization = authorizations[0] || null;
+      created.authorizations = authorizations;
     }
 
     const syncPayload = await getFinanceSyncPayload({

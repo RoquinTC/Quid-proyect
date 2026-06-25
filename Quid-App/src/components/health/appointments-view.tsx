@@ -54,6 +54,12 @@ type PrescribedMedicationDraft = {
   dosesPerDay: string;
 };
 
+type AuthorizationDraft = {
+  type: string;
+  specialty: string;
+  notes: string;
+};
+
 const containerVariants = {
   hidden: { opacity: 0 },
   show: {
@@ -442,6 +448,11 @@ function CompleteAppointmentDialog({
       specialty: string;
       notes: string | null;
     };
+    createAuthorizations?: Array<{
+      type: string;
+      specialty: string;
+      notes: string | null;
+    }>;
   }) => Promise<void>;
 }) {
   const [hasCopay, setHasCopay] = useState(false);
@@ -473,11 +484,11 @@ function CompleteAppointmentDialog({
     { name: "", qty: "", unit: "und", days: "30", dosesPerDay: "1" }
   ]);
 
-  // EPS Authorization follow-up
+  // EPS Authorization / clinical derivations follow-up
   const [hasAuthorization, setHasAuthorization] = useState(false);
-  const [authSpecialty, setAuthSpecialty] = useState("");
-  const [authType, setAuthType] = useState("specialist");
-  const [authNotes, setAuthNotes] = useState("");
+  const [authorizations, setAuthorizations] = useState<AuthorizationDraft[]>([
+    { type: "control", specialty: "", notes: "" },
+  ]);
 
   // Next scheduled appointment control (direct)
   const [hasFollowUp, setHasFollowUp] = useState(false);
@@ -511,9 +522,7 @@ function CompleteAppointmentDialog({
     setMeds([{ name: "", qty: "", unit: "und", days: "30", dosesPerDay: "1" }]);
 
     setHasAuthorization(false);
-    setAuthSpecialty("");
-    setAuthType("specialist");
-    setAuthNotes("");
+    setAuthorizations([{ type: "control", specialty: "", notes: "" }]);
 
     setHasFollowUp(false);
     setFollowUpSpecialty(appointment?.specialty ? `Control de ${appointment.specialty}` : "Control Médico");
@@ -558,7 +567,16 @@ function CompleteAppointmentDialog({
   const handleConfirm = async () => {
     if (needsPayment && !hasPaymentSource) return;
     if (hasFollowUp && !followUpDate) return;
-    if (hasAuthorization && !authSpecialty) return;
+    const validAuthorizations = hasAuthorization
+      ? authorizations
+          .filter((auth) => auth.specialty.trim() !== "")
+          .map((auth) => ({
+            type: auth.type,
+            specialty: auth.specialty.trim(),
+            notes: auth.notes.trim() || null,
+          }))
+      : [];
+    if (hasAuthorization && validAuthorizations.length === 0) return;
     setSaving(true);
     try {
       const validMeds = meds
@@ -598,11 +616,7 @@ function CompleteAppointmentDialog({
           date: followUpDate,
           location: followUpLocation || null,
         } : undefined,
-        createAuthorization: hasAuthorization ? {
-          type: authType,
-          specialty: authSpecialty,
-          notes: authNotes || null,
-        } : undefined,
+        createAuthorizations: validAuthorizations.length > 0 ? validAuthorizations : undefined,
       });
     } finally {
       setSaving(false);
@@ -611,9 +625,38 @@ function CompleteAppointmentDialog({
 
   const authTypes = [
     { value: "specialist", label: "Especialista" },
-    { value: "procedure", label: "Examen / Proc." },
     { value: "control", label: "Control" },
+    { value: "imaging", label: "Rayos X / Imagen" },
+    { value: "lab", label: "Laboratorio" },
+    { value: "procedure", label: "Procedimiento" },
+    { value: "therapy", label: "Terapia" },
+    { value: "other", label: "Otro" },
   ];
+
+  const updateAuthorizationRow = (index: number, field: keyof AuthorizationDraft, value: string) => {
+    setAuthorizations((current) =>
+      current.map((auth, idx) => (idx === index ? { ...auth, [field]: value } : auth))
+    );
+  };
+
+  const addAuthorizationRow = (draft?: Partial<AuthorizationDraft>) => {
+    setHasAuthorization(true);
+    setAuthorizations((current) => [
+      ...current,
+      {
+        type: draft?.type || "specialist",
+        specialty: draft?.specialty || "",
+        notes: draft?.notes || "",
+      },
+    ]);
+  };
+
+  const removeAuthorizationRow = (index: number) => {
+    setAuthorizations((current) => {
+      const next = current.filter((_, idx) => idx !== index);
+      return next.length > 0 ? next : [{ type: "control", specialty: "", notes: "" }];
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -838,7 +881,7 @@ function CompleteAppointmentDialog({
             )}
           </div>
 
-          {/* SECCIÓN 3: ORDEN PARA AUTORIZACIÓN EPS */}
+          {/* SECCIÓN 3: ÓRDENES Y DERIVACIONES */}
           <div className="border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex gap-2.5 items-center">
@@ -846,8 +889,8 @@ function CompleteAppointmentDialog({
                   <Stethoscope className="size-4" />
                 </div>
                 <div>
-                  <Label className="text-sm font-semibold">¿Generó orden para autorizar en EPS?</Label>
-                  <p className="text-xs text-gray-400">Queda pendiente de autorización antes de poder programar la cita.</p>
+                  <Label className="text-sm font-semibold">¿Generó órdenes o trámites?</Label>
+                  <p className="text-xs text-gray-400">Agrega control, rayos X, laboratorios, procedimientos o especialistas.</p>
                 </div>
               </div>
               <Switch checked={hasAuthorization} onCheckedChange={setHasAuthorization} />
@@ -859,48 +902,90 @@ function CompleteAppointmentDialog({
                 animate={{ opacity: 1, height: "auto" }}
                 className="space-y-3 pt-2 border-t border-gray-50 dark:border-gray-800"
               >
-                <div className="space-y-1.5">
-                  <Label htmlFor="auth-specialty" className="text-xs text-gray-500">Servicio, especialidad o procedimiento</Label>
-                  <Input
-                    id="auth-specialty"
-                    placeholder="Ej: Fisioterapia, Cardiología, Ecografía"
-                    value={authSpecialty}
-                    onChange={(e) => setAuthSpecialty(e.target.value)}
-                    className="rounded-xl h-9 text-xs"
-                  />
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-xl text-[11px]"
+                    onClick={() => addAuthorizationRow({ type: "control", specialty: "Control médico" })}
+                  >
+                    + Control
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-xl text-[11px]"
+                    onClick={() => addAuthorizationRow({ type: "imaging", specialty: "Rayos X" })}
+                  >
+                    + Rayos X
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-xl text-[11px]"
+                    onClick={() => addAuthorizationRow({ type: "lab", specialty: "Laboratorios" })}
+                  >
+                    + Labs
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 rounded-xl text-[11px]"
+                    onClick={() => addAuthorizationRow({ type: "specialist" })}
+                  >
+                    + Otra
+                  </Button>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-gray-500">Tipo de orden EPS</Label>
-                  <div className="flex gap-2">
-                    {authTypes.map((t) => (
-                      <button
-                        key={t.value}
-                        type="button"
-                        onClick={() => setAuthType(t.value)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                          authType === t.value
-                            ? "bg-violet-100 border-violet-300 text-violet-700 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-200"
-                            : "border-gray-200 dark:border-gray-800 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-900"
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
+                <div className="space-y-2">
+                  {authorizations.map((auth, idx) => (
+                    <div key={idx} className="rounded-2xl border border-blue-100 bg-blue-50/30 p-3 dark:border-blue-900/40 dark:bg-blue-950/10">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <Label className="text-xs font-semibold text-blue-700 dark:text-blue-200">
+                          Orden #{idx + 1}
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => removeAuthorizationRow(idx)}
+                          className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20"
+                          aria-label="Quitar orden"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[150px_1fr]">
+                        <select
+                          value={auth.type}
+                          onChange={(e) => updateAuthorizationRow(idx, "type", e.target.value)}
+                          className="h-9 rounded-xl border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none transition focus:border-blue-400 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100"
+                        >
+                          {authTypes.map((type) => (
+                            <option key={type.value} value={type.value}>
+                              {type.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Input
+                          placeholder="Ej: Control con medicina general, Rayos X de tórax"
+                          value={auth.specialty}
+                          onChange={(e) => updateAuthorizationRow(idx, "specialty", e.target.value)}
+                          className="h-9 rounded-xl text-xs"
+                        />
+                      </div>
+                      <textarea
+                        rows={2}
+                        placeholder="Notas opcionales: diagnóstico, CUPS, entidad, prioridad, documentos requeridos..."
+                        value={auth.notes}
+                        onChange={(e) => updateAuthorizationRow(idx, "notes", e.target.value)}
+                        className="mt-2 w-full resize-none rounded-xl border border-gray-200 bg-white/80 p-2.5 text-xs outline-none transition focus:border-blue-400 dark:border-gray-800 dark:bg-gray-950/80"
+                      />
+                    </div>
+                  ))}
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="auth-notes" className="text-xs text-gray-500">Notas para el trámite (opcional)</Label>
-                  <textarea
-                    id="auth-notes"
-                    rows={2}
-                    placeholder="Ej: diagnóstico asociado, CUPS, documentos requeridos..."
-                    value={authNotes}
-                    onChange={(e) => setAuthNotes(e.target.value)}
-                    className="w-full text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-transparent p-2.5 outline-none resize-none focus:ring-1 focus:ring-violet-500"
-                  />
-                </div>
+                <p className="rounded-xl bg-amber-50 p-2 text-[11px] leading-4 text-amber-700 dark:bg-amber-950/20 dark:text-amber-200">
+                  Puedes guardar varias órdenes aunque todavía no tengas el soporte. Después podrás adjuntar PDF o foto a cada trámite.
+                </p>
               </motion.div>
             )}
           </div>
@@ -979,7 +1064,7 @@ function CompleteAppointmentDialog({
           <Button
             className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-pink-500 hover:from-rose-700 hover:to-pink-600 text-white font-medium py-2.5"
             onClick={handleConfirm}
-            disabled={saving || (needsPayment && !hasPaymentSource) || (hasFollowUp && !followUpDate) || (hasAuthorization && !authSpecialty)}
+            disabled={saving || (needsPayment && !hasPaymentSource) || (hasFollowUp && !followUpDate) || (hasAuthorization && authorizations.every((auth) => !auth.specialty.trim()))}
           >
             {saving ? <Loader2 className="size-4 animate-spin mr-2" /> : <CalendarCheck className="size-4 mr-2" />}
             Guardar y Completar Cita
