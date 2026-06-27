@@ -1,15 +1,37 @@
 import { getServerSession } from "next-auth";
+import { getToken } from "next-auth/jwt";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 /**
  * Get the authenticated user's session or return a 401 response.
  * Use this in every API route that requires authentication.
  */
-export async function requireAuth() {
+export async function requireAuth(req?: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
+    if (req) {
+      const token = await getToken({
+        req,
+        secret: process.env.NEXTAUTH_SECRET,
+      });
+
+      if (token?.id || token?.sub) {
+        return {
+          session: {
+            user: {
+              id: String(token.id || token.sub),
+              email: typeof token.email === "string" ? token.email : undefined,
+              name: typeof token.name === "string" ? token.name : undefined,
+              image: typeof token.picture === "string" ? token.picture : undefined,
+            },
+          },
+          error: null,
+        };
+      }
+    }
+
     return { session: null, error: NextResponse.json({ error: "No autorizado" }, { status: 401 }) };
   }
   return { session, error: null };

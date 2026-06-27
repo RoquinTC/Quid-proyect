@@ -126,7 +126,7 @@ export function SyncProvider({ children }: SyncProviderProps) {
       const results = await Promise.allSettled(
         SYNC_ENDPOINTS.map(async (endpoint) => {
           const tableName = API_TABLE_MAP[endpoint];
-          if (!tableName) return;
+          if (!tableName) return false;
 
           try {
             const data = await apiFetch<any[]>(endpoint);
@@ -138,6 +138,7 @@ export function SyncProvider({ children }: SyncProviderProps) {
 
             if (Array.isArray(records)) {
               await replaceAllInTable(tableName, userId, records);
+              return true;
             } else if (records && typeof records === "object" && !Array.isArray(records)) {
               // Single object (e.g. /api/settings) — must have an id for key path
               const obj = records as Record<string, unknown>;
@@ -151,22 +152,27 @@ export function SyncProvider({ children }: SyncProviderProps) {
                     _version: 1,
                     _lastModified: Date.now(),
                   });
+                  return true;
                 }
               } else {
                 console.warn(`[Sync] Skipping ${endpoint}: response is not an array and has no 'id' field`);
               }
             }
+            return false;
           } catch (err) {
             console.warn(`[Sync] Failed to sync ${endpoint}:`, err);
+            return false;
           }
         })
       );
 
-      // Mark initial sync as done only if at least some endpoints succeeded
-      const succeeded = results.filter((r) => r.status === "fulfilled").length;
-      const failed = results.filter((r) => r.status === "rejected").length;
+      const settledValues = results.map((result) =>
+        result.status === "fulfilled" ? result.value : false
+      );
+      const succeeded = settledValues.filter(Boolean).length;
+      const failed = SYNC_ENDPOINTS.length - succeeded;
       
-      if (succeeded > 0) {
+      if (succeeded === SYNC_ENDPOINTS.length) {
         await setInitialSyncDone(userId);
         setInitialSyncComplete(true);
         console.log(`[Sync] Initial sync complete: ${succeeded}/${SYNC_ENDPOINTS.length} endpoints synced`);
@@ -174,10 +180,10 @@ export function SyncProvider({ children }: SyncProviderProps) {
         // All endpoints failed — likely offline, don't mark as synced
         console.warn("[Sync] Initial sync failed entirely — will retry on next load");
       } else {
-        // Partial success — still mark as done to avoid infinite retries
-        await setInitialSyncDone(userId);
+        // Partial success: let the app continue, but do not mark this local
+        // sync version as complete. The next launch will retry missing tables.
         setInitialSyncComplete(true);
-        console.log(`[Sync] Initial sync partial: ${succeeded}/${SYNC_ENDPOINTS.length} endpoints synced`);
+        console.warn(`[Sync] Initial sync partial: ${succeeded}/${SYNC_ENDPOINTS.length} endpoints synced — will retry next launch`);
       }
     } catch (err) {
       console.error("[Sync] Initial sync failed:", err);

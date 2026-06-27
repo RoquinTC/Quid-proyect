@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.0.14",
+  "currentVersion": "1.0.15",
   "releases": [
+    {
+      "version": "1.0.15",
+      "date": "2026-06-27",
+      "title": "Salud alineada entre Android y web",
+      "changes": [
+        "Las ordenes pendientes de autorizacion EPS ahora se descargan correctamente en la APK igual que en la PWA.",
+        "La sincronizacion local vuelve a intentar cualquier seccion que haya fallado, en vez de marcarla como completa antes de tiempo.",
+        "Al completar una cita, las ordenes creadas quedan listas en Android de forma inmediata y conectadas con la vista de salud."
+      ]
+    },
     {
       "version": "1.0.14",
       "date": "2026-06-27",

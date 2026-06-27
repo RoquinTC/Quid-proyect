@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createHealthFinanceEntry, reverseHealthFinanceEntry } from "@/lib/health-finance";
 import { toNumber } from "@/lib/decimal-serializer";
+import { requireAuth } from "@/lib/auth-guards";
 
 type CompleteAppointmentPayload = {
   copayAmount?: number | null;
@@ -93,10 +92,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
+    const { session, error } = await requireAuth(req);
+    if (error) return error;
 
     const { id } = await params;
     const body = (await req.json()) as CompleteAppointmentPayload;

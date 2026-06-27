@@ -508,6 +508,54 @@ async function updateLocalAfterMutation(url: string, options: RequestInit, data:
       }
     }
 
+    const createdAuthorizations = Array.isArray(data?.created?.authorizations)
+      ? data.created.authorizations
+      : data?.created?.authorization
+        ? [data.created.authorization]
+        : [];
+
+    if (createdAuthorizations.length > 0) {
+      const authorizationsTable = (_localDB as any).medicalAuthorizations;
+      if (authorizationsTable) {
+        await authorizationsTable.bulkPut(
+          createdAuthorizations
+            .filter((authorization: any) => authorization?.id)
+            .map((authorization: any) => ({
+              ...authorization,
+              _syncStatus: "synced",
+              _version: 1,
+              _lastModified: now,
+            }))
+        );
+      }
+    }
+
+    const createdFollowUp = data?.created?.followUp;
+    if (createdFollowUp?.id) {
+      const appointmentsTable = (_localDB as any).appointments;
+      if (appointmentsTable) {
+        await appointmentsTable.put({
+          ...createdFollowUp,
+          _syncStatus: "synced",
+          _version: 1,
+          _lastModified: now,
+        });
+      }
+    }
+
+    const createdOrder = data?.created?.order;
+    if (createdOrder?.id) {
+      const ordersTable = (_localDB as any).medicalOrders;
+      if (ordersTable) {
+        await ordersTable.put({
+          ...createdOrder,
+          _syncStatus: "synced",
+          _version: 1,
+          _lastModified: now,
+        });
+      }
+    }
+
     // ── Cross-table balance updates ──────────────────────────────
     // When a transaction changes account balances, the server returns
     // `updatedBalances` with the new balance for each affected account.

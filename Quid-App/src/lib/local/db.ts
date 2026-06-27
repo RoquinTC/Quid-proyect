@@ -567,7 +567,7 @@ class QuidDB extends Dexie {
 
 // Singleton — reused across the app
 export const localDB = new QuidDB();
-const LOCAL_SYNC_VERSION = 2;
+const LOCAL_SYNC_VERSION = 3;
 
 // ─── API path → Table name mapping ───
 
