@@ -130,16 +130,15 @@ export function AppShell() {
   const shouldLock = securityEnabled && !manuallyUnlocked;
 
   // Listen for visibility change events to lock on resume
-  // Grace period: when the app goes to background, start a 60-second timer.
-  // If the user returns within 60 seconds → cancel lock, reset counter.
-  // If 60 seconds pass while in background → lock on next foreground.
+  // Grace period: when the app goes to background, start a short timer.
+  // Quick app switching should not destroy an in-progress form.
   const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lockTriggeredRef = useRef(false);
 
   useEffect(() => {
     if (!securityEnabled) return;
 
-    const LOCK_DELAY_MS = 60_000; // 60 seconds grace period before locking
+    const LOCK_DELAY_MS = 5 * 60_000; // 5 minutes before locking on resume
 
     const handleVisibilityChange = async () => {
       if (document.hidden) {
@@ -241,22 +240,16 @@ export function AppShell() {
   }, [session?.user?.id, isOffline]);
 
   const handleUnlock = useCallback(() => {
-    if (!hasInitialDeepLinkRef.current) {
-      setActiveModule("dashboard");
-    }
     setManuallyUnlocked(true);
-  }, [setActiveModule]);
+  }, []);
 
   // Handle offline unlock — set the offline session in Zustand
   const handleOfflineUnlock = useCallback((cachedSession: any) => {
-    if (!hasInitialDeepLinkRef.current) {
-      setActiveModule("dashboard");
-    }
     setOfflineSession(cachedSession);
     setManuallyUnlocked(true);
     setJustLoggedIn(true);
     try { sessionStorage.setItem("quid-just-logged-in", "true"); } catch {}
-  }, [setActiveModule, setOfflineSession]);
+  }, [setOfflineSession]);
 
   // Cache session for offline access whenever it's available
   // BUT: skip if user just logged out (prevents re-caching during logout)
@@ -339,11 +332,6 @@ export function AppShell() {
     return <OnboardingFlow />;
   }
 
-  // If locked, show lock screen
-  if (shouldLock) {
-    return <LockScreen onUnlock={handleUnlock} />;
-  }
-
   // Authenticated and onboarded - show main app
   return (
     <AchievementsProvider>
@@ -355,6 +343,11 @@ export function AppShell() {
         <AppDeepLinkHandler />
         <DiscoveryCoach />
         {showBackupPrompt && <BackupRestorePrompt />}
+        {shouldLock && (
+          <div className="fixed inset-0 z-[9999] bg-white dark:bg-gray-950">
+            <LockScreen onUnlock={handleUnlock} />
+          </div>
+        )}
       </div>
     </AchievementsProvider>
   );
