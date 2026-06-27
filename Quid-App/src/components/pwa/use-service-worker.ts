@@ -70,6 +70,43 @@ export function useServiceWorker() {
       return;
     }
 
+    const capacitor = (window as any).Capacitor;
+    const isNativeCapacitor =
+      !!capacitor &&
+      (capacitor.isNativePlatform?.() === true ||
+        capacitor.getPlatform?.() === 'android' ||
+        capacitor.getPlatform?.() === 'ios');
+
+    if (isNativeCapacitor) {
+      // Capacitor already ships a local app bundle. Keeping the PWA service
+      // worker in Android can make the WebView serve old JS chunks after an
+      // APK update, so we clear only web caches and leave IndexedDB/localStorage
+      // intact for Quid data and session state.
+      async function clearNativeWebCaches() {
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(
+              cacheNames
+                .filter((name) => name.startsWith('quid-'))
+                .map((name) => caches.delete(name))
+            );
+          }
+
+          console.log('[PWA] Service Worker disabled for Capacitor native app');
+        } catch (error) {
+          console.warn('[PWA] Could not clear native web caches:', error);
+        }
+      }
+
+      clearNativeWebCaches();
+      setState((prev) => ({ ...prev, updateAvailable: false, pendingVersion: null }));
+      return;
+    }
+
     let registration: ServiceWorkerRegistration | null = null;
     const handleUpdateFound = () => {
       const newWorker = registration?.installing;

@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.0.12",
+  "currentVersion": "1.0.13",
   "releases": [
+    {
+      "version": "1.0.13",
+      "date": "2026-06-27",
+      "title": "Actualizacion mas limpia en Android",
+      "changes": [
+        "La APK limpia el cache web interno que podia dejar pantallas viejas despues de instalar una version nueva.",
+        "Android conserva tus datos y sesion, pero deja de usar fragmentos antiguos de la interfaz.",
+        "El flujo de citas medicas con varias ordenes queda disponible correctamente dentro de la APK actualizada."
+      ]
+    },
     {
       "version": "1.0.12",
       "date": "2026-06-25",
