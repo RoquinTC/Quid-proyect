@@ -70,6 +70,7 @@ const SYNC_ENDPOINTS = [
   "/api/vehicles",
   "/api/medications",
   "/api/appointments",
+  "/api/health/authorizations",
   "/api/pantry",
   "/api/shopping-lists",
   "/api/health-profiles",

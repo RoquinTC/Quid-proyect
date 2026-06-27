@@ -366,6 +366,26 @@ export interface LocalAppointment extends SyncMeta {
   updatedAt: string;
 }
 
+export interface LocalMedicalAuthorization extends SyncMeta {
+  id: string;
+  userId: string;
+  type: string;
+  specialty: string;
+  status: string;
+  code?: string | null;
+  authorizationDate?: string | null;
+  daysOfValidity?: number | null;
+  expirationDate?: string | null;
+  notes?: string | null;
+  supportUrl?: string | null;
+  supportType?: string | null;
+  appointmentId?: string | null;
+  originAppointmentId?: string | null;
+  renewals?: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LocalPantryItem extends SyncMeta {
   id: string;
   userId: string;
@@ -465,6 +485,7 @@ class QuidDB extends Dexie {
   fuelPrices!: Table<LocalFuelPrice>;
   medications!: Table<LocalMedication>;
   appointments!: Table<LocalAppointment>;
+  medicalAuthorizations!: Table<LocalMedicalAuthorization>;
   pantryItems!: Table<LocalPantryItem>;
   shoppingLists!: Table<LocalShoppingList>;
   shoppingListItems!: Table<LocalShoppingListItem>;
@@ -508,11 +529,45 @@ class QuidDB extends Dexie {
       mutationQueue: 'id, tableName, status, sequence, groupId, createdAt',
       syncMeta: 'key',
     });
+
+    this.version(2).stores({
+      accounts: 'id, userId, type, order, _syncStatus, _lastModified',
+      subAccounts: 'id, accountId, order, _syncStatus, _lastModified',
+      transactions: 'id, userId, accountId, subAccountId, type, category, date, sourceModule, _syncStatus, _lastModified',
+      budgets: 'id, userId, type, category, subCategory, _syncStatus, _lastModified',
+      debts: 'id, userId, type, _syncStatus, _lastModified',
+      installments: 'id, debtId, isPaid, nextPaymentDate, _syncStatus, _lastModified',
+      abonos: 'id, userId, debtId, date, _syncStatus, _lastModified',
+      abonoDetails: 'id, abonoId, installmentId, _syncStatus',
+      recurringPayments: 'id, userId, status, scheduledDate, debtId, savingsGoalId, payrollGroupId, _syncStatus, _lastModified',
+      payrollGroups: 'id, userId, accountId, _syncStatus, _lastModified',
+      savingsGoals: 'id, userId, isActive, status, _syncStatus, _lastModified',
+      savingsGoalAccounts: 'id, goalId, accountId, _syncStatus',
+      savingsContributions: 'id, goalId, date, _syncStatus, _lastModified',
+      cdts: 'id, userId, status, goalId, _syncStatus, _lastModified',
+      yieldRecords: 'id, accountId, subAccountId, month, _syncStatus, _lastModified',
+      vehicles: 'id, userId, _syncStatus, _lastModified',
+      fuelLogs: 'id, vehicleId, date, _syncStatus, _lastModified',
+      maintenanceRecords: 'id, vehicleId, type, date, _syncStatus, _lastModified',
+      fuelPrices: 'id, userId, fuelType, _syncStatus, _lastModified',
+      medications: 'id, userId, isActive, _syncStatus, _lastModified',
+      appointments: 'id, userId, date, status, _syncStatus, _lastModified',
+      medicalAuthorizations: 'id, userId, status, type, originAppointmentId, appointmentId, expirationDate, _syncStatus, _lastModified',
+      pantryItems: 'id, userId, category, _syncStatus, _lastModified',
+      shoppingLists: 'id, userId, status, _syncStatus, _lastModified',
+      shoppingListItems: 'id, shoppingListId, _syncStatus, _lastModified',
+      healthProfiles: 'id, userId, type, _syncStatus, _lastModified',
+      userSettings: 'id, userId, _syncStatus, _lastModified',
+      sharedAccountUsers: 'id, accountId, userId, _syncStatus',
+      mutationQueue: 'id, tableName, status, sequence, groupId, createdAt',
+      syncMeta: 'key',
+    });
   }
 }
 
 // Singleton — reused across the app
 export const localDB = new QuidDB();
+const LOCAL_SYNC_VERSION = 2;
 
 // ─── API path → Table name mapping ───
 
@@ -528,6 +583,7 @@ export const API_TABLE_MAP: Record<string, string> = {
   "/api/vehicles": "vehicles",
   "/api/medications": "medications",
   "/api/appointments": "appointments",
+  "/api/health/authorizations": "medicalAuthorizations",
   "/api/pantry": "pantryItems",
   "/api/shopping-lists": "shoppingLists",
   "/api/health-profiles": "healthProfiles",
@@ -568,6 +624,7 @@ export const TABLE_TO_ROUTE: Record<string, string> = {
   fuelPrices: 'fuel-prices',
   medications: 'medications',
   appointments: 'appointments',
+  medicalAuthorizations: 'health/authorizations',
   pantryItems: 'pantry',
   shoppingLists: 'shopping-lists',
   shoppingListItems: 'shopping-lists',
@@ -652,7 +709,7 @@ export async function replaceAllInTable<T extends { id: string }>(
 // ─── Helper: Check if initial sync has been completed for a user ───
 
 export async function isInitialSyncDone(userId: string): Promise<boolean> {
-  const value = await getSyncMeta("initialSyncDone");
+  const value = await getSyncMeta(`initialSyncDone:v${LOCAL_SYNC_VERSION}`);
   return value === userId;
 }
 
@@ -660,7 +717,7 @@ export async function isInitialSyncDone(userId: string): Promise<boolean> {
 
 export async function setInitialSyncDone(userId: string): Promise<void> {
   await localDB.syncMeta.put({
-    key: "initialSyncDone",
+    key: `initialSyncDone:v${LOCAL_SYNC_VERSION}`,
     value: userId,
     updatedAt: Date.now(),
   });

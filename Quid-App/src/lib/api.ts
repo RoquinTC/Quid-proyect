@@ -97,8 +97,18 @@ function parseApiUrl(url: string): { tableName: string | null; isCollection: boo
   const thirdSegment = match[3];
   let recordId: string | null = match[2] || null;
 
+  if (resource === "health" && recordId === "authorizations" && !thirdSegment) {
+    tableName = "medicalAuthorizations";
+    return { tableName, isCollection: true, isComplex: false, recordId: null };
+  }
+
   // Special sub-resource mapping
   if (thirdSegment) {
+    // /api/health/authorizations/{id} -> medicalAuthorizations table
+    if (resource === "health" && recordId === "authorizations" && thirdSegment) {
+      tableName = "medicalAuthorizations";
+      return { tableName, isCollection: false, isComplex: false, recordId: thirdSegment };
+    }
     // /api/accounts/{id}/sub-accounts → subAccounts table
     if (thirdSegment === "sub-accounts") {
       tableName = "subAccounts";
