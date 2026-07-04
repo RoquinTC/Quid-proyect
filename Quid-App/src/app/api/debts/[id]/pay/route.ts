@@ -6,8 +6,13 @@ import { getColombiaNow, getColombiaTodayString, createColombiaDate } from "@/li
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtPaySchema } from "@/lib/validations";
 import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 
 type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
+function normalizeOptionalId(value: string | null | undefined) {
+  return value && value !== "none" && value !== "__none__" ? value : null;
+}
 
 /**
  * Determine which billing cycle an installment CURRENTLY belongs to,
@@ -65,8 +70,8 @@ export async function POST(
     const confirmedCapital = body.confirmedCapital || {};
     const confirmedInterest = body.confirmedInterest || {};
     const confirmedOtherCharges = body.confirmedOtherCharges || {};
-    const payAccountId = body.payAccountId || null;
-    const paySubAccountId = body.paySubAccountId || null;
+    const payAccountId = normalizeOptionalId(body.payAccountId);
+    const paySubAccountId = normalizeOptionalId(body.paySubAccountId);
 
     // ── Idempotency check: prevent double-pay if a payment was just made ──
     const recentPayment = await db.transaction.findFirst({
@@ -94,7 +99,8 @@ export async function POST(
     const today = getColombiaNow();
 
     // ── Determine which installments are due for payment ──
-    let dueInstallments;
+    type InstallmentToPay = typeof debt.installments[number];
+    let dueInstallments: InstallmentToPay[];
 
     if (selectedInstallmentIds && selectedInstallmentIds.length > 0) {
       // User selected specific installments to pay (partial payment)
@@ -192,7 +198,49 @@ export async function POST(
     const paidInstallmentIds: string[] = [];
 
     // Determine if this is a loan with fixed cuota
-    const isLoanFixed = debt.type === "loan" && debt.paymentType === "fixed";
+    const isLoan = debt.type === "loan";
+    const isLoanFixed = isLoan && debt.paymentType === "fixed";
+    const getLoanPaymentSource = (inst: InstallmentToPay) => ({
+      accountId: payAccountId || inst.accountId || debt.accountId || null,
+      subAccountId: paySubAccountId || inst.subAccountId || debt.subAccountId || null,
+    });
+
+    if (isLoan) {
+      const missingSource = dueInstallments.find((inst) => !getLoanPaymentSource(inst).accountId);
+      if (missingSource) {
+        return NextResponse.json(
+          { error: "Selecciona la cuenta desde donde se pagará el préstamo" },
+          { status: 400 }
+        );
+      }
+
+      const entities = new Map<string, { type: "account" | "subAccount"; id: string }>();
+      for (const inst of dueInstallments) {
+        const source = getLoanPaymentSource(inst);
+        if (source.accountId) entities.set(`account:${source.accountId}`, { type: "account", id: source.accountId });
+        if (source.subAccountId) entities.set(`subAccount:${source.subAccountId}`, { type: "subAccount", id: source.subAccountId });
+      }
+      const accessError = await verifyEntityMutationAccess(session.user.id, [...entities.values()]);
+      if (accessError) return accessError;
+
+      const subAccountIds = [...new Set(dueInstallments.map((inst) => getLoanPaymentSource(inst).subAccountId).filter(Boolean))] as string[];
+      if (subAccountIds.length > 0) {
+        const subAccounts = await db.subAccount.findMany({
+          where: { id: { in: subAccountIds } },
+          select: { id: true, accountId: true },
+        });
+        const accountBySub = new Map(subAccounts.map((sub) => [sub.id, sub.accountId]));
+        for (const inst of dueInstallments) {
+          const source = getLoanPaymentSource(inst);
+          if (source.subAccountId && accountBySub.get(source.subAccountId) !== source.accountId) {
+            return NextResponse.json(
+              { error: "La subcuenta seleccionada no pertenece a la cuenta de pago" },
+              { status: 400 }
+            );
+          }
+        }
+      }
+    }
 
     // Update each installment — mark as paid
     for (const installment of dueInstallments) {
@@ -356,7 +404,7 @@ export async function POST(
 
     const accountBalanceDeductions: Record<string, { accountId: string | null; subAccountId: string | null; amount: number }> = {};
 
-    if (!isLoanFixed) {
+    if (!isLoan) {
       // ── CREDIT CARD: one grouped "transfer" per account ──
       // Group installments by account
       const accountGroups: Record<string, {
@@ -437,11 +485,11 @@ export async function POST(
     } else {
       // ── LOAN: individual transactions per installment with correct category ──
       for (const inst of dueInstallments) {
-        const capital = confirmedCapital[inst.id] ?? 0;
-        const interest = confirmedInterest[inst.id] ?? 0;
-        const other = confirmedOtherCharges[inst.id] ?? (debt.otherCharges ?? 0);
+        const capital = isLoanFixed ? (confirmedCapital[inst.id] ?? 0) : toNumber(inst.installmentAmount);
+        const interest = isLoanFixed ? (confirmedInterest[inst.id] ?? 0) : 0;
+        const other = isLoanFixed ? (confirmedOtherCharges[inst.id] ?? (debt.otherCharges ?? 0)) : 0;
         let instTotal: number;
-        if (capital === 0 && interest === 0) {
+        if (isLoanFixed && capital === 0 && interest === 0) {
           const balance = toNumber(inst.remainingBalance ?? debt.currentBalance);
           const annualRate = toNumber(debt.interestRate ?? 0);
           const monthlyRate = annualRate > 0 ? annualRate / 12 : 0;
@@ -455,8 +503,7 @@ export async function POST(
         const txCategory = inst.category || debt.category || "Deudas";
         const txSubCategory = inst.subCategory || debt.subCategory || null;
 
-        const effectiveAccountId = inst.accountId || payAccountId || debt.accountId || null;
-        const effectiveSubAccountId = inst.subAccountId || paySubAccountId || debt.subAccountId || null;
+        const { accountId: effectiveAccountId, subAccountId: effectiveSubAccountId } = getLoanPaymentSource(inst);
 
         if (effectiveAccountId) {
           await db.transaction.create({
@@ -541,36 +588,38 @@ export async function POST(
       totalPayment,
       paidInstallments: dueInstallments.length,
       details: dueInstallments.map(inst => {
-        if (isLoanFixed) {
+        if (isLoan) {
           const capital = confirmedCapital[inst.id] ?? 0;
           const interest = confirmedInterest[inst.id] ?? 0;
           const other = confirmedOtherCharges[inst.id] ?? (debt.otherCharges ?? 0);
+          const source = getLoanPaymentSource(inst);
+          return {
+            id: inst.id,
+            description: inst.description,
+            capital: isLoanFixed ? capital : toNumber(inst.installmentAmount),
+            interestRate: debt.interestRate ?? null,
+            interestAmount: isLoanFixed ? (interest || null) : null,
+            otherChargesAmount: isLoanFixed ? (other || null) : null,
+            totalAmount: isLoanFixed ? capital + interest + other : toNumber(inst.installmentAmount),
+            currentInstallment: inst.currentInstallment,
+            totalInstallments: inst.totalInstallments,
+            remainingBalance: inst.remainingBalance ?? inst.totalAmount,
+            accountId: source.accountId,
+            subAccountId: source.subAccountId,
+          };
+        } else {
+          const rate = interestRates[inst.id] ?? 0;
+          const balance = toNumber(inst.remainingBalance ?? inst.totalAmount);
+          const interest = (inst.totalInstallments > 1 && rate) ? balance * (rate / 100) : 0;
+          const capital = toNumber(inst.installmentAmount);
           return {
             id: inst.id,
             description: inst.description,
             capital,
-            interestRate: debt.interestRate ?? null,
-            interestAmount: interest || null,
-            otherChargesAmount: other || null,
-            totalAmount: capital + interest + other,
-            currentInstallment: inst.currentInstallment,
-            totalInstallments: inst.totalInstallments,
-            remainingBalance: inst.remainingBalance ?? inst.totalAmount,
-            accountId: inst.accountId,
-            subAccountId: inst.subAccountId,
-          };
-        } else {
-          const rate = interestRates[inst.id] ?? 0;
-          const balance = inst.remainingBalance ?? inst.totalAmount;
-          const interest = (inst.totalInstallments > 1 && rate) ? balance * (rate / 100) : 0;
-          return {
-            id: inst.id,
-            description: inst.description,
-            capital: inst.installmentAmount,
             interestRate: rate || null,
             interestAmount: interest || null,
             otherChargesAmount: null,
-            totalAmount: inst.installmentAmount + interest,
+            totalAmount: capital + interest,
             currentInstallment: inst.currentInstallment,
             totalInstallments: inst.totalInstallments,
             remainingBalance: inst.remainingBalance ?? inst.totalAmount,

@@ -35,6 +35,11 @@ export async function PUT(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.status !== undefined) updateData.status = body.status;
     if (body.profileId !== undefined) updateData.profileId = body.profileId;
+    if (body.storeName !== undefined) updateData.storeName = body.storeName?.trim() || null;
+    if (body.purpose !== undefined) updateData.purpose = body.purpose?.trim() || null;
+    if (body.purchaseDate !== undefined) {
+      updateData.purchaseDate = body.purchaseDate ? new Date(body.purchaseDate) : null;
+    }
 
     const list = await db.shoppingList.update({
       where: { id },

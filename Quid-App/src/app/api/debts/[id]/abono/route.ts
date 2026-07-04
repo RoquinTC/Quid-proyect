@@ -5,8 +5,13 @@ import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtAbonoSchema } from "@/lib/validations";
+import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 
 type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+
+function normalizeOptionalId(value: string | null | undefined) {
+  return value && value !== "none" && value !== "__none__" ? value : null;
+}
 
 /**
  * Process an "abono a capital" — an extra payment that reduces the remainingBalance
@@ -43,7 +48,8 @@ export async function POST(
       return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
 
-    const { payments, accountId, subAccountId, date } = body;
+    const { payments, accountId, date } = body;
+    const subAccountId = normalizeOptionalId(body.subAccountId);
 
     if (!payments || !Array.isArray(payments) || payments.length === 0) {
       return NextResponse.json({ error: "No se especificaron cuotas para el abono" }, { status: 400 });
@@ -51,6 +57,25 @@ export async function POST(
 
     if (!accountId) {
       return NextResponse.json({ error: "Se requiere una cuenta para el abono" }, { status: 400 });
+    }
+
+    const entities: { type: "account" | "subAccount"; id: string }[] = [{ type: "account", id: accountId }];
+    if (subAccountId) entities.push({ type: "subAccount", id: subAccountId });
+    const accessError = await verifyEntityMutationAccess(session.user.id, entities);
+    if (accessError) return accessError;
+
+    if (subAccountId) {
+      const subAccount = await db.subAccount.findUnique({
+        where: { id: subAccountId },
+        select: { accountId: true },
+      });
+
+      if (!subAccount || subAccount.accountId !== accountId) {
+        return NextResponse.json(
+          { error: "La subcuenta seleccionada no pertenece a la cuenta de origen" },
+          { status: 400 }
+        );
+      }
     }
 
     // Verify debt belongs to user

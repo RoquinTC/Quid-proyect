@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
       if (err instanceof Response) return err;
       return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
-    const { name, profileId } = body;
+    const { name, profileId, storeName, purpose } = body;
 
     const list = await db.shoppingList.create({
       data: {
@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
         name: name || "Lista de Mercado",
         status: "draft",
         profileId: profileId || null,
+        storeName: storeName?.trim() || null,
+        purpose: purpose?.trim() || null,
       },
       include: { items: true },
     });

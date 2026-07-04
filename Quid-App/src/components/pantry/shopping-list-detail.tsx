@@ -71,6 +71,10 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   const [paymentSubAccountId, setPaymentSubAccountId] = useState("");
   const [paymentDebtId, setPaymentDebtId] = useState("");
   const [installmentCount, setInstallmentCount] = useState("1");
+  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [confirmStoreName, setConfirmStoreName] = useState("");
+  const [confirmPurpose, setConfirmPurpose] = useState("Mercado");
+  const [confirmDescription, setConfirmDescription] = useState("");
   const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const fetchList = useCallback(async () => {
@@ -200,6 +204,10 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
           subAccountId: paymentType === "account" ? paymentSubAccountId || null : null,
           debtId: paymentType === "credit_card" ? paymentDebtId : null,
           installmentCount: paymentType === "credit_card" ? Number(installmentCount) || 1 : null,
+          purchaseDate: purchaseDate ? `${purchaseDate}T12:00:00.000Z` : null,
+          storeName: confirmStoreName || null,
+          purpose: confirmPurpose || null,
+          description: confirmDescription || null,
         }),
       });
       setConfirmDialogOpen(false);
@@ -235,6 +243,26 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   }
 
   if (!list) return null;
+
+  const buildSuggestedDescription = () => {
+    const store = confirmStoreName.trim();
+    const purpose = confirmPurpose.trim() || list.purpose || list.name || "Mercado";
+    if (store && purpose.toLowerCase() !== "mercado") return `Compra ${store} - ${purpose}`;
+    if (store) return `Mercado - ${store}`;
+    return `Mercado - ${purpose}`;
+  };
+
+  const handleDeleteList = async () => {
+    if (!list) return;
+    const ok = window.confirm(`¿Eliminar la lista "${list.name}"?`);
+    if (!ok) return;
+    try {
+      await apiFetch(`/api/shopping-lists/${listId}`, { method: "DELETE" });
+      onBack();
+    } catch (error) {
+      console.error("Error deleting list:", error);
+    }
+  };
 
   const totalEstimated = list.items.reduce(
     (sum, i) => sum + (i.estimatedPrice || 0) * i.quantity,
@@ -279,7 +307,21 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
               {list.items.length} items · {purchasedCount} comprados
             </span>
           </div>
+          {(list.storeName || list.purpose || list.purchaseDate) && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              {[list.storeName, list.purpose, list.purchaseDate ? `Compra: ${list.purchaseDate.slice(0, 10)}` : null]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
         </div>
+        <button
+          onClick={handleDeleteList}
+          className="size-9 rounded-xl bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 flex items-center justify-center"
+          aria-label="Eliminar lista"
+        >
+          <Trash2 className="size-4" />
+        </button>
       </div>
 
       {/* Profile selector */}
@@ -499,24 +541,38 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
         )}
 
         {list.status === "shopping" && (
-          <Button
-            onClick={() => handleStatusChange("verified")}
-            disabled={updatingStatus}
-            className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-teal-500"
-          >
-            {updatingStatus ? (
-              <Loader2 className="size-4 animate-spin mr-2" />
-            ) : (
-              <ClipboardCheck className="size-4 mr-2" />
-            )}
-            Verificar Compra
-          </Button>
+          <>
+            <Button
+              onClick={() => setShowItemForm(true)}
+              className="w-full rounded-xl border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400"
+              variant="outline"
+            >
+              <Plus className="size-4 mr-2" />
+              Agregar antojo o producto
+            </Button>
+            <Button
+              onClick={() => handleStatusChange("verified")}
+              disabled={updatingStatus}
+              className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-teal-500"
+            >
+              {updatingStatus ? (
+                <Loader2 className="size-4 animate-spin mr-2" />
+              ) : (
+                <ClipboardCheck className="size-4 mr-2" />
+              )}
+              Verificar Compra
+            </Button>
+          </>
         )}
 
         {list.status === "verified" && (
           <Button
             onClick={() => {
               setConfirmError(null);
+              setConfirmStoreName(list.storeName || "");
+              setConfirmPurpose(list.purpose || list.name || "Mercado");
+              setPurchaseDate(list.purchaseDate ? list.purchaseDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
+              setConfirmDescription("");
               setConfirmDialogOpen(true);
             }}
             disabled={confirming}
@@ -546,6 +602,54 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
               <p className="text-xs text-amber-700 dark:text-amber-300">Total real</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(totalActual)}</p>
               <p className="text-xs text-gray-500 mt-1">Categoría: Alimentación / Mercado</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm-store">Tienda</Label>
+                <Input
+                  id="confirm-store"
+                  placeholder="Ej: D1, Éxito"
+                  value={confirmStoreName}
+                  onChange={(e) => setConfirmStoreName(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm-date">Fecha real</Label>
+                <Input
+                  id="confirm-date"
+                  type="date"
+                  value={purchaseDate}
+                  onChange={(e) => setPurchaseDate(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-purpose">Nombre o motivo</Label>
+              <Input
+                id="confirm-purpose"
+                placeholder="Mercado, postre, cumpleaños..."
+                value={confirmPurpose}
+                onChange={(e) => setConfirmPurpose(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-description">Nombre en Finanzas</Label>
+              <Input
+                id="confirm-description"
+                placeholder={buildSuggestedDescription()}
+                value={confirmDescription}
+                onChange={(e) => setConfirmDescription(e.target.value)}
+                className="rounded-xl"
+              />
+              <p className="text-xs text-gray-400">
+                Si lo dejas vacío se guardará como: {buildSuggestedDescription()}
+              </p>
             </div>
 
             <RadioGroup

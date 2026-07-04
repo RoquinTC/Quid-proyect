@@ -6,6 +6,24 @@ import { getColombiaTodayString, createColombiaDate } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { validateBody, shoppingListConfirmSchema } from "@/lib/validations";
+import { verifyEntityMutationAccess } from "@/lib/auth-guards";
+
+function normalizeOptionalId(value: string | null | undefined) {
+  return value && value !== "none" && value !== "__none__" ? value : null;
+}
+
+function cleanText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function buildMarketDescription(listName: string, storeName?: string | null, purpose?: string | null) {
+  const store = cleanText(storeName);
+  const label = cleanText(purpose) || cleanText(listName) || "Mercado";
+  if (store && label && label.toLowerCase() !== "mercado") return `Compra ${store} - ${label}`;
+  if (store) return `Mercado - ${store}`;
+  return label ? `Mercado - ${label}` : "Mercado";
+}
 
 export async function POST(
   req: NextRequest,
@@ -19,7 +37,17 @@ export async function POST(
 
     const { id } = await params;
     const body = await validateBody(req, shoppingListConfirmSchema);
-    const { paymentType, accountId, subAccountId, debtId, installmentCount } = body;
+    const {
+      paymentType,
+      accountId,
+      debtId,
+      installmentCount,
+      purchaseDate: bodyPurchaseDate,
+    } = body;
+    const subAccountId = normalizeOptionalId(body.subAccountId);
+    const storeName = cleanText(body.storeName);
+    const purpose = cleanText(body.purpose);
+    const customDescription = cleanText(body.description);
 
     const list = await db.shoppingList.findFirst({
       where: { id, userId: session.user.id },
@@ -52,27 +80,26 @@ export async function POST(
       return NextResponse.json({ error: "La lista no tiene un valor para registrar" }, { status: 400 });
     }
 
-    const purchaseDate = createColombiaDate(getColombiaTodayString());
+    const purchaseDate = bodyPurchaseDate ? new Date(bodyPurchaseDate) : createColombiaDate(getColombiaTodayString());
     const category = "Alimentación";
     const subCategory = "Mercado";
-    const description = `Compra de mercado - ${list.name}`;
+    const finalStoreName = storeName ?? list.storeName;
+    const finalPurpose = purpose ?? list.purpose;
+    const description = customDescription || buildMarketDescription(list.name, finalStoreName, finalPurpose);
     let debt: { id: string; type: string; cutoffDate: number | null; paymentDate: number | null } | null = null;
     let nextPaymentDate = new Date(purchaseDate);
     const totalInstallments = installmentCount && installmentCount > 1 ? installmentCount : 1;
     const installmentAmount = Math.round((totalAmount / totalInstallments) * 100) / 100;
 
     if (paymentType === "account") {
-      const account = await db.account.findFirst({
-        where: { id: accountId!, userId: session.user.id },
-        select: { id: true },
-      });
-      if (!account) {
-        return NextResponse.json({ error: "Cuenta de pago no encontrada" }, { status: 404 });
-      }
+      const entities: { type: "account" | "subAccount"; id: string }[] = [{ type: "account", id: accountId! }];
+      if (subAccountId) entities.push({ type: "subAccount", id: subAccountId });
+      const accessError = await verifyEntityMutationAccess(session.user.id, entities);
+      if (accessError) return accessError;
 
       if (subAccountId) {
-        const subAccount = await db.subAccount.findFirst({
-          where: { id: subAccountId, account: { userId: session.user.id } },
+        const subAccount = await db.subAccount.findUnique({
+          where: { id: subAccountId },
           select: { id: true, accountId: true },
         });
         if (!subAccount || subAccount.accountId !== accountId) {
@@ -112,10 +139,31 @@ export async function POST(
 
     const updatedList = await db.$transaction(async (tx) => {
       for (const item of list.items) {
-        if (item.isPurchased && item.pantryItemId) {
+        if (!item.isPurchased) continue;
+
+        const itemPrice = toNumber(item.actualPrice ?? item.estimatedPrice ?? 0);
+
+        if (item.pantryItemId) {
           await tx.pantryItem.update({
             where: { id: item.pantryItemId },
-            data: { quantity: { increment: item.quantity } },
+            data: {
+              quantity: { increment: item.quantity },
+              purchaseDate,
+              purchasePrice: itemPrice || undefined,
+            },
+          });
+        } else {
+          await tx.pantryItem.create({
+            data: {
+              userId: session.user.id,
+              name: item.name,
+              category: "other",
+              quantity: item.quantity,
+              unit: item.unit || "unit",
+              purchaseDate,
+              purchasePrice: itemPrice || null,
+              minStock: null,
+            },
           });
         }
       }
@@ -180,7 +228,13 @@ export async function POST(
 
       return tx.shoppingList.update({
         where: { id },
-        data: { status: "completed" },
+        data: {
+          status: "completed",
+          storeName: finalStoreName,
+          purpose: finalPurpose,
+          purchaseDate,
+          completedAt: new Date(),
+        },
         include: { items: true },
       });
     });

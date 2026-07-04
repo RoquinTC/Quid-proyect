@@ -63,7 +63,7 @@ export function ShoppingItemForm({ open, onOpenChange, listId, onSuccess }: Shop
     setName(item.name);
     setUnit(item.unit);
     setPantryItemId(item.id);
-    const needed = item.minStock ? item.minStock - item.quantity : 1;
+    const needed = item.minStock !== null && item.minStock !== undefined ? item.minStock - item.quantity : 1;
     setQuantity(Math.max(needed, 1).toString());
   };
 

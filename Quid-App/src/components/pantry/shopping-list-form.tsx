@@ -30,6 +30,8 @@ interface ShoppingListFormProps {
 export function ShoppingListForm({ open, onOpenChange, onSuccess }: ShoppingListFormProps) {
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("Lista de Mercado");
+  const [storeName, setStoreName] = useState("");
+  const [purpose, setPurpose] = useState("Mercado");
   const [profileId, setProfileId] = useState<string>("none");
   const [healthProfiles, setHealthProfiles] = useState<HealthProfile[]>([]);
 
@@ -49,12 +51,16 @@ export function ShoppingListForm({ open, onOpenChange, onSuccess }: ShoppingList
         method: "POST",
         body: JSON.stringify({
           name,
+          storeName: storeName || null,
+          purpose: purpose || null,
           profileId: profileId === "none" ? null : profileId,
         }),
       });
       onSuccess?.();
       onOpenChange(false);
       setName("Lista de Mercado");
+      setStoreName("");
+      setPurpose("Mercado");
       setProfileId("none");
     } catch (error) {
       console.error("Error creating list:", error);
@@ -81,6 +87,29 @@ export function ShoppingListForm({ open, onOpenChange, onSuccess }: ShoppingList
               onChange={(e) => setName(e.target.value)}
               className="rounded-xl"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="storeName">Tienda</Label>
+              <Input
+                id="storeName"
+                placeholder="Ej: D1, Éxito"
+                value={storeName}
+                onChange={(e) => setStoreName(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="purpose">Motivo</Label>
+              <Input
+                id="purpose"
+                placeholder="Mercado, postre..."
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value)}
+                className="rounded-xl"
+              />
+            </div>
           </div>
 
           {/* Health Profile */}

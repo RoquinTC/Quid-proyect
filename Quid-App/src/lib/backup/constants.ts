@@ -484,6 +484,10 @@ export interface BackupShoppingList {
   name: string;
   status: string;
   profileId: string | null;
+  storeName?: string | null;
+  purpose?: string | null;
+  purchaseDate?: string | null;
+  completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

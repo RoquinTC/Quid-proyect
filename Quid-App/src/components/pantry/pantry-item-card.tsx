@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { apiFetch, formatCurrency, formatShortDate } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -64,7 +63,10 @@ function getExpirationStatus(date: string | null): { color: string; label: strin
 
 export function PantryItemCard({ item, onEdit, onDelete, categoryColor }: PantryItemCardProps) {
   const [deleting, setDeleting] = useState(false);
-  const isLowStock = item.minStock ? item.quantity < item.minStock : false;
+  const isLowStock =
+    item.minStock !== null &&
+    item.minStock !== undefined &&
+    item.quantity < item.minStock;
   const expStatus = getExpirationStatus(item.expirationDate);
 
   const handleDelete = async () => {
@@ -82,14 +84,10 @@ export function PantryItemCard({ item, onEdit, onDelete, categoryColor }: Pantry
   const handleQuickQuantity = async (delta: number) => {
     try {
       const newQty = Math.max(0, item.quantity + delta);
-      if (newQty === 0) {
-        await apiFetch(`/api/pantry/${item.id}`, { method: "DELETE" });
-      } else {
-        await apiFetch(`/api/pantry/${item.id}`, {
-          method: "PUT",
-          body: JSON.stringify({ quantity: newQty }),
-        });
-      }
+      await apiFetch(`/api/pantry/${item.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ quantity: newQty }),
+      });
       onDelete(); // refresh
     } catch (error) {
       console.error("Error updating quantity:", error);
@@ -97,92 +95,85 @@ export function PantryItemCard({ item, onEdit, onDelete, categoryColor }: Pantry
   };
 
   return (
-    <motion.div whileTap={{ scale: 0.98 }} whileHover={{ scale: 1.01 }}>
-      <Card className="border-0 shadow-sm rounded-xl bg-white dark:bg-gray-800">
-        <CardContent className="p-3">
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0" onClick={onEdit}>
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">
-                  {item.name}
-                </h3>
-                {isLowStock && (
-                  <AlertTriangle className="size-3.5 text-amber-500 shrink-0" />
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-500">
-                  {item.quantity} {unitLabels[item.unit] || item.unit}
-                </span>
-
-                {item.expirationDate && (
-                  <span className={`text-xs flex items-center gap-0.5 ${expStatus.color}`}>
-                    <expStatus.icon className="size-3" />
-                    {expStatus.label}
-                  </span>
-                )}
-
-                {item.purchasePrice && (
-                  <span className="text-xs text-gray-400">
-                    {formatCurrency(item.purchasePrice)}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1">
-              {/* Quick quantity buttons */}
-              <div className="flex items-center gap-0.5">
-                <button
-                  onClick={() => handleQuickQuantity(-1)}
-                  className="size-6 rounded-md bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                >
-                  <span className="text-xs font-bold">-</span>
-                </button>
-                <button
-                  onClick={() => handleQuickQuantity(1)}
-                  className="size-6 rounded-md bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 hover:bg-amber-200 dark:hover:bg-amber-800/30 transition-colors"
-                >
-                  <span className="text-xs font-bold">+</span>
-                </button>
-              </div>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="size-7">
-                    <MoreVertical className="size-3.5 text-gray-400" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="rounded-xl">
-                  <DropdownMenuItem onClick={onEdit}>
-                    <Pencil className="size-3.5 mr-2" />
-                    Editar
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="text-red-500 focus:text-red-500"
-                  >
-                    <Trash2 className="size-3.5 mr-2" />
-                    Eliminar
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+    <motion.div
+      whileTap={{ scale: 0.99 }}
+      className={`rounded-xl border bg-white/90 px-2.5 py-2 shadow-sm dark:bg-gray-800/90 ${
+        isLowStock ? "border-amber-300 dark:border-amber-700" : "border-gray-100 dark:border-gray-700"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onEdit}
+          className="min-w-0 flex-1 text-left"
+        >
+          <div className="flex items-center gap-1.5">
+            {isLowStock && <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />}
+            <h3 className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+              {item.name}
+            </h3>
           </div>
-
-          {/* Low stock warning bar */}
-          {isLowStock && (
-            <div className="mt-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/20">
-              <AlertTriangle className="size-3 text-amber-500" />
-              <span className="text-xs text-amber-600 dark:text-amber-400">
-                Stock bajo (mín: {item.minStock} {unitLabels[item.unit] || item.unit})
+          <div className="mt-0.5 flex items-center gap-1.5 overflow-hidden text-[11px] text-gray-500">
+            <span className={isLowStock ? "font-semibold text-amber-600 dark:text-amber-400" : ""}>
+              {item.quantity} {unitLabels[item.unit] || item.unit}
+            </span>
+            {item.minStock !== null && item.minStock !== undefined && (
+              <span className="shrink-0">mín {item.minStock}</span>
+            )}
+            {item.purchasePrice && (
+              <span className="shrink-0">{formatCurrency(item.purchasePrice)}</span>
+            )}
+            {item.expirationDate && (
+              <span className={`flex shrink-0 items-center gap-0.5 ${expStatus.color}`}>
+                <expStatus.icon className="size-3" />
+                {expStatus.label}
               </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </div>
+        </button>
+
+        {isLowStock && (
+          <Badge className="h-5 shrink-0 bg-amber-100 px-1.5 text-[10px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+            Falta
+          </Badge>
+        )}
+
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            onClick={() => handleQuickQuantity(-1)}
+            className="size-7 rounded-lg bg-gray-100 text-xs font-bold text-gray-500 transition-colors hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+          >
+            -
+          </button>
+          <button
+            onClick={() => handleQuickQuantity(1)}
+            className="size-7 rounded-lg bg-amber-100 text-xs font-bold text-amber-600 transition-colors hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-800/30"
+          >
+            +
+          </button>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="size-7 shrink-0">
+              <MoreVertical className="size-3.5 text-gray-400" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="rounded-xl">
+            <DropdownMenuItem onClick={onEdit}>
+              <Pencil className="size-3.5 mr-2" />
+              Editar
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={handleDelete}
+              disabled={deleting}
+              className="text-red-500 focus:text-red-500"
+            >
+              <Trash2 className="size-3.5 mr-2" />
+              Eliminar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </motion.div>
   );
 }

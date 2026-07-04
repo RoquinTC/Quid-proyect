@@ -424,6 +424,8 @@ Cumplido:
 - Hay bloque visual de excluidos en presupuesto.
 - Hay bloque de movimientos sin clasificar.
 - Compras con tarjeta desde módulos como transporte/despensa impactan la categoría real de la compra, no una categoría genérica de deuda.
+- **Realizado 2026-07-04 - Transferencias y bolsillos:** se ajustó el flujo para permitir transferencias desde un bolsillo/subcuenta hacia la cuenta principal, hacia otro bolsillo de la misma cuenta o hacia otras cuentas, incluyendo pagos recurrentes que afectan solo el bolsillo elegido.
+- **Realizado 2026-07-04 - Préstamos:** se corrigió el flujo para que todo préstamo, fijo o variable, se trate como pago real de préstamo y no como tarjeta de crédito. Al pagar ahora se exige cuenta/subcuenta de origen, se crea gasto financiero, se descuenta el saldo correcto, se actualiza presupuesto y el abono a capital valida permisos y pertenencia de subcuentas.
 
 Falta para considerarlo 100%:
 - Auditar todos los flujos de escritura: finanzas, recurrentes, transporte, salud, despensa, Aura y compras directas con TC.
@@ -434,7 +436,7 @@ Falta para considerarlo 100%:
 - Ajustar colores: 100% usado no siempre es malo; rojo debe reservarse para sobrepasar presupuesto.
 
 ### A.6 Despensa / mercado conectado a Finanzas
-**Estado:** `85%`
+**Estado:** `85% - base funcional; rediseño avanzado pendiente`
 
 Cumplido:
 - Inventario base.
@@ -448,6 +450,141 @@ Falta para considerarlo 100%:
 - Conversión de unidades con historial de precio: kg, libra, gramo, unidad.
 - Recetas conectadas de forma más fuerte con stock ideal, faltantes y perfiles de salud.
 - QA de confirmación con tarjeta en varias cuotas.
+
+### A.6.1 Visión pendiente - Despensa como Nevera Virtual inteligente
+
+Objetivo:
+- Convertir Despensa en una nevera virtual robusta, conectada a Finanzas, Salud, Aura y Odiseus.
+- La app debe ayudar a comprar mejor, controlar inventario real, sugerir recetas saludables y proyectar gastos de mercado con base en precios históricos.
+
+Principios:
+- Cada usuario de Quid es independiente. Las enfermedades, restricciones alimentarias, alergias, gustos y perfiles de salud no se mezclan entre usuarios.
+- Aura debe saber con quién está hablando y para quién se va a cocinar.
+- Las compras de alimentos siempre deben viajar a Finanzas cuando se confirmen, igual que Transporte y Salud.
+- El inventario visible para el usuario será la "nevera virtual"; por debajo existirá un stock ideal/configuración de referencia que el usuario podrá ajustar sin que se vuelva una pantalla confusa.
+
+#### 1. Primera experiencia e inventario ideal
+
+Flujo propuesto:
+- Si el usuario entra por primera vez y la despensa está vacía, mostrar un estado inicial amable: "Armemos tu inventario ideal" o "Creemos tu primer mercado".
+- La primera lista sugerida puede llamarse `Mercado` por defecto.
+- El usuario define productos, cantidades y unidades esperadas: huevos, arroz, leche, frutas, carnes, verduras, medicamentos alimentarios especiales, etc.
+- Ese primer mercado crea dos capas:
+  - `Stock ideal`: lo que normalmente debería haber en casa.
+  - `Nevera actual`: lo que realmente quedó disponible tras confirmar una compra o ajustar manualmente cantidades.
+
+#### 2. Lista de mercado viva en supermercado
+
+La lista debe permitir:
+- Añadir productos planeados antes de salir.
+- Añadir productos espontáneos durante la compra.
+- Capturar cantidad, unidad, precio por unidad o precio total.
+- Asociar la lista a una tienda específica.
+- Poner nombre especial opcional: `Mercado`, `Postre`, `Cumpleaños de X`, `Cena especial`, etc.
+- Calcular un total aproximado mientras el usuario compra.
+- Permitir corregir precios al llegar a casa con la factura, porque el precio de exhibición puede ser diferente al precio real pagado.
+
+Confirmación de compra:
+- Al confirmar, preguntar:
+  - Cuenta, subcuenta o tarjeta con la que se pagó.
+  - Fecha real de compra, por si se confirma al día siguiente.
+  - Tienda asociada.
+  - Nombre final del registro.
+- El movimiento financiero debe llamarse de forma clara, por ejemplo:
+  - `Mercado - Éxito`
+  - `Compra D1 - Postre`
+  - `Mercado - Olímpica`
+- Si se paga con cuenta/subcuenta, debe descontar saldo y crear gasto en Finanzas.
+- Si se paga con tarjeta de crédito, debe crear el movimiento/cuota/deuda usando el mismo flujo ya validado en Transporte/Salud.
+- Al confirmar, la nevera virtual debe aumentar inventario según lo comprado.
+
+#### 3. Nevera virtual e inventario real
+
+La nevera debe permitir:
+- Ver existencias actuales.
+- Editar cantidades manualmente cuando la realidad no coincida con la app.
+- Marcar productos consumidos o vencidos.
+- Actualizar cantidades reales: por ejemplo, stock ideal 30 huevos, nevera virtual 20 huevos, pero físicamente solo hay 5; el usuario debe poder ajustar a 5.
+- Generar lista de mercado con faltantes comparando `stock ideal` vs `nevera actual`.
+- Usar precios históricos para proyectar cuánto costará reponer lo faltante.
+- Manejar unidades y conversiones: kilogramo, libra, gramo, litro, mililitro, unidad, paquete, bandeja, botella, etc.
+- Guardar historial de precio por producto, tienda, unidad y fecha para ver variaciones.
+
+#### 4. Recetas, cocina e impacto en inventario
+
+Aura debe poder sugerir recetas:
+- Con lo que ya existe en la nevera.
+- Con faltantes claros y opción de agregarlos a la lista de mercado.
+- Según número de personas.
+- Según perfiles de salud seleccionados.
+- Según restricciones médicas, alergias, intolerancias y preferencias.
+
+Flujo de receta:
+- El usuario elige una receta.
+- La app muestra:
+  - Ingredientes.
+  - Cantidad por persona y cantidad total.
+  - Checklist de preparación.
+  - Paso a paso de cocina.
+- Al tocar `Preparar` o `Cocinar`, los ingredientes se descuentan de la nevera virtual.
+- Si falta un ingrediente:
+  - Aura puede sugerir reemplazo.
+  - O permitir agregarlo a una lista de mercado.
+
+#### 5. Perfiles alimentarios conectados con Salud
+
+Se requiere una capa similar a perfil de salud dentro de Despensa:
+- Debe leer enfermedades y condiciones del módulo Salud cuando existan.
+- Debe traducir esas condiciones a alimentos recomendados, limitados o prohibidos.
+- Debe permitir crear perfiles adicionales manuales para pareja, hijos, invitados o personas que no usan Quid.
+- En perfiles manuales se podrán registrar:
+  - Alergias.
+  - Intolerancias.
+  - Alimentos que causan malestar.
+  - Preferencias o restricciones voluntarias: bajo sodio, bajo azúcar, sin lactosa, vegetariano, etc.
+  - Ejemplos: "la leche le hace daño", "la lechuga le produce gases", "evitar azúcar", "diabetes", "hipertensión".
+
+Regla clave:
+- Si se cocina para dos o más personas, Aura debe cruzar las restricciones de todos y sugerir recetas seguras para el grupo.
+- Si hay conflicto, Aura debe explicarlo: "Esta receta sirve para ti, pero no para X por la lactosa; puedo reemplazar leche por bebida vegetal".
+
+#### 6. Aura + Odiseus en Despensa
+
+Aura será la cara de usuario y Odiseus el asistente de razonamiento por debajo cuando aplique.
+
+Capacidades esperadas:
+- Consultar inventario.
+- Sugerir recetas saludables.
+- Explicar por qué una receta conviene o no según enfermedad.
+- Sugerir reemplazos.
+- Ayudar a crear lista de mercado.
+- Interpretar frases naturales:
+  - "Aura, qué puedo cocinar hoy?"
+  - "Aura, agrega leche y huevos al mercado"
+  - "Aura, voy a cocinar para mí y mi pareja"
+  - "Aura, tengo diabetes, qué desayuno puedo hacer con lo que hay?"
+- Siempre debe pedir confirmación antes de modificar inventario, crear compra o registrar gasto.
+
+#### 7. Historial, trazabilidad y analítica
+
+La despensa debe ofrecer:
+- Historial de compras por tienda.
+- Variación de precios por producto y tienda.
+- Comparativo de cuánto costó el mercado anterior vs el actual.
+- Detección de productos que subieron o bajaron de precio.
+- Productos frecuentes.
+- Productos olvidados o que siempre faltan.
+- Gasto mensual en mercado.
+- Trazabilidad de cada producto: comprado, consumido en receta, ajustado manualmente o descartado.
+
+#### 8. Robustez mínima para implementación futura
+
+Pendientes técnicos a considerar cuando se implemente:
+- Modelo de datos para `stock ideal`, `inventario actual`, `precio histórico`, `tienda`, `unidad`, `conversiones`, `recetas`, `perfiles alimentarios` y `consumo por receta`.
+- Reverso/anulación de una compra confirmada: debe restaurar inventario, saldo/deuda y presupuesto.
+- Migraciones seguras sin perder datos actuales de despensa.
+- Offline/local-first para APK/PWA: listas de mercado deben poder funcionar dentro del supermercado aunque haya mala señal y sincronizar después.
+- OCR futuro de factura o ticket para corregir precios automáticamente.
 
 ## B. Implementado parcial, prioridad alta
 

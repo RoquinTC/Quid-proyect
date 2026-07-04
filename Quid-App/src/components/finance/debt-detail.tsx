@@ -248,10 +248,11 @@ export function DebtDetail() {
     // Use dueInsts if no selection, otherwise use selected
     const instsToPay = selectedDueInsts.length > 0 ? selectedDueInsts : dueInsts;
 
-    const isLoanFixed = debt.type === "loan" && debt.paymentType === "fixed";
+    const isLoan = debt.type === "loan";
+    const isLoanFixed = isLoan && debt.paymentType === "fixed";
 
     // Check if we need to show the confirmation dialog
-    if (isLoanFixed && !showInterestDialog) {
+    if (isLoan && !showInterestDialog) {
       // Pre-fill estimated values for loan fixed cuota
       // interestRate for loans is NMV (annual nominal), monthly rate = NMV / 12
       const annualRate = debt.interestRate ?? 0;
@@ -264,15 +265,17 @@ export function DebtDetail() {
       const newOther: Record<string, string> = {};
       const newRates: Record<string, string> = {};
 
-      for (const inst of instsToPay) {
-        const balance = inst.remainingBalance ?? debt.currentBalance;
-        const estimatedInt = monthlyRate > 0 ? balance * (monthlyRate / 100) : 0;
-        const estimatedCap = Math.max(fixedCuota - estimatedInt - defaultOther, 0);
+      if (isLoanFixed) {
+        for (const inst of instsToPay) {
+          const balance = inst.remainingBalance ?? debt.currentBalance;
+          const estimatedInt = monthlyRate > 0 ? balance * (monthlyRate / 100) : 0;
+          const estimatedCap = Math.max(fixedCuota - estimatedInt - defaultOther, 0);
 
-        newCapital[inst.id] = confirmedCapital[inst.id] ?? estimatedCap.toFixed(0);
-        newInterest[inst.id] = confirmedInterest[inst.id] ?? estimatedInt.toFixed(0);
-        newOther[inst.id] = confirmedOtherCharges[inst.id] ?? defaultOther.toFixed(0);
-        newRates[inst.id] = confirmedRate[inst.id] ?? monthlyRate.toFixed(4);
+          newCapital[inst.id] = confirmedCapital[inst.id] ?? estimatedCap.toFixed(0);
+          newInterest[inst.id] = confirmedInterest[inst.id] ?? estimatedInt.toFixed(0);
+          newOther[inst.id] = confirmedOtherCharges[inst.id] ?? defaultOther.toFixed(0);
+          newRates[inst.id] = confirmedRate[inst.id] ?? monthlyRate.toFixed(4);
+        }
       }
 
       setConfirmedCapital(newCapital);
@@ -289,7 +292,7 @@ export function DebtDetail() {
     }
 
     // Check if there are multi-installment purchases selected (need interest rate input) — credit card flow
-    if (!isLoanFixed) {
+    if (!isLoan) {
       const multiDue = selectedDueInsts.filter(
         (inst) => inst.totalInstallments > 1
       );
@@ -328,7 +331,7 @@ export function DebtDetail() {
         selectedInstallmentIds: Array.from(selectedInstallmentIds),
       };
 
-      if (isLoanFixed) {
+      if (isLoan) {
         const capitalToSend: Record<string, number> = {};
         const interestToSend: Record<string, number> = {};
         const otherToSend: Record<string, number> = {};
@@ -346,11 +349,13 @@ export function DebtDetail() {
           if (!isNaN(oth)) otherToSend[instId] = oth;
         }
 
-        payload.confirmedCapital = capitalToSend;
-        payload.confirmedInterest = interestToSend;
-        payload.confirmedOtherCharges = otherToSend;
+        if (isLoanFixed) {
+          payload.confirmedCapital = capitalToSend;
+          payload.confirmedInterest = interestToSend;
+          payload.confirmedOtherCharges = otherToSend;
+        }
         payload.payAccountId = payAccountId || null;
-        payload.paySubAccountId = paySubAccountId === "__none__" ? null : (paySubAccountId || null);
+        payload.paySubAccountId = paySubAccountId === "__none__" || paySubAccountId === "none" ? null : (paySubAccountId || null);
       }
 
       const result = await apiFetch<{
@@ -1038,14 +1043,16 @@ export function DebtDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Calculator className="size-5 text-amber-500" />
-              {debt && debt.type === "loan" && debt.paymentType === "fixed"
+              {debt && debt.type === "loan"
                 ? "Confirmar Pago del Préstamo"
                 : "Tasa de Interés"
               }
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {debt && debt.type === "loan" && debt.paymentType === "fixed"
-                ? "Confirma los valores del extracto bancario. Puedes ajustar cada valor según lo que aparece en tu extracto."
+              {debt && debt.type === "loan"
+                ? debt.paymentType === "fixed"
+                  ? "Confirma los valores del extracto bancario y la cuenta desde donde sale el pago."
+                  : "Confirma la cuota que vas a pagar y la cuenta desde donde sale el dinero."
                 : "Ingresa la tasa de interés mensual del extracto bancario."
               }
               {debt && debt.interestRate && debt.type !== "loan" && (
@@ -1057,10 +1064,10 @@ export function DebtDetail() {
           </AlertDialogHeader>
 
           <div className="space-y-3 py-2">
-            {debt && debt.type === "loan" && debt.paymentType === "fixed" ? (
-              // ── Loan Fixed Cuota: Full confirmation dialog ──
+            {debt && debt.type === "loan" ? (
+              // ── Loan: payment confirmation + account source ──
               <>
-              {selectedDueInstallments.map((inst) => {
+              {debt.paymentType === "fixed" ? selectedDueInstallments.map((inst) => {
                 const balance = inst.remainingBalance ?? debt.currentBalance;
                 const capStr = confirmedCapital[inst.id] ?? "0";
                 const intStr = confirmedInterest[inst.id] ?? "0";
@@ -1201,6 +1208,37 @@ export function DebtDetail() {
                     </div>
                   </div>
                 );
+              }) : selectedDueInstallments.map((inst) => {
+                const balance = inst.remainingBalance ?? inst.totalAmount;
+                const paymentAmount = inst.installmentAmount;
+                const newBalance = Math.max(balance - paymentAmount, 0);
+
+                return (
+                  <div key={inst.id} className="bg-emerald-50 dark:bg-emerald-900/15 rounded-xl p-3 space-y-2 border border-emerald-100 dark:border-emerald-800/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {inst.description}
+                      </span>
+                      <Badge variant="secondary" className="text-xs">
+                        Cuota {inst.currentInstallment}/{inst.totalInstallments}
+                      </Badge>
+                    </div>
+                    <div className="text-xs space-y-0.5 bg-white dark:bg-gray-900 rounded-lg p-2">
+                      <div className="flex justify-between text-gray-500">
+                        <span>Saldo actual:</span>
+                        <span>{formatCurrency(balance)}</span>
+                      </div>
+                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-medium">
+                        <span>Pago a capital:</span>
+                        <span>{formatCurrency(paymentAmount)}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-900 dark:text-white font-medium pt-1 border-t">
+                        <span>Saldo estimado después:</span>
+                        <span>{formatCurrency(newBalance)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
               })}
 
               {/* ── Account selection for payment ── */}
@@ -1312,6 +1350,7 @@ export function DebtDetail() {
           <AlertDialogFooter className="flex-col gap-2">
             <AlertDialogAction
               onClick={handlePay}
+              disabled={paying || (debt?.type === "loan" && !payAccountId)}
               className="rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 w-full"
             >
               Confirmar Pago ({selectedDueInstallments.length} cuota{selectedDueInstallments.length !== 1 ? "s" : ""} — {formatCurrency(totalDue)})

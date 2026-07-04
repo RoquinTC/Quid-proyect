@@ -15,6 +15,8 @@ import {
   ClipboardList,
   CheckCircle2,
   Loader2,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ShoppingListItem, ShoppingList } from "@/lib/types";
@@ -42,6 +44,7 @@ export function ShoppingListsView() {
   const [showForm, setShowForm] = useState(false);
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [generateMessage, setGenerateMessage] = useState<string | null>(null);
 
   const fetchLists = useCallback(async () => {
     try {
@@ -63,16 +66,32 @@ export function ShoppingListsView() {
 
   const handleGenerateFromPantry = async () => {
     setGenerating(true);
+    setGenerateMessage(null);
     try {
-      await apiFetch("/api/shopping-lists/_/generate", {
+      const generated = await apiFetch<ShoppingList>("/api/shopping-lists/_/generate", {
         method: "POST",
-        body: JSON.stringify({ name: "Lista Auto-generada" }),
+        body: JSON.stringify({ name: "Mercado", purpose: "Mercado" }),
       });
       await fetchLists();
+      if (generated?.id) setSelectedListId(generated.id);
     } catch (error) {
       console.error("Error generating list:", error);
+      setGenerateMessage(error instanceof Error ? error.message : "No se pudo generar la lista desde la despensa.");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleDeleteList = async (list: ShoppingList) => {
+    const ok = window.confirm(`¿Eliminar la lista "${list.name}"?`);
+    if (!ok) return;
+    try {
+      await apiFetch(`/api/shopping-lists/${list.id}`, { method: "DELETE" });
+      if (selectedListId === list.id) setSelectedListId(null);
+      await fetchLists();
+    } catch (error) {
+      console.error("Error deleting shopping list:", error);
+      setGenerateMessage(error instanceof Error ? error.message : "No se pudo eliminar la lista.");
     }
   };
 
@@ -147,6 +166,11 @@ export function ShoppingListsView() {
           )}
           Generar desde Despensa
         </Button>
+        {generateMessage && (
+          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+            {generateMessage}
+          </p>
+        )}
       </motion.div>
 
       {/* Empty State */}
@@ -184,31 +208,52 @@ export function ShoppingListsView() {
               {activeLists.map((list) => {
                 const status = statusConfig[list.status] || statusConfig.draft;
                 const totalEstimated = list.items.reduce(
-                  (sum, i) => sum + (i.estimatedPrice || 0),
+                  (sum, i) => sum + (i.estimatedPrice || 0) * i.quantity,
                   0
                 );
                 const StatusIcon = status.icon;
+                const previewItems = list.items.slice(0, 3).map((item) => item.name).join(", ");
 
                 return (
                   <motion.div key={list.id} variants={itemVariants}>
                     <Card
-                      className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-800 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => setSelectedListId(list.id)}
+                      className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-800 hover:shadow-md transition-shadow"
                     >
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between mb-2">
-                          <div>
+                          <button className="min-w-0 flex-1 text-left" onClick={() => setSelectedListId(list.id)}>
                             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
                               {list.name}
                             </h3>
                             <span className="text-xs text-gray-400">
-                              {list.items.length} items
+                              {list.items.length} items{list.storeName ? ` · ${list.storeName}` : ""}
                             </span>
+                            {previewItems && (
+                              <p className="mt-1 truncate text-xs text-gray-500">
+                                {previewItems}{list.items.length > 3 ? ` y ${list.items.length - 3} más` : ""}
+                              </p>
+                            )}
+                          </button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Badge className={`text-xs ${status.color}`}>
+                              <StatusIcon className="size-3 mr-1" />
+                              {status.label}
+                            </Badge>
+                            <button
+                              onClick={() => setSelectedListId(list.id)}
+                              className="size-7 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                              aria-label="Ver lista"
+                            >
+                              <Eye className="mx-auto size-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteList(list)}
+                              className="size-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30"
+                              aria-label="Eliminar lista"
+                            >
+                              <Trash2 className="mx-auto size-3.5" />
+                            </button>
                           </div>
-                          <Badge className={`text-xs ${status.color}`}>
-                            <StatusIcon className="size-3 mr-1" />
-                            {status.label}
-                          </Badge>
                         </div>
 
                         <div className="flex items-center justify-between">
@@ -250,26 +295,47 @@ export function ShoppingListsView() {
               <h3 className="text-sm font-semibold text-gray-500">Completadas</h3>
               {completedLists.map((list) => {
                 const totalActual = list.items.reduce(
-                  (sum, i) => sum + (i.actualPrice || i.estimatedPrice || 0),
+                  (sum, i) => sum + (i.actualPrice || i.estimatedPrice || 0) * i.quantity,
                   0
                 );
+                const previewItems = list.items.slice(0, 3).map((item) => item.name).join(", ");
                 return (
                   <motion.div key={list.id} variants={itemVariants}>
                     <Card
-                      className="border-0 shadow-sm rounded-2xl bg-white/50 dark:bg-gray-800/50 cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => setSelectedListId(list.id)}
+                      className="border-0 shadow-sm rounded-2xl bg-white/50 dark:bg-gray-800/50 hover:shadow-md transition-shadow"
                     >
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
-                          <div>
+                          <button className="min-w-0 flex-1 text-left" onClick={() => setSelectedListId(list.id)}>
                             <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 line-through">
                               {list.name}
                             </h3>
                             <span className="text-xs text-gray-400">
                               {list.items.length} items · {formatCurrency(totalActual)}
                             </span>
+                            {previewItems && (
+                              <p className="mt-1 truncate text-xs text-gray-400">
+                                {previewItems}{list.items.length > 3 ? ` y ${list.items.length - 3} más` : ""}
+                              </p>
+                            )}
+                          </button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <CheckCircle2 className="size-4 text-green-500" />
+                            <button
+                              onClick={() => setSelectedListId(list.id)}
+                              className="size-7 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+                              aria-label="Ver lista"
+                            >
+                              <Eye className="mx-auto size-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteList(list)}
+                              className="size-7 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30"
+                              aria-label="Eliminar lista"
+                            >
+                              <Trash2 className="mx-auto size-3.5" />
+                            </button>
                           </div>
-                          <CheckCircle2 className="size-4 text-green-500" />
                         </div>
                       </CardContent>
                     </Card>

@@ -19,7 +19,10 @@ export async function GET() {
 
     // Identify low stock items
     const lowStockItems = items.filter(
-      (item) => item.minStock && item.quantity < item.minStock
+      (item) =>
+        item.minStock !== null &&
+        item.minStock !== undefined &&
+        item.quantity < item.minStock
     );
 
     return NextResponse.json({ items, lowStockItems });

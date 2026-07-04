@@ -906,6 +906,10 @@ model ShoppingList {
   name            String    @default("Lista de Mercado")
   status          String    @default("draft") // draft, shopping, verified, completed
   profileId       String?   // Health profile to consider
+  storeName       String?   // tienda asociada: D1, Éxito, Olímpica, etc.
+  purpose         String?   // motivo/nombre especial: Mercado, Postre, Cumpleaños, etc.
+  purchaseDate    DateTime? // fecha real en que se hizo la compra
+  completedAt     DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

@@ -25,7 +25,9 @@ export async function POST(
       if (err instanceof Response) return err;
       return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
-    const { name, profileId } = body;
+    const { name, profileId, storeName, purpose } = body;
+    const listName = name?.trim() || "Mercado";
+    const listPurpose = purpose?.trim() || "Mercado";
 
     // Get all pantry items
     const pantryItems = await db.pantryItem.findMany({
@@ -34,44 +36,77 @@ export async function POST(
 
     // Find items below minStock
     const lowStockItems = pantryItems.filter(
-      (item) => item.minStock && item.quantity < item.minStock
+      (item) =>
+        item.minStock !== null &&
+        item.minStock !== undefined &&
+        toNumber(item.quantity) < toNumber(item.minStock)
     );
 
     if (lowStockItems.length === 0) {
-      return NextResponse.json({ error: "No hay items con stock bajo para generar la lista" }, { status: 400 });
+      return NextResponse.json({
+        error: "No hay productos faltantes. Revisa que los productos tengan stock mínimo configurado y que la cantidad actual esté por debajo de ese valor.",
+      }, { status: 400 });
     }
 
-    // Create shopping list
-    const list = await db.shoppingList.create({
-      data: {
-        userId: session.user.id,
-        name: name || "Lista Auto-generada",
-        status: "draft",
-        profileId: profileId || null,
-      },
-    });
+    const generatedList = await db.$transaction(async (tx) => {
+      let list = await tx.shoppingList.findFirst({
+        where: {
+          userId: session.user.id,
+          name: listName,
+          status: { not: "completed" },
+        },
+        orderBy: { updatedAt: "desc" },
+      });
 
-    // Create items for the list
-    const listItems = await Promise.all(
-      lowStockItems.map((item) =>
-        db.shoppingListItem.create({
+      if (list) {
+        await tx.shoppingListItem.deleteMany({ where: { shoppingListId: list.id } });
+        list = await tx.shoppingList.update({
+          where: { id: list.id },
           data: {
+            status: "draft",
+            profileId: profileId || list.profileId || null,
+            storeName: storeName?.trim() || list.storeName || null,
+            purpose: listPurpose,
+          },
+        });
+      } else {
+        list = await tx.shoppingList.create({
+          data: {
+            userId: session.user.id,
+            name: listName,
+            status: "draft",
+            profileId: profileId || null,
+            storeName: storeName?.trim() || null,
+            purpose: listPurpose,
+          },
+        });
+      }
+
+      await tx.shoppingListItem.createMany({
+        data: lowStockItems.map((item) => {
+          const needed = Math.max(toNumber(item.minStock ?? 0) - toNumber(item.quantity), 0);
+          return {
             shoppingListId: list.id,
             name: item.name,
-            quantity: toNumber((item.minStock ?? 0)) - toNumber(item.quantity),
+            quantity: needed,
             unit: item.unit,
-            estimatedPrice: item.purchasePrice
-              ? toNumber(item.purchasePrice) * (toNumber(item.minStock ?? 0) - toNumber(item.quantity))
-              : null,
+            // estimatedPrice is unit price; the UI multiplies it by quantity.
+            estimatedPrice: item.purchasePrice ? toNumber(item.purchasePrice) : null,
+            actualPrice: null,
             isPurchased: false,
             checked: false,
             pantryItemId: item.id,
-          },
-        })
-      )
-    );
+          };
+        }),
+      });
 
-    return NextResponse.json({ ...list, items: listItems }, { status: 201 });
+      return tx.shoppingList.findUnique({
+        where: { id: list.id },
+        include: { items: true },
+      });
+    });
+
+    return NextResponse.json(generatedList, { status: 201 });
   } catch (error) {
     console.error("Generate shopping list error:", error);
     return NextResponse.json({ error: "Error al generar lista de compras" }, { status: 500 });

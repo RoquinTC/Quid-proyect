@@ -851,12 +851,17 @@ export const pantryUpdateSchema = z.object({
 export const shoppingListCreateSchema = z.object({
   name: z.string().optional().default("Lista de Mercado"),
   profileId: z.string().nullable().optional(),
+  storeName: z.string().nullable().optional(),
+  purpose: z.string().nullable().optional(),
 });
 
 export const shoppingListUpdateSchema = z.object({
   name: z.string().optional(),
   status: z.string().optional(),
   profileId: z.string().nullable().optional(),
+  storeName: z.string().nullable().optional(),
+  purpose: z.string().nullable().optional(),
+  purchaseDate: isoDateString.nullable().optional(),
 });
 
 export const shoppingItemCreateSchema = z.object({
@@ -880,6 +885,8 @@ export const shoppingItemUpdateSchema = z.object({
 export const shoppingGenerateSchema = z.object({
   name: z.string().optional(),
   profileId: z.string().nullable().optional(),
+  storeName: z.string().nullable().optional(),
+  purpose: z.string().nullable().optional(),
 });
 
 export const shoppingListConfirmSchema = z.object({
@@ -888,6 +895,10 @@ export const shoppingListConfirmSchema = z.object({
   subAccountId: z.string().nullable().optional(),
   debtId: z.string().nullable().optional(),
   installmentCount: z.number().int().min(1).nullable().optional(),
+  purchaseDate: isoDateString.nullable().optional(),
+  storeName: z.string().nullable().optional(),
+  purpose: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
 });
 
 // ============================================

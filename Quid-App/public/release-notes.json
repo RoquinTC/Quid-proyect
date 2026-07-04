@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.0.16",
+  "currentVersion": "1.0.17",
   "releases": [
+    {
+      "version": "1.0.17",
+      "date": "2026-07-04",
+      "title": "Mercado mas claro y finanzas mas precisas",
+      "changes": [
+        "La nevera ahora se ve como una lista compacta para revisar productos sin ocupar tanto espacio.",
+        "Las listas de mercado se pueden ver, eliminar y reutilizar con mas claridad, mostrando productos antes de entrar.",
+        "Generar mercado desde despensa actualiza una lista viva llamada Mercado y trae productos agotados con stock minimo configurado.",
+        "Los pagos de prestamos y abonos a capital ahora piden cuenta de origen y registran mejor el movimiento financiero."
+      ]
+    },
     {
       "version": "1.0.16",
       "date": "2026-06-27",

@@ -339,7 +339,19 @@ export async function POST() {
       // 26. ShoppingLists
       for (const sl of migratedBackup.shoppingLists) {
         await tx.shoppingList.create({
-          data: { id: remapId(sl.id), userId, name: sl.name, status: sl.status, profileId: remapOptionalId(sl.profileId), createdAt: sl.createdAt, updatedAt: sl.updatedAt },
+          data: {
+            id: remapId(sl.id),
+            userId,
+            name: sl.name,
+            status: sl.status,
+            profileId: remapOptionalId(sl.profileId),
+            storeName: sl.storeName ?? null,
+            purpose: sl.purpose ?? null,
+            purchaseDate: sl.purchaseDate ?? null,
+            completedAt: sl.completedAt ?? null,
+            createdAt: sl.createdAt,
+            updatedAt: sl.updatedAt,
+          },
         });
         stats.shoppingLists++;
       }
