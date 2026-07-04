@@ -21,7 +21,7 @@ async function syncMaintenanceReminder({
   userId,
   vehicleId,
   vehicleName,
-  itemNames,
+  items,
   description,
   recordKm,
   recordDate,
@@ -30,20 +30,30 @@ async function syncMaintenanceReminder({
   userId: string;
   vehicleId: string;
   vehicleName: string;
-  itemNames: string[];
+  items: Array<{
+    name: string;
+    typeKey?: string | null;
+    scheduleReminder?: boolean;
+    reminderIntervalKm?: number | null;
+    reminderIntervalDays?: number | null;
+    reminderWarningKm?: number | null;
+  }>;
   description: string;
   recordKm: number;
   recordDate: Date;
   enabled: boolean;
 }) {
-  if (!enabled || itemNames.length === 0) return;
+  if (!enabled || items.length === 0) return;
 
   const userRules = await db.maintenanceServiceRule.findMany({
     where: { userId },
   });
 
-  for (const rawItemName of itemNames) {
-    const [itemName, typeKey = rawItemName] = rawItemName.split("::");
+  for (const item of items) {
+    if (item.scheduleReminder === false) continue;
+
+    const itemName = item.name;
+    const typeKey = item.typeKey || item.name;
     const resolvedRule = resolveMaintenanceRule({ name: itemName, typeKey }, userRules);
     if (!resolvedRule.isActive) continue;
 
@@ -71,8 +81,16 @@ async function syncMaintenanceReminder({
 
     // User service rules are the source of truth. Existing reminders can still
     // carry a custom interval when the user edited only that reminder.
-    const intervalKm = existingReminder?.repeatIntervalKm || resolvedRule.intervalKm || 0;
-    const intervalDays = existingReminder?.repeatIntervalDays || resolvedRule.intervalDays || 0;
+    const intervalKm =
+      item.reminderIntervalKm ??
+      existingReminder?.repeatIntervalKm ??
+      resolvedRule.intervalKm ??
+      0;
+    const intervalDays =
+      item.reminderIntervalDays ??
+      existingReminder?.repeatIntervalDays ??
+      resolvedRule.intervalDays ??
+      0;
 
     if (!intervalKm && !intervalDays) continue; // No rule to generate next reminder for this specific item
 
@@ -94,7 +112,7 @@ async function syncMaintenanceReminder({
         triggerMode: nextDueKm && nextDueDate ? "hybrid" : nextDueKm ? "km" : "date",
         dueKm: nextDueKm,
         dueDate: nextDueDate,
-        warningKm: intervalKm ? resolvedRule.warningKm : 500,
+        warningKm: intervalKm ? item.reminderWarningKm ?? resolvedRule.warningKm : 500,
         warningDays: 15,
         repeatIntervalKm: intervalKm > 0 ? intervalKm : null,
         repeatIntervalDays: intervalDays > 0 ? intervalDays : null,
@@ -225,19 +243,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
     }
 
-    const itemNamesToSync = items && items.length > 0 
-      ? items.map((i: any) => `${i.name}::${i.typeKey || i.name}`) 
-      : [maintenanceReminderTitle(maintenanceType)];
+    const itemsToSync = items && items.length > 0
+      ? items.map((item: any) => ({
+          name: item.name,
+          typeKey: item.typeKey || item.name,
+          scheduleReminder: item.scheduleReminder,
+          reminderIntervalKm: item.reminderIntervalKm,
+          reminderIntervalDays: item.reminderIntervalDays,
+          reminderWarningKm: item.reminderWarningKm,
+        }))
+      : [{
+          name: maintenanceReminderTitle(maintenanceType),
+          typeKey: maintenanceType,
+          scheduleReminder: reminderEnabled ?? true,
+          reminderIntervalKm: repeatIntervalKm ?? null,
+          reminderIntervalDays: nextDueDate ? null : undefined,
+        }];
 
     await syncMaintenanceReminder({
       userId: session.user.id,
       vehicleId: id,
       vehicleName: vehicle.name,
-      itemNames: itemNamesToSync,
+      items: itemsToSync,
       description,
       recordKm,
       recordDate,
-      enabled: true, // Auto-enable reminders based on the new logic
+      enabled: reminderEnabled ?? true,
     });
 
     // Create finance entry with full integration

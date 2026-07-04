@@ -43,6 +43,10 @@ interface SelectedService {
   label: string;        // display name
   price: string;        // raw numeric string for CurrencyInput
   isCustom?: boolean;   // true if user added this via + button
+  scheduleReminder?: boolean;
+  reminderIntervalKm?: string;
+  reminderIntervalMonths?: string;
+  reminderWarningKm?: string;
 }
 
 let _nextId = 0;
@@ -183,6 +187,10 @@ export function MaintenanceForm({
             label: item.name,
             price: item.unitPrice.toString(),
             isCustom: true,
+            scheduleReminder: false,
+            reminderIntervalKm: "",
+            reminderIntervalMonths: "",
+            reminderWarningKm: "",
           }))
         );
       } else {
@@ -194,6 +202,10 @@ export function MaintenanceForm({
           label: typeConfig?.label || record.type || "Servicio",
           price: record.cost?.toString() || "0",
           isCustom: !typeConfig,
+          scheduleReminder: Boolean(record.reminderEnabled && (record.nextDueKm || record.nextDueDate)),
+          reminderIntervalKm: record.repeatIntervalKm ? String(record.repeatIntervalKm) : record.nextDueKm && record.km ? String(Math.max(0, record.nextDueKm - record.km)) : "",
+          reminderIntervalMonths: "",
+          reminderWarningKm: "500",
         }]);
       }
 
@@ -234,13 +246,32 @@ export function MaintenanceForm({
       if (exists) {
         return prev.filter(s => s.typeKey !== typeKey);
       }
-      return [...prev, { id: createId(), typeKey, label, price: "" }];
+      const typeConfig = MAINTENANCE_TYPES.find(t => t.value === typeKey);
+      const rule = maintenanceRules.find(r => r.typeKey === typeKey);
+      const intervalKm = rule?.intervalKm ?? typeConfig?.nextKmInterval ?? 0;
+      const intervalMonths = rule?.intervalMonths ?? typeConfig?.nextMonthInterval ?? 0;
+      return [...prev, {
+        id: createId(),
+        typeKey,
+        label,
+        price: "",
+        scheduleReminder: Boolean(intervalKm || intervalMonths),
+        reminderIntervalKm: intervalKm ? String(intervalKm) : "",
+        reminderIntervalMonths: intervalMonths ? String(intervalMonths) : "",
+        reminderWarningKm: rule?.warningKm ? String(rule.warningKm) : intervalKm ? "500" : "",
+      }];
     });
-  }, []);
+  }, [maintenanceRules]);
 
   const updateServicePrice = useCallback((id: string, price: string) => {
     setSelectedServices(prev =>
       prev.map(s => s.id === id ? { ...s, price } : s)
+    );
+  }, []);
+
+  const updateServiceReminder = useCallback((id: string, patch: Partial<SelectedService>) => {
+    setSelectedServices(prev =>
+      prev.map(s => s.id === id ? { ...s, ...patch } : s)
     );
   }, []);
 
@@ -265,7 +296,17 @@ export function MaintenanceForm({
       if (prev.find(s => s.typeKey === key)) {
         return prev.map(s => s.typeKey === key ? { ...s, price } : s);
       }
-      return [...prev, { id: createId(), typeKey: key, label, price, isCustom: true }];
+      return [...prev, {
+        id: createId(),
+        typeKey: key,
+        label,
+        price,
+        isCustom: true,
+        scheduleReminder: false,
+        reminderIntervalKm: "",
+        reminderIntervalMonths: "",
+        reminderWarningKm: "",
+      }];
     });
     
     setCustomMasterItems(prev => {
@@ -295,6 +336,10 @@ export function MaintenanceForm({
         .map(s => ({
           name: s.label,
           typeKey: s.typeKey,
+          scheduleReminder: Boolean(reminderEnabled && s.scheduleReminder),
+          reminderIntervalKm: s.scheduleReminder && s.reminderIntervalKm ? Number(s.reminderIntervalKm) : null,
+          reminderIntervalDays: s.scheduleReminder && s.reminderIntervalMonths ? Number(s.reminderIntervalMonths) * 30 : null,
+          reminderWarningKm: s.scheduleReminder && s.reminderWarningKm ? Number(s.reminderWarningKm) : null,
           quantity: 1,
           unitPrice: parseFloat(s.price) || 0,
           totalPrice: parseFloat(s.price) || 0,
@@ -658,31 +703,89 @@ export function MaintenanceForm({
                   {selectedServices.map((service) => (
                     <div
                       key={service.id}
-                      className="flex items-center gap-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50"
+                      className="rounded-lg bg-gray-50 p-2 dark:bg-gray-800/50"
                     >
-                      {/* Checkbox indicator */}
-                      <div className="size-4 rounded border-2 border-cyan-500 bg-cyan-500 flex items-center justify-center flex-shrink-0">
-                        <Check className="size-2.5 text-white" />
+                      <div className="flex items-center gap-2">
+                        {/* Checkbox indicator */}
+                        <div className="size-4 rounded border-2 border-cyan-500 bg-cyan-500 flex items-center justify-center flex-shrink-0">
+                          <Check className="size-2.5 text-white" />
+                        </div>
+                        {/* Service name */}
+                        <span className="text-xs font-medium text-gray-700 dark:text-gray-300 flex-1 truncate">
+                          {service.label}
+                        </span>
+                        {/* Price */}
+                        <span className="text-xs font-bold text-gray-900 dark:text-white flex-shrink-0">
+                          {service.price && parseFloat(service.price) > 0
+                            ? formatCurrency(parseFloat(service.price))
+                            : "—"
+                          }
+                        </span>
+                        {/* Remove */}
+                        <button
+                          type="button"
+                          onClick={() => removeService(service.id)}
+                          className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
+                        >
+                          <X className="size-3" />
+                        </button>
                       </div>
-                      {/* Service name */}
-                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300 flex-1 truncate">
-                        {service.label}
-                      </span>
-                      {/* Price */}
-                      <span className="text-xs font-bold text-gray-900 dark:text-white flex-shrink-0">
-                        {service.price && parseFloat(service.price) > 0
-                          ? formatCurrency(parseFloat(service.price))
-                          : "—"
-                        }
-                      </span>
-                      {/* Remove */}
-                      <button
-                        type="button"
-                        onClick={() => removeService(service.id)}
-                        className="p-1 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
-                      >
-                        <X className="size-3" />
-                      </button>
+
+                      <div className="mt-2 rounded-lg border border-cyan-100 bg-white/80 p-2 dark:border-cyan-900/40 dark:bg-gray-900/60">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-semibold text-gray-700 dark:text-gray-200">
+                              Programar recordatorio
+                            </p>
+                            <p className="text-[10px] text-gray-400">
+                              Quid creará el próximo aviso desde este odómetro.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={Boolean(reminderEnabled && service.scheduleReminder)}
+                            disabled={!reminderEnabled}
+                            onCheckedChange={(checked) => updateServiceReminder(service.id, { scheduleReminder: checked })}
+                          />
+                        </div>
+
+                        {reminderEnabled && service.scheduleReminder && (
+                          <div className="mt-2 grid grid-cols-3 gap-2">
+                            <div>
+                              <Label className="text-[10px] text-gray-400">Cada km</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={service.reminderIntervalKm || ""}
+                                onChange={(event) => updateServiceReminder(service.id, { reminderIntervalKm: event.target.value })}
+                                placeholder="2000"
+                                className="h-8 rounded-lg text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] text-gray-400">Cada meses</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={service.reminderIntervalMonths || ""}
+                                onChange={(event) => updateServiceReminder(service.id, { reminderIntervalMonths: event.target.value })}
+                                placeholder="6"
+                                className="h-8 rounded-lg text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] text-gray-400">Avisar km</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={service.reminderWarningKm || ""}
+                                onChange={(event) => updateServiceReminder(service.id, { reminderWarningKm: event.target.value })}
+                                placeholder="500"
+                                className="h-8 rounded-lg text-xs"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
 
@@ -713,6 +816,25 @@ export function MaintenanceForm({
               </div>
             )}
           </div>
+
+          {selectedServices.length > 0 && (
+            <div className="rounded-2xl border border-cyan-100 bg-cyan-50/70 p-3 dark:border-cyan-900/40 dark:bg-cyan-950/20">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-cyan-900 dark:text-cyan-100">
+                    Recordatorios desde este mantenimiento
+                  </p>
+                  <p className="text-xs text-cyan-700/70 dark:text-cyan-300/70">
+                    Activa avisos por kilometraje o fecha para los servicios que lo necesiten.
+                  </p>
+                </div>
+                <Switch
+                  checked={reminderEnabled}
+                  onCheckedChange={setReminderEnabled}
+                />
+              </div>
+            </div>
+          )}
 
           {/* ─── 4. Workshop Name ─── */}
           <div className="space-y-2">

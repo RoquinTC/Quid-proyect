@@ -302,7 +302,6 @@ export function TransportPage() {
   const visibleTimeline = useMemo(() => {
     if (transportTab === "fuel") return timeline.filter((entry) => entry.type === "fuel");
     if (transportTab === "maintenance") return timeline.filter((entry) => entry.type === "maintenance");
-    if (transportTab === "reminders") return [];
     return timeline;
   }, [timeline, transportTab]);
 
@@ -1622,11 +1621,27 @@ export function TransportPage() {
             </div>
           </div>
         ) : transportTab === "reminders" ? (
-          <div className="px-4 py-5 text-center">
-            <p className="text-xs text-gray-400">
-              Gestiona tus alertas desde la tarjeta de recordatorios de arriba.
-            </p>
-          </div>
+          <ReminderBoard
+            vehicle={selectedVehicle}
+            onCreateReminder={() => {
+              setEditReminder(null);
+              setShowReminderForm(true);
+            }}
+            onEditReminder={(reminder) => {
+              setEditReminder(reminder);
+              setShowReminderForm(true);
+            }}
+            onToggleReminder={(reminder, completed) => handleToggleReminder(reminder, completed)}
+            onDeleteReminder={(reminder) => setDeleteTarget({ type: "reminder", id: reminder.id, vehicleId: reminder.vehicleId })}
+            onCreateMaintenance={() => {
+              setEditMaintenance(null);
+              setShowMaintenanceForm(true);
+            }}
+            onCreateDocument={() => {
+              setEditDocument(null);
+              setShowDocumentForm(true);
+            }}
+          />
         ) : visibleTimeline.length === 0 ? (
           <div className="p-8 text-center">
             <div className="inline-flex items-center justify-center size-12 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-3">
@@ -1878,6 +1893,319 @@ export function TransportPage() {
   );
 }
 
+type ReminderBoardItem =
+  | {
+      id: string;
+      kind: "custom";
+      title: string;
+      subtitle: string;
+      detail: string;
+      status: "overdue" | "soon" | "ok" | "done";
+      reminder: VehicleReminder;
+    }
+  | {
+      id: string;
+      kind: "maintenance";
+      title: string;
+      subtitle: string;
+      detail: string;
+      status: "overdue" | "soon" | "ok";
+      recordId: string;
+      maintType: string;
+    }
+  | {
+      id: string;
+      kind: "document";
+      title: string;
+      subtitle: string;
+      detail: string;
+      status: "overdue" | "soon" | "ok";
+      documentId: string;
+      docType: string;
+    };
+
+function ReminderBoard({
+  vehicle,
+  onCreateReminder,
+  onEditReminder,
+  onToggleReminder,
+  onDeleteReminder,
+  onCreateMaintenance,
+  onCreateDocument,
+}: {
+  vehicle: VehicleWithDetails | null;
+  onCreateReminder: () => void;
+  onEditReminder: (reminder: VehicleReminder) => void;
+  onToggleReminder: (reminder: VehicleReminder, completed: boolean) => void;
+  onDeleteReminder: (reminder: VehicleReminder) => void;
+  onCreateMaintenance: () => void;
+  onCreateDocument: () => void;
+}) {
+  const now = new Date();
+
+  if (!vehicle) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-sm text-gray-400">Selecciona un vehículo para ver sus recordatorios.</p>
+      </div>
+    );
+  }
+
+  const customItems: ReminderBoardItem[] = (vehicle.reminders || []).map((reminder) => {
+    const daysUntilDue = reminder.dueDate
+      ? Math.ceil((new Date(reminder.dueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+    const kmRemaining = reminder.dueKm != null ? reminder.dueKm - vehicle.currentKm : null;
+    const isOverdue = reminder.isActive && ((daysUntilDue !== null && daysUntilDue <= 0) || (kmRemaining !== null && kmRemaining <= 0));
+    const isSoon = reminder.isActive && !isOverdue && (
+      (daysUntilDue !== null && daysUntilDue <= reminder.warningDays) ||
+      (kmRemaining !== null && kmRemaining <= (reminder.warningKm ?? 500))
+    );
+
+    const parts = [
+      daysUntilDue !== null
+        ? daysUntilDue <= 0
+          ? "Vence hoy"
+          : `${daysUntilDue} días`
+        : null,
+      kmRemaining !== null
+        ? kmRemaining <= 0
+          ? "Km cumplido"
+          : `${Math.round(kmRemaining).toLocaleString("es-CO")} km restantes`
+        : null,
+    ].filter(Boolean);
+
+    return {
+      id: `custom-${reminder.id}`,
+      kind: "custom",
+      title: reminder.title,
+      subtitle: reminder.category || "Recordatorio manual",
+      detail: parts.join(" · ") || "Sin fecha ni kilometraje",
+      status: !reminder.isActive ? "done" : isOverdue ? "overdue" : isSoon ? "soon" : "ok",
+      reminder,
+    };
+  });
+
+  const maintenanceItems: ReminderBoardItem[] = (vehicle.maintenanceRecords || [])
+    .filter((record) => record.reminderEnabled && (record.nextDueKm || record.nextDueDate))
+    .map((record) => {
+      const kmRemaining = record.nextDueKm ? record.nextDueKm - vehicle.currentKm : null;
+      const daysUntil = record.nextDueDate
+        ? Math.ceil((new Date(record.nextDueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+      const isOverdue = (kmRemaining !== null && kmRemaining <= 0) || (daysUntil !== null && daysUntil <= 0);
+      const isSoon = !isOverdue && ((kmRemaining !== null && kmRemaining <= 500) || (daysUntil !== null && daysUntil <= 15));
+      const detailParts = [
+        kmRemaining !== null
+          ? kmRemaining <= 0
+            ? "Kilometraje cumplido"
+            : `${Math.round(kmRemaining).toLocaleString("es-CO")} km restantes`
+          : null,
+        daysUntil !== null
+          ? daysUntil <= 0
+            ? "Fecha cumplida"
+            : `${daysUntil} días`
+          : null,
+      ].filter(Boolean);
+
+      return {
+        id: `maintenance-${record.id}`,
+        kind: "maintenance",
+        title: maintTypeLabels[record.type] || "Mantenimiento",
+        subtitle: record.description || "Recordatorio desde mantenimiento",
+        detail: detailParts.join(" · ") || "Programado",
+        status: isOverdue ? "overdue" : isSoon ? "soon" : "ok",
+        recordId: record.id,
+        maintType: record.type,
+      };
+    });
+
+  const documentItems: ReminderBoardItem[] = (vehicle.documents || [])
+    .filter((document) => document.reminderEnabled)
+    .map((document) => {
+      const daysUntil = Math.ceil((new Date(document.expiryDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const isOverdue = daysUntil < 0;
+      const isSoon = !isOverdue && daysUntil <= (document.reminderDays || 30);
+      return {
+        id: `document-${document.id}`,
+        kind: "document",
+        title: docTypeLabels[document.type] || "Documento",
+        subtitle: document.documentNumber ? `#${document.documentNumber}` : "Documento del vehículo",
+        detail: isOverdue ? `Vencido hace ${Math.abs(daysUntil)} días` : `Vence en ${daysUntil} días`,
+        status: isOverdue ? "overdue" : isSoon ? "soon" : "ok",
+        documentId: document.id,
+        docType: document.type,
+      };
+    });
+
+  const items = [...customItems, ...maintenanceItems, ...documentItems].sort((a, b) => {
+    const order = { overdue: 0, soon: 1, ok: 2, done: 3 } as const;
+    return order[a.status] - order[b.status];
+  });
+
+  const grouped = [
+    { title: "Requiere atención", status: "overdue" as const, items: items.filter((item) => item.status === "overdue") },
+    { title: "Próximos", status: "soon" as const, items: items.filter((item) => item.status === "soon") },
+    { title: "Planificados", status: "ok" as const, items: items.filter((item) => item.status === "ok") },
+    { title: "Completados", status: "done" as const, items: items.filter((item) => item.status === "done") },
+  ].filter((group) => group.items.length > 0);
+
+  const counters = {
+    overdue: items.filter((item) => item.status === "overdue").length,
+    soon: items.filter((item) => item.status === "soon").length,
+    total: items.filter((item) => item.status !== "done").length,
+  };
+
+  return (
+    <div className="p-4 space-y-4 pb-safe">
+      <div className="rounded-3xl border border-cyan-100 bg-gradient-to-br from-slate-950 via-cyan-950 to-slate-900 p-4 text-white shadow-lg shadow-cyan-950/20 dark:border-cyan-900/50">
+        <div className="flex items-start gap-3">
+          <div className="flex size-11 items-center justify-center rounded-2xl bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25">
+            <Bell className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200/80">Centro de alertas</p>
+            <h3 className="text-xl font-black leading-tight">Recordatorios de {vehicle.name}</h3>
+            <p className="mt-1 text-xs text-cyan-50/70">
+              Mantenimiento, documentos y avisos manuales en una sola línea de control.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="rounded-2xl bg-white/10 p-2 text-center ring-1 ring-white/10">
+            <p className="text-lg font-black">{counters.total}</p>
+            <p className="text-[10px] text-cyan-100/75">activos</p>
+          </div>
+          <div className="rounded-2xl bg-red-500/15 p-2 text-center ring-1 ring-red-300/20">
+            <p className="text-lg font-black text-red-100">{counters.overdue}</p>
+            <p className="text-[10px] text-red-100/75">críticos</p>
+          </div>
+          <div className="rounded-2xl bg-amber-400/15 p-2 text-center ring-1 ring-amber-200/20">
+            <p className="text-lg font-black text-amber-100">{counters.soon}</p>
+            <p className="text-[10px] text-amber-100/75">próximos</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <Button size="sm" className="h-9 rounded-2xl bg-white text-slate-950 hover:bg-cyan-50" onClick={onCreateReminder}>
+            <Plus className="mr-1 size-3.5" />
+            Manual
+          </Button>
+          <Button size="sm" variant="secondary" className="h-9 rounded-2xl bg-white/10 text-white hover:bg-white/20" onClick={onCreateMaintenance}>
+            <Wrench className="mr-1 size-3.5" />
+            Mant.
+          </Button>
+          <Button size="sm" variant="secondary" className="h-9 rounded-2xl bg-white/10 text-white hover:bg-white/20" onClick={onCreateDocument}>
+            <FileText className="mr-1 size-3.5" />
+            Doc.
+          </Button>
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-gray-200 bg-white/70 p-6 text-center shadow-sm dark:border-gray-700 dark:bg-gray-900/40">
+          <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-600 dark:bg-cyan-950/30 dark:text-cyan-300">
+            <Bell className="size-6" />
+          </div>
+          <p className="text-sm font-bold text-gray-900 dark:text-white">Sin recordatorios todavía</p>
+          <p className="mt-1 text-xs text-gray-500">
+            Crea uno manual o actívalo al guardar un mantenimiento/documento.
+          </p>
+        </div>
+      ) : (
+        grouped.map((group) => (
+          <div key={group.status} className="space-y-2">
+            <p className="px-1 text-xs font-bold uppercase tracking-wider text-gray-400">
+              {group.title}
+            </p>
+            <div className="space-y-2">
+              {group.items.map((item) => (
+                <ReminderBoardCard
+                  key={item.id}
+                  item={item}
+                  onEditReminder={onEditReminder}
+                  onToggleReminder={onToggleReminder}
+                  onDeleteReminder={onDeleteReminder}
+                />
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function ReminderBoardCard({
+  item,
+  onEditReminder,
+  onToggleReminder,
+  onDeleteReminder,
+}: {
+  item: ReminderBoardItem;
+  onEditReminder: (reminder: VehicleReminder) => void;
+  onToggleReminder: (reminder: VehicleReminder, completed: boolean) => void;
+  onDeleteReminder: (reminder: VehicleReminder) => void;
+}) {
+  const Icon = item.kind === "custom"
+    ? Bell
+    : item.kind === "document"
+    ? (docTypeIcons[item.docType] || FileText)
+    : (maintTypeIcons[item.maintType] || Wrench);
+  const tone = item.status === "overdue"
+    ? "border-red-200 bg-red-50/90 text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200"
+    : item.status === "soon"
+    ? "border-amber-200 bg-amber-50/90 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200"
+    : item.status === "done"
+    ? "border-gray-200 bg-gray-50/90 text-gray-500 opacity-75 dark:border-gray-800 dark:bg-gray-900/30"
+    : "border-cyan-100 bg-white/90 text-cyan-700 dark:border-cyan-900/40 dark:bg-gray-900/60 dark:text-cyan-200";
+
+  return (
+    <div className={`rounded-2xl border p-3 shadow-sm ${tone}`}>
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white/70 ring-1 ring-black/5 dark:bg-white/10">
+          <Icon className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-black text-gray-950 dark:text-white">{item.title}</p>
+            <Badge variant="secondary" className="h-5 rounded-full border-0 px-2 text-[10px]">
+              {item.kind === "custom" ? "Manual" : item.kind === "maintenance" ? "Mant." : "Doc."}
+            </Badge>
+          </div>
+          <p className="truncate text-xs text-gray-500 dark:text-gray-300/70">{item.subtitle}</p>
+          <p className="mt-1 text-xs font-semibold">{item.detail}</p>
+        </div>
+
+        {item.kind === "custom" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 rounded-xl">
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem onClick={() => onToggleReminder(item.reminder, item.reminder.isActive)}>
+                <Bell className="mr-2 size-4 text-cyan-500" />
+                {item.reminder.isActive ? "Completar" : "Reactivar"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onEditReminder(item.reminder)}>
+                <Pencil className="mr-2 size-4 text-blue-500" />
+                Editar
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => onDeleteReminder(item.reminder)}>
+                <Trash2 className="mr-2 size-4" />
+                Eliminar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Timeline Card (compact, Drivvo-style) ────────────────────────
 function TimelineCard({
   entry,
@@ -1895,6 +2223,10 @@ function TimelineCard({
   const isFuel = entry.type === "fuel";
   const isDoc = entry.type === "document";
   const [showItems, setShowItems] = useState(false);
+  const hasFuelDetails = isFuel && (entry.pricePerGallon || entry.gallons || entry.notes);
+  const hasDocDetails = isDoc && (entry.documentNumber || entry.expiryDate);
+  const hasMaintenanceDetails = !isFuel && !isDoc && ((entry.items?.length ?? 0) > 0 || entry.maintDescription || entry.nextDueKm || entry.nextDueDate);
+  const hasExpandableDetails = Boolean(hasFuelDetails || hasDocDetails || hasMaintenanceDetails);
 
   // Document status
   const docStatus = (() => {
@@ -1936,8 +2268,8 @@ function TimelineCard({
       </div>
 
       {/* Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-3 group">
-        <div className="flex items-center justify-between mb-0.5">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-2.5 group">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             {isDoc && DocIcon && (
               <div className={`size-5 rounded-md flex items-center justify-center flex-shrink-0 ${docTypeColors[entry.docType || ""] || docTypeColors.otro}`}>
@@ -1959,7 +2291,7 @@ function TimelineCard({
             )}
           </div>
           <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-            <span className="text-sm font-bold text-gray-900 dark:text-white">
+            <span className="text-sm font-black text-gray-900 dark:text-white">
               {formatCurrency(entry.cost)}
             </span>
             {/* Action buttons - always visible on mobile */}
@@ -2027,26 +2359,91 @@ function TimelineCard({
           )}
         </div>
 
-        {/* Maintenance items expandable */}
-        {!isFuel && !isDoc && entry.items && entry.items.length > 0 && (
+        {hasExpandableDetails && (
           <div className="mt-1.5">
             <button
-              className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              className="flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
               onClick={() => setShowItems(!showItems)}
             >
               <ChevronRight className={`size-3 transition-transform ${showItems ? "rotate-90" : ""}`} />
-              <span>{entry.items.length} {entry.items.length === 1 ? "item" : "items"}</span>
+              <span>{showItems ? "Ocultar detalle" : "Ver detalle"}</span>
             </button>
             {showItems && (
-              <div className="mt-1.5 space-y-1 pl-4 border-l-2 border-gray-100 dark:border-gray-700">
-                {entry.items.map(item => (
-                  <div key={item.id} className="flex items-center justify-between text-[11px]">
-                    <span className="text-gray-600 dark:text-gray-400 truncate">{item.name}</span>
-                    <span className="text-gray-500 flex-shrink-0 ml-2">
-                      {item.quantity} × {formatCurrency(item.unitPrice)} = {formatCurrency(item.totalPrice)}
-                    </span>
+              <div className="mt-2 space-y-1.5 rounded-xl border border-gray-100 bg-gray-50/80 p-2 text-[11px] dark:border-gray-700 dark:bg-gray-900/40">
+                {isFuel && (
+                  <>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-gray-400">Precio galón</p>
+                        <p className="font-semibold text-gray-700 dark:text-gray-200">
+                          {entry.pricePerGallon ? formatCurrency(entry.pricePerGallon) : "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Galones</p>
+                        <p className="font-semibold text-gray-700 dark:text-gray-200">
+                          {entry.gallons ? entry.gallons.toFixed(2) : "—"}
+                        </p>
+                      </div>
+                    </div>
+                    {entry.notes && (
+                      <p className="pt-1 text-gray-500 dark:text-gray-400">{entry.notes}</p>
+                    )}
+                  </>
+                )}
+
+                {!isFuel && !isDoc && (
+                  <>
+                    {entry.maintDescription && (
+                      <p className="text-gray-500 dark:text-gray-400">{entry.maintDescription}</p>
+                    )}
+                    {(entry.nextDueKm || entry.nextDueDate) && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <p className="text-gray-400">Próx. km</p>
+                          <p className="font-semibold text-gray-700 dark:text-gray-200">
+                            {entry.nextDueKm ? `${entry.nextDueKm.toLocaleString("es-CO")} km` : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400">Próx. fecha</p>
+                          <p className="font-semibold text-gray-700 dark:text-gray-200">
+                            {entry.nextDueDate ? formatShortDate(entry.nextDueDate) : "—"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {entry.items && entry.items.length > 0 && (
+                      <div className="space-y-1 border-t border-gray-200 pt-1.5 dark:border-gray-700">
+                        {entry.items.map(item => (
+                          <div key={item.id} className="flex items-center justify-between gap-2">
+                            <span className="truncate text-gray-600 dark:text-gray-400">{item.name}</span>
+                            <span className="flex-shrink-0 text-gray-500">
+                              {item.quantity} × {formatCurrency(item.unitPrice)} = {formatCurrency(item.totalPrice)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isDoc && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-gray-400">Documento</p>
+                      <p className="font-semibold text-gray-700 dark:text-gray-200">
+                        {entry.documentNumber || "Sin número"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400">Vencimiento</p>
+                      <p className="font-semibold text-gray-700 dark:text-gray-200">
+                        {entry.expiryDate ? formatShortDate(entry.expiryDate) : "—"}
+                      </p>
+                    </div>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>

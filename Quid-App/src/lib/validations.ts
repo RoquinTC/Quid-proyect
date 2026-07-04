@@ -591,6 +591,10 @@ export const maintenanceCreateSchema = z.object({
   items: z.array(z.object({
     name: z.string().min(1),
     typeKey: z.string().nullable().optional(),
+    scheduleReminder: z.boolean().optional(),
+    reminderIntervalKm: z.number().min(0).nullable().optional(),
+    reminderIntervalDays: z.number().int().min(0).nullable().optional(),
+    reminderWarningKm: z.number().min(0).nullable().optional(),
     quantity: z.number().positive().default(1),
     unitPrice: z.number().positive("El precio unitario es obligatorio"),
     totalPrice: z.number().positive(),
@@ -619,6 +623,10 @@ export const maintenanceUpdateSchema = z.object({
     id: z.string().optional(), // existing item id for updates
     name: z.string().min(1),
     typeKey: z.string().nullable().optional(),
+    scheduleReminder: z.boolean().optional(),
+    reminderIntervalKm: z.number().min(0).nullable().optional(),
+    reminderIntervalDays: z.number().int().min(0).nullable().optional(),
+    reminderWarningKm: z.number().min(0).nullable().optional(),
     quantity: z.number().positive().default(1),
     unitPrice: z.number().positive(),
     totalPrice: z.number().positive(),
