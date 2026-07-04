@@ -68,11 +68,18 @@ export async function POST(
     for (const tx of linkedTransactions) {
       // Reverse the balance impact
       if (tx.type === "transfer" && tx.accountId) {
-        // Restore source account balance (was decremented)
-        await db.account.update({
-          where: { id: tx.accountId },
-          data: { balance: { increment: tx.amount } },
-        });
+        // Restore the exact source balance that was decremented.
+        if (tx.subAccountId) {
+          await db.subAccount.update({
+            where: { id: tx.subAccountId },
+            data: { balance: { increment: tx.amount } },
+          });
+        } else {
+          await db.account.update({
+            where: { id: tx.accountId },
+            data: { balance: { increment: tx.amount } },
+          });
+        }
 
         // Find and reverse the counterpart income transaction
         if (tx.relatedTransactionId) {
@@ -97,11 +104,18 @@ export async function POST(
           }
         }
       } else if (tx.type === "expense" && tx.accountId) {
-        // Restore account balance (was decremented)
-        await db.account.update({
-          where: { id: tx.accountId },
-          data: { balance: { increment: tx.amount } },
-        });
+        // Restore the exact account/subaccount balance that was decremented.
+        if (tx.subAccountId) {
+          await db.subAccount.update({
+            where: { id: tx.subAccountId },
+            data: { balance: { increment: tx.amount } },
+          });
+        } else {
+          await db.account.update({
+            where: { id: tx.accountId },
+            data: { balance: { increment: tx.amount } },
+          });
+        }
       } else if (tx.type === "income" && tx.accountId) {
         // Reverse income: decrement account/subaccount balance (was incremented)
         if (tx.subAccountId) {

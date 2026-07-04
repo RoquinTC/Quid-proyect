@@ -91,6 +91,8 @@ export function TransactionForm({
 
   const isEditing = !!editTransaction;
   const isMobile = useIsMobile();
+  const normalizeSubAccountId = (value: string | null | undefined) =>
+    value && value !== "none" && value !== "__none__" ? value : null;
 
   // Get sub-accounts for selected account
   const selectedAccount = accounts.find((a) => a.id === accountId);
@@ -102,6 +104,11 @@ export function TransactionForm({
   // Get subcategories for current category
   const currentCategoryData = categories.find((c) => c.name === category);
   const availableSubCategories = currentCategoryData?.subcategories || [];
+  const isSameTransferTarget = type === "transfer" &&
+    !!accountId &&
+    !!toAccountId &&
+    accountId === toAccountId &&
+    normalizeSubAccountId(subAccountId) === normalizeSubAccountId(toSubAccountId);
 
   useEffect(() => {
     if (editTransaction) {
@@ -176,9 +183,17 @@ export function TransactionForm({
     if (!amount || !description) return;
     if (type !== "transfer" && !accountId) return;
     if (type === "transfer" && (!accountId || !toAccountId)) return;
+    if (isSameTransferTarget) {
+      toast.error("El origen y el destino son el mismo lugar", {
+        description: "Escoge otro bolsillo o la cuenta principal para mover el dinero.",
+      });
+      return;
+    }
     setLoading(true);
     try {
       const finalCategory = useCustomCategory ? customCategory : category;
+      const sourceSubAccountId = normalizeSubAccountId(subAccountId);
+      const destinationSubAccountId = normalizeSubAccountId(toSubAccountId);
       if (isEditing) {
         await apiFetch(`/api/transactions/${editTransaction.id}`, {
           method: "PUT",
@@ -187,7 +202,7 @@ export function TransactionForm({
             amount: parseFloat(amount),
             description,
             accountId: accountId || null,
-            subAccountId: subAccountId || null,
+            subAccountId: sourceSubAccountId,
             category: type !== "transfer" ? (finalCategory || "Otros") : null,
             subCategory: type !== "transfer" ? (subCategory || null) : null,
             date,
@@ -207,7 +222,7 @@ export function TransactionForm({
             amount: parseFloat(amount),
             description,
             accountId: accountId || null,
-            subAccountId: subAccountId || null,
+            subAccountId: sourceSubAccountId,
             category: type !== 'transfer' ? (finalCategory || 'Otros') : null,
             subCategory: type !== 'transfer' ? (subCategory || null) : null,
             date,
@@ -215,7 +230,7 @@ export function TransactionForm({
             excludeFromBudget,
             receiptUrl,
             transferToAccountId: type === 'transfer' ? toAccountId : undefined,
-            transferToSubAccountId: type === 'transfer' ? (toSubAccountId || undefined) : undefined,
+            transferToSubAccountId: type === 'transfer' ? destinationSubAccountId : undefined,
           }),
         });
 
@@ -269,8 +284,7 @@ export function TransactionForm({
   const renderAccountSelect = (
     value: string,
     onChange: (val: string) => void,
-    label: string,
-    excludeId?: string
+    label: string
   ) => (
     <div className="space-y-2">
       <Label>{label}</Label>
@@ -280,7 +294,6 @@ export function TransactionForm({
         </SelectTrigger>
         <SelectContent>
           {accounts
-            .filter((acc) => acc.id !== excludeId)
             .map((acc) => (
               <SelectItem key={acc.id} value={acc.id}>
                 <div className="flex items-center gap-2">
@@ -416,8 +429,13 @@ export function TransactionForm({
         <>
           {renderAccountSelect(accountId, setAccountId, "Desde cuenta")}
           {renderSubAccountSelect(accountId, subAccountId, setSubAccountId, subAccounts)}
-          {renderAccountSelect(toAccountId, setToAccountId, "Hacia cuenta", accountId)}
+          {renderAccountSelect(toAccountId, setToAccountId, "Hacia cuenta")}
           {renderSubAccountSelect(toAccountId, toSubAccountId, setToSubAccountId, toSubAccounts)}
+          {isSameTransferTarget && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+              El origen y destino son iguales. Puedes mover de un bolsillo a la cuenta principal, de la cuenta principal a un bolsillo o entre bolsillos distintos.
+            </p>
+          )}
         </>
       ) : (
         <>
@@ -535,7 +553,7 @@ export function TransactionForm({
       {/* Submit */}
       <Button
         onClick={handleSubmit}
-        disabled={loading || !amount || !description || (!accountId && type !== "transfer")}
+        disabled={loading || !amount || !description || (!accountId && type !== "transfer") || (type === "transfer" && (!accountId || !toAccountId || isSameTransferTarget))}
         className={`w-full rounded-xl h-12 text-sm font-semibold ${
           type === "income"
             ? "bg-gradient-to-r from-emerald-600 to-teal-500"

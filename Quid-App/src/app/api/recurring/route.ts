@@ -12,6 +12,10 @@ type DestinationAccount =
     }>
   | null;
 
+function normalizeSubAccountId(value: string | null | undefined) {
+  return value && value !== "none" && value !== "__none__" ? value : null;
+}
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -97,7 +101,7 @@ export async function POST(req: NextRequest) {
       subAccountId,
       debtId,
       destinationAccountId,
-      destinationSubAccountId,
+      destinationSubAccountId: rawDestinationSubAccountId,
       category,
       subCategory,
       scheduledDate,
@@ -105,6 +109,8 @@ export async function POST(req: NextRequest) {
       notes,
       isRecurring,
     } = body;
+    const sourceSubAccountId = normalizeSubAccountId(subAccountId);
+    const destinationSubAccountId = normalizeSubAccountId(rawDestinationSubAccountId);
 
     if (!description || amount === undefined || !scheduledDate) {
       return NextResponse.json(
@@ -113,17 +119,57 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (type === "transfer") {
+      if (!accountId || !destinationAccountId) {
+        return NextResponse.json(
+          { error: "Cuenta origen y cuenta destino son requeridas" },
+          { status: 400 }
+        );
+      }
+
+      if (accountId === destinationAccountId && sourceSubAccountId === destinationSubAccountId) {
+        return NextResponse.json(
+          { error: "El origen y el destino de la transferencia recurrente no pueden ser el mismo lugar" },
+          { status: 400 }
+        );
+      }
+    }
+
     // Verify write access of all referenced entities. Accounts and sub-accounts
     // can be owned by the user or shared with editor access.
     const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
     if (accountId) entitiesToVerify.push({ type: "account", id: accountId });
-    if (subAccountId) entitiesToVerify.push({ type: "subAccount", id: subAccountId });
+    if (sourceSubAccountId) entitiesToVerify.push({ type: "subAccount", id: sourceSubAccountId });
     if (debtId) entitiesToVerify.push({ type: "debt", id: debtId });
     if (destinationAccountId) entitiesToVerify.push({ type: "account", id: destinationAccountId });
     if (destinationSubAccountId) entitiesToVerify.push({ type: "subAccount", id: destinationSubAccountId });
 
     const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
     if (accessError) return accessError;
+
+    if (sourceSubAccountId) {
+      const sourceSubAccount = await db.subAccount.findFirst({
+        where: { id: sourceSubAccountId, accountId: accountId || "" },
+      });
+      if (!sourceSubAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo origen no pertenece a la cuenta origen" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (destinationSubAccountId) {
+      const destinationSubAccount = await db.subAccount.findFirst({
+        where: { id: destinationSubAccountId, accountId: destinationAccountId || "" },
+      });
+      if (!destinationSubAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo destino no pertenece a la cuenta destino" },
+          { status: 400 }
+        );
+      }
+    }
 
     const recurringPayment = await db.recurringPayment.create({
       data: {
@@ -132,10 +178,10 @@ export async function POST(req: NextRequest) {
         amount,
         type: type || "expense",
         accountId: accountId || null,
-        subAccountId: subAccountId || null,
+        subAccountId: sourceSubAccountId,
         debtId: debtId || null,
         destinationAccountId: destinationAccountId || null,
-        destinationSubAccountId: destinationSubAccountId || null,
+        destinationSubAccountId,
         category: category || null,
         subCategory: subCategory || null,
         scheduledDate: new Date(scheduledDate),

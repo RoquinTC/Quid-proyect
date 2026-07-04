@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { validateBody, recurringUpdateSchema } from "@/lib/validations";
 import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 
+function normalizeSubAccountId(value: string | null | undefined) {
+  return value && value !== "none" && value !== "__none__" ? value : null;
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -104,15 +108,67 @@ export async function PUT(
       );
     }
 
+    const nextType = body.type ?? existing.type;
+    const nextAccountId = body.accountId !== undefined ? body.accountId : existing.accountId;
+    const nextSubAccountId = body.subAccountId !== undefined
+      ? normalizeSubAccountId(body.subAccountId)
+      : normalizeSubAccountId(existing.subAccountId);
+    const nextDestinationAccountId = body.destinationAccountId !== undefined
+      ? body.destinationAccountId
+      : existing.destinationAccountId;
+    const nextDestinationSubAccountId = body.destinationSubAccountId !== undefined
+      ? normalizeSubAccountId(body.destinationSubAccountId)
+      : normalizeSubAccountId(existing.destinationSubAccountId);
+
+    if (nextType === "transfer") {
+      if (!nextAccountId || !nextDestinationAccountId) {
+        return NextResponse.json(
+          { error: "Cuenta origen y cuenta destino son requeridas" },
+          { status: 400 }
+        );
+      }
+
+      if (nextAccountId === nextDestinationAccountId && nextSubAccountId === nextDestinationSubAccountId) {
+        return NextResponse.json(
+          { error: "El origen y el destino de la transferencia recurrente no pueden ser el mismo lugar" },
+          { status: 400 }
+        );
+      }
+    }
+
     const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
     if (body.accountId) entitiesToVerify.push({ type: "account", id: body.accountId });
-    if (body.subAccountId) entitiesToVerify.push({ type: "subAccount", id: body.subAccountId });
+    if (nextSubAccountId) entitiesToVerify.push({ type: "subAccount", id: nextSubAccountId });
     if (body.debtId) entitiesToVerify.push({ type: "debt", id: body.debtId });
     if (body.destinationAccountId) entitiesToVerify.push({ type: "account", id: body.destinationAccountId });
-    if (body.destinationSubAccountId) entitiesToVerify.push({ type: "subAccount", id: body.destinationSubAccountId });
+    if (nextDestinationSubAccountId) entitiesToVerify.push({ type: "subAccount", id: nextDestinationSubAccountId });
 
     const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
     if (accessError) return accessError;
+
+    if (nextSubAccountId) {
+      const sourceSubAccount = await db.subAccount.findFirst({
+        where: { id: nextSubAccountId, accountId: nextAccountId || "" },
+      });
+      if (!sourceSubAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo origen no pertenece a la cuenta origen" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (nextDestinationSubAccountId) {
+      const destinationSubAccount = await db.subAccount.findFirst({
+        where: { id: nextDestinationSubAccountId, accountId: nextDestinationAccountId || "" },
+      });
+      if (!destinationSubAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo destino no pertenece a la cuenta destino" },
+          { status: 400 }
+        );
+      }
+    }
 
     const updateData: Record<string, unknown> = {};
     if (body.description !== undefined) updateData.description = body.description;
@@ -120,10 +176,10 @@ export async function PUT(
     if (body.actualAmount !== undefined) updateData.actualAmount = body.actualAmount;
     if (body.type !== undefined) updateData.type = body.type;
     if (body.accountId !== undefined) updateData.accountId = body.accountId || null;
-    if (body.subAccountId !== undefined) updateData.subAccountId = body.subAccountId || null;
+    if (body.subAccountId !== undefined) updateData.subAccountId = nextSubAccountId;
     if (body.debtId !== undefined) updateData.debtId = body.debtId || null;
     if (body.destinationAccountId !== undefined) updateData.destinationAccountId = body.destinationAccountId || null;
-    if (body.destinationSubAccountId !== undefined) updateData.destinationSubAccountId = body.destinationSubAccountId || null;
+    if (body.destinationSubAccountId !== undefined) updateData.destinationSubAccountId = nextDestinationSubAccountId;
     if (body.category !== undefined) updateData.category = body.category || null;
     if (body.subCategory !== undefined) updateData.subCategory = body.subCategory || null;
     if (body.scheduledDate !== undefined) updateData.scheduledDate = new Date(body.scheduledDate);
@@ -182,7 +238,7 @@ export async function PUT(
       if (body.description !== undefined) seriesUpdateData.description = body.description;
       if (body.amount !== undefined) seriesUpdateData.amount = body.amount;
       if (body.accountId !== undefined) seriesUpdateData.accountId = body.accountId || null;
-      if (body.subAccountId !== undefined) seriesUpdateData.subAccountId = body.subAccountId || null;
+      if (body.subAccountId !== undefined) seriesUpdateData.subAccountId = nextSubAccountId;
       if (body.category !== undefined) seriesUpdateData.category = body.category || null;
       if (body.subCategory !== undefined) seriesUpdateData.subCategory = body.subCategory || null;
 

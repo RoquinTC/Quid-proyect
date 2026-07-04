@@ -9,6 +9,10 @@ import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, recurringConfirmSchema } from "@/lib/validations";
 import { createColombiaDate, getColombiaTodayString } from "@/lib/api";
 
+function normalizeSubAccountId(value: string | null | undefined) {
+  return value && value !== "none" && value !== "__none__" ? value : null;
+}
+
 /**
  * Calculate the next scheduled date for a recurring payment.
  * - Monthly with customDays: customDays is a JSON array with one day, e.g. "[15]"
@@ -162,21 +166,59 @@ export async function POST(
     }
 
     // For savings goal transfers, the destination is chosen at confirmation time
+    const sourceSubAccountId = normalizeSubAccountId(payment.subAccountId);
     const effectiveDestAccountId = isSavingsGoal ? (destinationAccountId || payment.destinationAccountId) : payment.destinationAccountId;
-    const effectiveDestSubAccountId = isSavingsGoal ? (destinationSubAccountId !== undefined ? destinationSubAccountId : payment.destinationSubAccountId) : payment.destinationSubAccountId;
+    const effectiveDestSubAccountId = normalizeSubAccountId(
+      isSavingsGoal
+        ? (destinationSubAccountId !== undefined ? destinationSubAccountId : payment.destinationSubAccountId)
+        : payment.destinationSubAccountId
+    );
+
+    if (payment.type === "transfer" && payment.accountId && effectiveDestAccountId) {
+      if (payment.accountId === effectiveDestAccountId && sourceSubAccountId === effectiveDestSubAccountId) {
+        return NextResponse.json(
+          { error: "El origen y el destino de la transferencia recurrente no pueden ser el mismo lugar" },
+          { status: 400 }
+        );
+      }
+    }
 
     // Re-verify write access of all referenced entities before mutating balances.
     // This allows transfers from an owned account into a shared account where the
     // user has editor access.
     const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
     if (payment.accountId) entitiesToVerify.push({ type: "account", id: payment.accountId });
-    if (payment.subAccountId) entitiesToVerify.push({ type: "subAccount", id: payment.subAccountId });
+    if (sourceSubAccountId) entitiesToVerify.push({ type: "subAccount", id: sourceSubAccountId });
     if (payment.debtId) entitiesToVerify.push({ type: "debt", id: payment.debtId });
     if (effectiveDestAccountId) entitiesToVerify.push({ type: "account", id: effectiveDestAccountId });
     if (effectiveDestSubAccountId) entitiesToVerify.push({ type: "subAccount", id: effectiveDestSubAccountId });
 
     const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
     if (accessError) return accessError;
+
+    if (sourceSubAccountId) {
+      const sourceSubAccount = await db.subAccount.findFirst({
+        where: { id: sourceSubAccountId, accountId: payment.accountId || "" },
+      });
+      if (!sourceSubAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo origen no pertenece a la cuenta origen" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (effectiveDestSubAccountId) {
+      const destinationSubAccount = await db.subAccount.findFirst({
+        where: { id: effectiveDestSubAccountId, accountId: effectiveDestAccountId || "" },
+      });
+      if (!destinationSubAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo destino no pertenece a la cuenta destino" },
+          { status: 400 }
+        );
+      }
+    }
 
     // 1. Mark payment as confirmed
     await db.recurringPayment.update({
@@ -187,7 +229,7 @@ export async function POST(
         confirmedDate: todayColombia,
         // Update destination if provided (for savings goals)
         destinationAccountId: effectiveDestAccountId || payment.destinationAccountId,
-        destinationSubAccountId: effectiveDestSubAccountId !== undefined ? effectiveDestSubAccountId : payment.destinationSubAccountId,
+        destinationSubAccountId: effectiveDestSubAccountId,
       },
     });
 
@@ -209,7 +251,7 @@ export async function POST(
         data: {
           userId: session.user.id,
           accountId: payment.accountId,
-          subAccountId: payment.subAccountId || null,
+          subAccountId: sourceSubAccountId,
           type: "transfer",
           amount: confirmedAmount,
           description: payment.description,
@@ -223,16 +265,14 @@ export async function POST(
         },
       });
 
-      // Decrement source account balance
-      await db.account.update({
-        where: { id: payment.accountId },
-        data: { balance: { increment: -confirmedAmount } },
-      });
-
-      // If source was a sub-account, also decrement its balance
-      if (payment.subAccountId) {
+      if (sourceSubAccountId) {
         await db.subAccount.update({
-          where: { id: payment.subAccountId },
+          where: { id: sourceSubAccountId },
+          data: { balance: { increment: -confirmedAmount } },
+        });
+      } else {
+        await db.account.update({
+          where: { id: payment.accountId },
           data: { balance: { increment: -confirmedAmount } },
         });
       }
@@ -404,7 +444,7 @@ export async function POST(
           nextPaymentDate: nextPayment,
           isPaid: false,
           accountId: payment.accountId || null,
-          subAccountId: payment.subAccountId || null,
+          subAccountId: sourceSubAccountId,
           category: payment.category || null,
           subCategory: payment.subCategory || null,
           recurringPaymentId: payment.id,
@@ -452,7 +492,7 @@ export async function POST(
           data: {
             userId: session.user.id,
             accountId: payment.accountId,
-            subAccountId: payment.subAccountId || null,
+            subAccountId: sourceSubAccountId,
             type: "income",
             amount: confirmedAmount,
             description: payment.description,
@@ -467,9 +507,9 @@ export async function POST(
         });
 
         // Increment account balance
-        if (payment.subAccountId) {
+        if (sourceSubAccountId) {
           await db.subAccount.update({
-            where: { id: payment.subAccountId },
+            where: { id: sourceSubAccountId },
             data: { balance: { increment: confirmedAmount } },
           });
         } else {
@@ -501,6 +541,7 @@ export async function POST(
           data: {
             userId: session.user.id,
             accountId: payment.accountId,
+            subAccountId: sourceSubAccountId,
             type: "expense",
             amount: confirmedAmount,
             description: payment.description,
@@ -514,11 +555,17 @@ export async function POST(
           },
         });
 
-        // Decrement account balance
-        await db.account.update({
-          where: { id: payment.accountId },
-          data: { balance: { increment: -confirmedAmount } },
-        });
+        if (sourceSubAccountId) {
+          await db.subAccount.update({
+            where: { id: sourceSubAccountId },
+            data: { balance: { increment: -confirmedAmount } },
+          });
+        } else {
+          await db.account.update({
+            where: { id: payment.accountId },
+            data: { balance: { increment: -confirmedAmount } },
+          });
+        }
       }
 
       // Update budget spent if category matches
@@ -569,10 +616,10 @@ export async function POST(
           amount: nextAmount,
           type: payment.type,
           accountId: payment.accountId,
-          subAccountId: payment.subAccountId,
+          subAccountId: sourceSubAccountId,
           debtId: payment.debtId,
           destinationAccountId: effectiveDestAccountId || payment.destinationAccountId,
-          destinationSubAccountId: effectiveDestSubAccountId !== undefined ? effectiveDestSubAccountId : payment.destinationSubAccountId,
+          destinationSubAccountId: effectiveDestSubAccountId,
           category: payment.category,
           subCategory: payment.subCategory,
           scheduledDate: nextDate,

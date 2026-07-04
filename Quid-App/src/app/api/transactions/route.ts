@@ -8,6 +8,10 @@ import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, transactionCreateSchema } from "@/lib/validations";
 import { createAndPushNotification } from "@/lib/push";
 
+function normalizeSubAccountId(value: string | null | undefined) {
+  return value && value !== "none" && value !== "__none__" ? value : null;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -167,21 +171,60 @@ export async function POST(req: NextRequest) {
 
     const body = await validateBody(req, transactionCreateSchema);
     const { type, amount, description, accountId, subAccountId, category, subCategory, date, sourceModule, sourceId, isRecurring, notes, transferToAccountId, transferToSubAccountId, excludeFromBudget, receiptUrl } = body;
+    const sourceSubAccountId = normalizeSubAccountId(subAccountId);
+    const destinationSubAccountId = normalizeSubAccountId(transferToSubAccountId);
 
     if (!type || !amount || !description) {
       return NextResponse.json({ error: "Tipo, monto y descripción son requeridos" }, { status: 400 });
+    }
+
+    if (type === "transfer") {
+      if (!accountId || !transferToAccountId) {
+        return NextResponse.json({ error: "Cuenta origen y cuenta destino son requeridas" }, { status: 400 });
+      }
+
+      if (accountId === transferToAccountId && sourceSubAccountId === destinationSubAccountId) {
+        return NextResponse.json(
+          { error: "El origen y el destino de la transferencia no pueden ser el mismo lugar" },
+          { status: 400 }
+        );
+      }
     }
 
     // Verify write access of all referenced entities. Accounts and sub-accounts
     // can be owned by the user or shared with editor access.
     const entitiesToVerify: { type: "account" | "subAccount" | "debt"; id: string }[] = [];
     if (accountId) entitiesToVerify.push({ type: "account", id: accountId });
-    if (subAccountId) entitiesToVerify.push({ type: "subAccount", id: subAccountId });
+    if (sourceSubAccountId) entitiesToVerify.push({ type: "subAccount", id: sourceSubAccountId });
     if (transferToAccountId) entitiesToVerify.push({ type: "account", id: transferToAccountId });
-    if (transferToSubAccountId) entitiesToVerify.push({ type: "subAccount", id: transferToSubAccountId });
+    if (destinationSubAccountId) entitiesToVerify.push({ type: "subAccount", id: destinationSubAccountId });
 
     const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
     if (accessError) return accessError;
+
+    if (sourceSubAccountId) {
+      const sourceSubAccount = await db.subAccount.findFirst({
+        where: { id: sourceSubAccountId, accountId: accountId || "" },
+      });
+      if (!sourceSubAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo origen no pertenece a la cuenta origen" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (destinationSubAccountId) {
+      const destinationSubAccount = await db.subAccount.findFirst({
+        where: { id: destinationSubAccountId, accountId: transferToAccountId || "" },
+      });
+      if (!destinationSubAccount) {
+        return NextResponse.json(
+          { error: "El bolsillo destino no pertenece a la cuenta destino" },
+          { status: 400 }
+        );
+      }
+    }
 
     // Create transaction
     const transaction = await db.transaction.create({
@@ -191,7 +234,7 @@ export async function POST(req: NextRequest) {
         amount,
         description,
         accountId: accountId || null,
-        subAccountId: subAccountId || null,
+        subAccountId: sourceSubAccountId,
         category: category || null,
         subCategory: subCategory || null,
         date: date ? createColombiaDate(date.split("T")[0]) : createColombiaDate(getColombiaTodayString()),
@@ -209,12 +252,12 @@ export async function POST(req: NextRequest) {
     });
 
     // Update balance (transfer deducts from source account, same as expense)
-    if (subAccountId) {
+    if (sourceSubAccountId) {
       // Update subaccount balance when transaction belongs to a subaccount
       const balanceChange = type === "income" ? amount : (type === "expense" || type === "transfer") ? -amount : 0;
       if (balanceChange !== 0) {
         await db.subAccount.update({
-          where: { id: subAccountId },
+          where: { id: sourceSubAccountId },
           data: { balance: { increment: balanceChange } },
         });
       }
@@ -283,7 +326,7 @@ export async function POST(req: NextRequest) {
           amount,
           description: `Transferencia recibida: ${description}`,
           accountId: transferToAccountId,
-          subAccountId: transferToSubAccountId || null,
+          subAccountId: destinationSubAccountId,
           category: "Otros",
           date: date ? createColombiaDate(date.split("T")[0]) : createColombiaDate(getColombiaTodayString()),
           notes: `Transferencia desde ${sourceAccount?.name || "cuenta"}`,
@@ -299,9 +342,9 @@ export async function POST(req: NextRequest) {
       });
 
       // Update destination account balance
-      if (transferToSubAccountId) {
+      if (destinationSubAccountId) {
         await db.subAccount.update({
-          where: { id: transferToSubAccountId },
+          where: { id: destinationSubAccountId },
           data: { balance: { increment: amount } },
         });
       } else {
@@ -313,14 +356,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch updated balances for the affected account/subaccount
-    if (subAccountId) {
+    if (sourceSubAccountId) {
       const updatedSub = await db.subAccount.findUnique({
-        where: { id: subAccountId },
+        where: { id: sourceSubAccountId },
         select: { balance: true, name: true, account: { select: { name: true } } },
       });
       if (updatedSub) {
         updatedBalances.push({
-          id: subAccountId,
+          id: sourceSubAccountId,
           name: `${updatedSub.account.name} → ${updatedSub.name}`,
           balance: toNumber(updatedSub.balance),
           isSubAccount: true,
@@ -343,14 +386,14 @@ export async function POST(req: NextRequest) {
 
     // For transfers, also fetch destination balance
     if (type === "transfer" && transferToAccountId) {
-      if (transferToSubAccountId) {
+      if (destinationSubAccountId) {
         const updatedDestSub = await db.subAccount.findUnique({
-          where: { id: transferToSubAccountId },
+          where: { id: destinationSubAccountId },
           select: { balance: true, name: true, account: { select: { name: true } } },
         });
         if (updatedDestSub) {
           updatedBalances.push({
-            id: transferToSubAccountId,
+            id: destinationSubAccountId,
             name: `${updatedDestSub.account.name} → ${updatedDestSub.name}`,
             balance: toNumber(updatedDestSub.balance),
             isSubAccount: true,
@@ -386,8 +429,8 @@ export async function POST(req: NextRequest) {
         where: {
           OR: [
             { accountId: { in: affectedAccountIds } },
-            { subAccountId: subAccountId || undefined },
-            { subAccountId: transferToSubAccountId || undefined },
+            { subAccountId: sourceSubAccountId || undefined },
+            { subAccountId: destinationSubAccountId || undefined },
           ].filter(Boolean),
         },
       });

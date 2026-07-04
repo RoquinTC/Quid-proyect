@@ -355,9 +355,18 @@ export function RecurringForm({
   };
 
   const scheme = typeColorScheme[paymentType];
+  const normalizeSubAccountId = (value: string | null | undefined) =>
+    value && value !== "none" && value !== "__none__" ? value : null;
+  const isSameTransferTarget = paymentType === "transfer" &&
+    !!sourceAccountId &&
+    !!destinationAccountId &&
+    sourceAccountId === destinationAccountId &&
+    normalizeSubAccountId(sourceSubAccountId) === normalizeSubAccountId(destinationSubAccountId);
 
   const buildPayload = (overrideAmount: number, overrideScheduledDate: string) => {
     const finalCategory = useCustomCategory ? customCategory : category;
+    const normalizedSourceSubAccountId = normalizeSubAccountId(sourceSubAccountId);
+    const normalizedDestinationSubAccountId = normalizeSubAccountId(destinationSubAccountId);
     return {
       description,
       amount: overrideAmount,
@@ -370,13 +379,15 @@ export function RecurringForm({
           ? (sourceAccountId || null)
           : (sourceAccountId || null),
       subAccountId: paymentType === "income"
-        ? (sourceSubAccountId && sourceSubAccountId !== "none" ? sourceSubAccountId : null)
+        ? normalizedSourceSubAccountId
         : paymentType === "expense" && sourceType === "debt"
-          ? (sourceSubAccountId && sourceSubAccountId !== "none" ? sourceSubAccountId : null)
-          : null,
+          ? normalizedSourceSubAccountId
+          : paymentType === "transfer" || (paymentType === "expense" && sourceType === "account")
+            ? normalizedSourceSubAccountId
+            : null,
       debtId: paymentType === "expense" && sourceType === "debt" ? sourceDebtId || null : null,
       destinationAccountId: paymentType === "transfer" ? destinationAccountId || null : null,
-      destinationSubAccountId: paymentType === "transfer" ? destinationSubAccountId || null : null,
+      destinationSubAccountId: paymentType === "transfer" ? normalizedDestinationSubAccountId : null,
       category: paymentType !== "transfer" ? (finalCategory || null) : null,
       subCategory: paymentType !== "transfer" ? (subCategory || null) : null,
       notes: notes || null,
@@ -423,6 +434,7 @@ export function RecurringForm({
       if (!amount || parseFloat(amount) <= 0 || !scheduledDate) return;
     }
     if (paymentType === "transfer" && (!sourceAccountId || !destinationAccountId)) return;
+    if (paymentType === "transfer" && isSameTransferTarget) return;
     if (paymentType === "income" && !sourceAccountId) return;
 
     setLoading(true);
@@ -725,7 +737,6 @@ export function RecurringForm({
                   </SelectTrigger>
                   <SelectContent>
                     {accounts
-                      .filter((acc) => acc.id !== sourceAccountId)
                       .map((acc) => (
                         <SelectItem key={acc.id} value={acc.id}>
                           <span className="flex items-center gap-2">
@@ -759,6 +770,11 @@ export function RecurringForm({
                     </SelectContent>
                   </Select>
                 </div>
+              )}
+              {isSameTransferTarget && (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                  El origen y destino son iguales. Puedes mover entre cuenta principal y bolsillos, o entre bolsillos distintos de la misma cuenta.
+                </p>
               )}
             </>
           ) : paymentType === "income" ? (
@@ -1170,7 +1186,7 @@ export function RecurringForm({
           )}
         </DialogBody>
         <DialogStickyFooter>
-          <Button onClick={handleSubmit} disabled={loading || !description || (frequency === "biweekly" ? (!biweeklyAmount1 || parseFloat(biweeklyAmount1) <= 0 || !biweeklyAmount2 || parseFloat(biweeklyAmount2) <= 0) : frequency === "weekly" ? (!weeklyAmount || parseFloat(weeklyAmount) <= 0) : (!amount || parseFloat(amount) <= 0 || !scheduledDate)) || (paymentType === "transfer" && (!sourceAccountId || !destinationAccountId)) || (paymentType === "income" && !sourceAccountId)} className="w-full rounded-xl" style={scheme.gradientStyle}>
+          <Button onClick={handleSubmit} disabled={loading || !description || (frequency === "biweekly" ? (!biweeklyAmount1 || parseFloat(biweeklyAmount1) <= 0 || !biweeklyAmount2 || parseFloat(biweeklyAmount2) <= 0) : frequency === "weekly" ? (!weeklyAmount || parseFloat(weeklyAmount) <= 0) : (!amount || parseFloat(amount) <= 0 || !scheduledDate)) || (paymentType === "transfer" && (!sourceAccountId || !destinationAccountId || isSameTransferTarget)) || (paymentType === "income" && !sourceAccountId)} className="w-full rounded-xl" style={scheme.gradientStyle}>
             {loading ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
             {isEditing ? "Guardar Cambios" : "Crear Pago Recurrente"}
           </Button>
