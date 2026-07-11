@@ -43,6 +43,8 @@ import {
   Calculator,
   HandCoins,
   CalendarDays,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -195,6 +197,18 @@ export function DebtDetail() {
     if (!acc) return null;
     const sub = acc.subAccounts.find((s) => s.id === subAccountId);
     return sub?.name || null;
+  };
+
+  const getPaymentSourceBalance = (
+    accountId: string | null | undefined,
+    subAccountId: string | null | undefined
+  ): number | null => {
+    if (!accountId) return null;
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) return null;
+    if (!subAccountId) return account.balance;
+    const subAccount = account.subAccounts.find((s) => s.id === subAccountId);
+    return subAccount?.balance ?? null;
   };
 
   const toggleInstallmentSelection = (id: string) => {
@@ -576,22 +590,6 @@ export function DebtDetail() {
     : dueInstallments.filter((inst) => selectedInstallmentIds.has(inst.id));
   const hasPaidInstallments = debt.installments.some((inst) => inst.paidAmount > 0);
 
-  // Build payment summary: group SELECTED due installments by their account
-  const paymentSummary: Record<string, { accountName: string; subAccountName: string | null; amount: number; purchases: string[] }> = {};
-  for (const inst of selectedDueInstallments) {
-    const key = `${inst.accountId || "none"}-${inst.subAccountId || "none"}`;
-    if (!paymentSummary[key]) {
-      paymentSummary[key] = {
-        accountName: getAccountName(inst.accountId),
-        subAccountName: getSubAccountName(inst.accountId, inst.subAccountId),
-        amount: 0,
-        purchases: [],
-      };
-    }
-    paymentSummary[key].amount += inst.installmentAmount;
-    paymentSummary[key].purchases.push(inst.description);
-  }
-
   const totalDue = selectedDueInstallments.reduce((sum, i) => {
     let amount = i.installmentAmount;
     const rate = parseFloat(interestRates[i.id] || "0");
@@ -601,6 +599,39 @@ export function DebtDetail() {
     }
     return sum + amount;
   }, 0);
+
+  // Build payment summary: group SELECTED due installments by their source account/pocket
+  const paymentSummary: Record<string, {
+    accountName: string;
+    subAccountName: string | null;
+    amount: number;
+    balance: number | null;
+    difference: number | null;
+    purchases: string[];
+  }> = {};
+
+  for (const inst of selectedDueInstallments) {
+    const key = `${inst.accountId || "none"}-${inst.subAccountId || "none"}`;
+    if (!paymentSummary[key]) {
+      const balance = getPaymentSourceBalance(inst.accountId, inst.subAccountId);
+      paymentSummary[key] = {
+        accountName: getAccountName(inst.accountId),
+        subAccountName: getSubAccountName(inst.accountId, inst.subAccountId),
+        amount: 0,
+        balance,
+        difference: null,
+        purchases: [],
+      };
+    }
+    paymentSummary[key].amount += inst.installmentAmount;
+    paymentSummary[key].purchases.push(inst.description);
+  }
+
+  for (const group of Object.values(paymentSummary)) {
+    group.difference = group.balance === null ? null : group.balance - group.amount;
+  }
+
+  const paymentSummaryGroups = Object.entries(paymentSummary);
 
   return (
     <motion.div
@@ -918,49 +949,90 @@ export function DebtDetail() {
       {/* The InstallmentPlan component renders its own pay/reverse/abono buttons for non-loan debts */}
       {/* This section was removed to avoid duplicate buttons */}
 
-      {/* Payment Summary — only for selected installments */}
+      {/* Payment capacity summary — only for selected installments */}
       {selectedDueInstallments.length > 0 && (
-        <Card className="border-0 shadow-md rounded-2xl border-l-4 border-l-amber-400">
+        <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                Resumen de Pago
-              </h4>
-              <Badge variant="secondary" className="text-xs">
-                {selectedDueInstallments.length} de {dueInstallments.length}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Estado de pago
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Validando contra la cuenta asociada a cada compra
+                </p>
+              </div>
+              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                {selectedDueInstallments.length} / {dueInstallments.length || selectedDueInstallments.length}
               </Badge>
             </div>
             <div className="space-y-2">
-              {Object.entries(paymentSummary).map(([key, group]) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-xl p-3"
-                >
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <Wallet className="size-3.5 text-gray-500" />
-                      <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {group.accountName}
-                      </span>
-                    </div>
-                    {group.subAccountName && (
-                      <span className="text-xs text-gray-400 ml-5">
-                        🐷 {group.subAccountName}
-                      </span>
-                    )}
-                    <div className="text-xs text-gray-400 ml-5 mt-0.5">
-                      Compras: {group.purchases.join(", ")}
+              {paymentSummaryGroups.map(([key, group]) => {
+                const hasLinkedBalance = group.balance !== null;
+                const isShort = hasLinkedBalance && (group.difference ?? 0) < 0;
+                const difference = group.difference ?? 0;
+                const sourceLabel = group.subAccountName
+                  ? `${group.accountName} · ${group.subAccountName}`
+                  : group.accountName;
+
+                return (
+                  <div
+                    key={key}
+                    className={[
+                      "rounded-2xl p-3 border",
+                      isShort
+                        ? "bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900/50"
+                        : "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/50",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Wallet className={isShort ? "size-3.5 text-rose-500" : "size-3.5 text-emerald-500"} />
+                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">
+                            {sourceLabel}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">Por cobrar</p>
+                            <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(group.amount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">Disponible</p>
+                            <p className="font-bold text-gray-900 dark:text-white">
+                              {hasLinkedBalance ? formatCurrency(group.balance ?? 0) : "Sin dato"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">{isShort ? "Te falta" : "Queda"}</p>
+                            <p className={isShort ? "font-bold text-rose-600 dark:text-rose-400" : "font-bold text-emerald-600 dark:text-emerald-400"}>
+                              {hasLinkedBalance ? formatCurrency(Math.abs(difference)) : "-"}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2 truncate">
+                          {group.purchases.length === 1
+                            ? group.purchases[0]
+                            : `${group.purchases.length} compras: ${group.purchases.slice(0, 2).join(", ")}${group.purchases.length > 2 ? "..." : ""}`}
+                        </p>
+                      </div>
+                      <div className={isShort ? "text-rose-500" : "text-emerald-500"}>
+                        {isShort ? <AlertTriangle className="size-5" /> : <CheckCircle2 className="size-5" />}
+                      </div>
                     </div>
                   </div>
-                  <span className="text-sm font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(group.amount)}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
+              {paymentSummaryGroups.some(([, group]) => group.balance === null) && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  Hay compras sin cuenta origen enlazada. No se puede calcular disponibilidad para esas cuotas.
+                </p>
+              )}
             </div>
-            <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Total a Pagar
+                Total seleccionado
               </span>
               <span className="text-base font-bold text-gray-900 dark:text-white">
                 {formatCurrency(totalDue)}

@@ -728,7 +728,7 @@ Criterio de éxito:
 
 ## D. Próximo orden recomendado de implementación
 
-1. **Cerrar presupuesto y exclusiones:** neutralizar lenguaje, terminar resumen por periodo y auditar todos los flujos con TC/recurrentes/salud/despensa/Aura.
+1. **Cerrar presupuesto, exclusiones y deudas:** neutralizar lenguaje, terminar resumen por periodo, mejorar la visibilidad de pagos de TC contra cuentas origen y auditar todos los flujos con TC/recurrentes/salud/despensa/Aura.
 2. **Reorganizar Ajustes por módulo:** separar UI y componentes antes de que crezca más.
 3. **Aura tools v1:** gateway, schemas, confirmación con botones y skills financieras principales.
 4. **Notificaciones reales:** cron observable en admin y prueba Android con app cerrada.
@@ -739,6 +739,20 @@ Criterio de éxito:
 ## E. Snapshot de auditoría vigente - 2026-06-06
 
 Esta sección deja evidenciado el estado real revisado en código para no depender del historial del chat.
+
+### E.0 Finanzas
+
+Ya existe base real:
+- Cuentas, subcuentas/bolsillos, presupuestos, transacciones, deudas, cuotas y pagos conectados.
+- Transferencias entre cuentas y subcuentas, incluyendo movimientos desde un bolsillo hacia la cuenta principal u otro bolsillo.
+- Pagos recurrentes capaces de afectar bolsillo/subcuenta específica sin cargar la cuenta principal equivocada.
+- Flujo de tarjetas de crédito con compras asociadas a cuenta origen, cuotas, pagos, reversos y actualización dinámica de vista.
+- Flujo de préstamos ajustado para pedir cuenta/subcuenta de origen al pagar cuota o hacer abono, registrando el movimiento financiero correspondiente.
+- **Estado de pago para tarjetas de crédito:** el detalle de la tarjeta muestra un resumen compacto por cuenta/bolsillo asociado a las cuotas seleccionadas: por cobrar, disponible y faltante/sobrante.
+
+Falta complementar:
+- Evolucionar el estado de pago hacia una proyección por cortes futuros: permitir ver no solo las cuotas seleccionadas/por vencer, sino también lo que se viene en próximos ciclos de la tarjeta.
+- Considerar pagos/cortes pendientes de varios periodos y evitar doble conteo con cuotas ya pagadas, reversadas o excluidas.
 
 ### E.1 Salud
 
