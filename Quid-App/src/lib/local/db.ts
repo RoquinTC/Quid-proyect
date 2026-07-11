@@ -701,6 +701,10 @@ export async function replaceAllInTable<T extends { id: string }>(
     if (serverRecordsToStore.length > 0) {
       const enriched = serverRecordsToStore.map((record) => ({
         ...record,
+        // Shared accounts arrive from the API with the owner's userId.
+        // Locally we index collections by the viewer's userId, otherwise the
+        // APK can sync successfully and then hide shared balances as if empty.
+        ...(tableName === "accounts" ? { userId } : {}),
         _syncStatus: "synced" as const,
         _version: 1,
         _lastModified: Date.now(),

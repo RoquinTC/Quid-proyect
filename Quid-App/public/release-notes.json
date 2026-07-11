@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.0.17",
+  "currentVersion": "1.0.18",
   "releases": [
+    {
+      "version": "1.0.18",
+      "date": "2026-07-11",
+      "title": "Tarjetas mas claras al pagar",
+      "changes": [
+        "El detalle de tarjeta ahora muestra si la cuenta asociada tiene saldo suficiente para cubrir las cuotas seleccionadas.",
+        "Puedes ver rapidamente cuanto se va a cobrar, cuanto hay disponible y si falta dinero, sin salir a consultar la cuenta.",
+        "El resumen respeta bolsillos y cuentas principales para que el calculo sea mas preciso."
+      ]
+    },
     {
       "version": "1.0.17",
       "date": "2026-07-04",
