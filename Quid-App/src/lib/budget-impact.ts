@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
 import { getCurrentBudgetPeriod } from "@/lib/holidays";
 import { toNumber } from "@/lib/decimal-serializer";
+import type { FinanceLedgerClient } from "@/lib/finance-ledger";
 
 type BudgetType = "income" | "expense";
 
@@ -9,16 +10,17 @@ export async function findMatchingBudget(
   userId: string,
   category: string,
   subCategory: string | null,
-  type: BudgetType
+  type: BudgetType,
+  client: FinanceLedgerClient = db
 ) {
   if (subCategory) {
-    const specific = await db.budget.findFirst({
+    const specific = await client.budget.findFirst({
       where: { userId, category, subCategory, type },
     });
     if (specific) return specific;
   }
 
-  return db.budget.findFirst({
+  return client.budget.findFirst({
     where: { userId, category, subCategory: null, type },
   });
 }
@@ -29,14 +31,15 @@ export async function adjustBudgetSpent(params: {
   subCategory?: string | null;
   type: BudgetType;
   amount: number;
+  client?: FinanceLedgerClient;
 }) {
-  const { userId, category, subCategory = null, type, amount } = params;
+  const { userId, category, subCategory = null, type, amount, client = db } = params;
   if (!category || amount === 0) return false;
 
-  const budget = await findMatchingBudget(userId, category, subCategory, type);
+  const budget = await findMatchingBudget(userId, category, subCategory, type, client);
   if (!budget) return false;
 
-  await db.budget.update({
+  await client.budget.update({
     where: { id: budget.id },
     data: { spent: { increment: amount } },
   });
@@ -44,8 +47,8 @@ export async function adjustBudgetSpent(params: {
   return true;
 }
 
-export async function getUserCurrentBudgetPeriod(userId: string) {
-  const settings = await db.userSettings.findUnique({
+export async function getUserCurrentBudgetPeriod(userId: string, client: FinanceLedgerClient = db) {
+  const settings = await client.userSettings.findUnique({
     where: { userId },
     select: { budgetCutoffDay: true, respectHolidays: true },
   });
@@ -57,8 +60,8 @@ export async function getUserCurrentBudgetPeriod(userId: string) {
   );
 }
 
-export async function isDateInCurrentBudgetPeriod(userId: string, date: Date) {
-  const { start, end } = await getUserCurrentBudgetPeriod(userId);
+export async function isDateInCurrentBudgetPeriod(userId: string, date: Date, client: FinanceLedgerClient = db) {
+  const { start, end } = await getUserCurrentBudgetPeriod(userId, client);
   const endPlus = new Date(end.getTime() + 24 * 60 * 60 * 1000);
   return date >= start && date < endPlus;
 }
@@ -71,6 +74,7 @@ export async function applyCreditInstallmentBudgetImpact(params: {
   installmentAmount: number;
   nextPaymentDate: Date;
   direction?: 1 | -1;
+  client?: FinanceLedgerClient;
 }) {
   const {
     userId,
@@ -80,11 +84,12 @@ export async function applyCreditInstallmentBudgetImpact(params: {
     installmentAmount,
     nextPaymentDate,
     direction = 1,
+    client = db,
   } = params;
 
   if (debtType === "loan") return false;
   if (!category) return false;
-  if (!(await isDateInCurrentBudgetPeriod(userId, nextPaymentDate))) return false;
+  if (!(await isDateInCurrentBudgetPeriod(userId, nextPaymentDate, client))) return false;
 
   return adjustBudgetSpent({
     userId,
@@ -92,5 +97,6 @@ export async function applyCreditInstallmentBudgetImpact(params: {
     subCategory,
     type: "expense",
     amount: toNumber(installmentAmount) * direction,
+    client,
   });
 }

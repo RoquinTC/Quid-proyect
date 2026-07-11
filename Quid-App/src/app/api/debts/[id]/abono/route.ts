@@ -6,8 +6,11 @@ import { getColombiaNow } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtAbonoSchema } from "@/lib/validations";
 import { verifyEntityMutationAccess } from "@/lib/auth-guards";
-
-type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+import {
+  applyBalanceDelta,
+  applyBudgetDelta,
+  assertSubAccountBelongsToAccount,
+} from "@/lib/finance-ledger";
 
 function normalizeOptionalId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -64,20 +67,6 @@ export async function POST(
     const accessError = await verifyEntityMutationAccess(session.user.id, entities);
     if (accessError) return accessError;
 
-    if (subAccountId) {
-      const subAccount = await db.subAccount.findUnique({
-        where: { id: subAccountId },
-        select: { accountId: true },
-      });
-
-      if (!subAccount || subAccount.accountId !== accountId) {
-        return NextResponse.json(
-          { error: "La subcuenta seleccionada no pertenece a la cuenta de origen" },
-          { status: 400 }
-        );
-      }
-    }
-
     // Verify debt belongs to user
     const debt = await db.debt.findFirst({
       where: { id, userId: session.user.id },
@@ -87,175 +76,133 @@ export async function POST(
       return NextResponse.json({ error: "Deuda no encontrada" }, { status: 404 });
     }
 
-    // ── Process each abono ──
-    let totalAbono = 0;
-    const details: Array<{
-      installmentId: string;
-      description: string;
-      currentInstallment: number;
-      totalInstallments: number;
-      previousBalance: number;
-      abonoAmount: number;
-      newBalance: number;
-    }> = [];
+    const transactionDate = date ? new Date(date) : getColombiaNow();
+    const { totalAbono, details, abonoRecord } = await db.$transaction(async (tx) => {
+      await assertSubAccountBelongsToAccount(
+        tx,
+        subAccountId,
+        accountId,
+        "La subcuenta seleccionada no pertenece a la cuenta de origen"
+      );
 
-    for (const payment of payments) {
-      const installment = await db.installment.findFirst({
-        where: {
-          id: payment.installmentId,
-          debtId: id,
-          isPaid: false,
-        },
-      });
+      let total = 0;
+      const processedDetails: Array<{
+        installmentId: string;
+        description: string;
+        currentInstallment: number;
+        totalInstallments: number;
+        previousBalance: number;
+        abonoAmount: number;
+        newBalance: number;
+      }> = [];
 
-      if (!installment) {
-        return NextResponse.json(
-          { error: `Cuota ${payment.installmentId} no encontrada o ya está pagada` },
-          { status: 400 }
-        );
-      }
+      for (const payment of payments) {
+        const installment = await tx.installment.findFirst({
+          where: {
+            id: payment.installmentId,
+            debtId: id,
+            isPaid: false,
+          },
+        });
 
-      if (payment.amount <= 0) {
-        return NextResponse.json(
-          { error: "El monto del abono debe ser mayor a 0" },
-          { status: 400 }
-        );
-      }
+        if (!installment) {
+          throw new Error(`Cuota ${payment.installmentId} no encontrada o ya está pagada`);
+        }
 
-      const previousBalance = toNumber(installment.remainingBalance ?? installment.totalAmount);
+        if (payment.amount <= 0) {
+          throw new Error("El monto del abono debe ser mayor a 0");
+        }
 
-      if (payment.amount > previousBalance - toNumber(installment.installmentAmount)) {
+        const previousBalance = toNumber(installment.remainingBalance ?? installment.totalAmount);
+
         if (payment.amount > previousBalance) {
-          return NextResponse.json(
-            { error: `El abono ($${payment.amount.toLocaleString()}) excede el saldo pendiente ($${previousBalance.toLocaleString()}) de "${installment.description}"` },
-            { status: 400 }
+          throw new Error(
+            `El abono ($${payment.amount.toLocaleString()}) excede el saldo pendiente ($${previousBalance.toLocaleString()}) de "${installment.description}"`
           );
         }
+
+        const newBalance = Math.max(previousBalance - payment.amount, 0);
+
+        await tx.installment.update({
+          where: { id: installment.id },
+          data: { remainingBalance: newBalance },
+        });
+
+        total += payment.amount;
+        processedDetails.push({
+          installmentId: installment.id,
+          description: installment.description,
+          currentInstallment: installment.currentInstallment,
+          totalInstallments: installment.totalInstallments,
+          previousBalance,
+          abonoAmount: payment.amount,
+          newBalance,
+        });
       }
 
-      const newBalance = Math.max(previousBalance - payment.amount, 0);
+      await tx.debt.update({
+        where: { id },
+        data: { currentBalance: { increment: -total } },
+      });
 
-      // Update installment's remainingBalance
-      await db.installment.update({
-        where: { id: installment.id },
+      const purchaseNames = processedDetails.map((d) => `${d.description} (cuota ${d.currentInstallment}/${d.totalInstallments})`);
+      const installmentIds = processedDetails.map((d) => d.installmentId);
+
+      const transaction = await tx.transaction.create({
         data: {
-          remainingBalance: newBalance,
+          userId: session.user.id,
+          accountId,
+          subAccountId: subAccountId || undefined,
+          type: "expense",
+          amount: total,
+          description: debt.type === "loan"
+            ? `Abono a préstamo ${debt.name}`
+            : `Abono a tarjeta de crédito ${debt.name}`,
+          category: debt.category || "Deudas",
+          subCategory: debt.subCategory || null,
+          date: transactionDate,
+          sourceModule: "finance",
+          sourceId: debt.id,
+          notes: `Abono a capital: ${purchaseNames.join(", ")} | installmentIds: ${installmentIds.join(",")}`,
         },
       });
 
-      totalAbono += payment.amount;
-
-      details.push({
-        installmentId: installment.id,
-        description: installment.description,
-        currentInstallment: installment.currentInstallment,
-        totalInstallments: installment.totalInstallments,
-        previousBalance,
-        abonoAmount: payment.amount,
-        newBalance,
+      const createdAbono = await tx.abono.create({
+        data: {
+          userId: session.user.id,
+          debtId: id,
+          transactionId: transaction.id,
+          totalAmount: total,
+          accountId,
+          subAccountId: subAccountId || null,
+          date: transactionDate,
+          details: {
+            create: processedDetails.map((d) => ({
+              installmentId: d.installmentId,
+              amount: d.abonoAmount,
+              previousBalance: d.previousBalance,
+              newBalance: d.newBalance,
+            })),
+          },
+        },
       });
-    }
 
-    // ── Update debt balance ──
-    await db.debt.update({
-      where: { id },
-      data: { currentBalance: { increment: -totalAbono } },
-    });
-
-    // ── Create expense transaction ──
-    const transactionDate = date ? new Date(date) : getColombiaNow();
-    const purchaseNames = details.map((d) => `${d.description} (cuota ${d.currentInstallment}/${d.totalInstallments})`);
-    const installmentIds = details.map((d) => d.installmentId);
-
-    const transactionData: {
-      userId: string;
-      accountId: string;
-      subAccountId?: string;
-      type: string;
-      amount: number;
-      description: string;
-      category: string;
-      subCategory?: string | null;
-      date: Date;
-      sourceModule: string;
-      sourceId: string;
-      notes: string;
-    } = {
-      userId: session.user.id,
-      accountId,
-      type: "expense",
-      amount: totalAbono,
-      description: debt.type === "loan"
-        ? `Abono a préstamo ${debt.name}`
-        : `Abono a tarjeta de crédito ${debt.name}`,
-      category: debt.category || "Deudas",
-      subCategory: debt.subCategory || null,
-      date: transactionDate,
-      sourceModule: "finance",
-      sourceId: debt.id,
-      notes: `Abono a capital: ${purchaseNames.join(", ")} | installmentIds: ${installmentIds.join(",")}`,
-    };
-
-    if (subAccountId) {
-      transactionData.subAccountId = subAccountId;
-    }
-
-    const transaction = await db.transaction.create({ data: transactionData });
-
-    // ── Create Abono + AbonoDetail records for audit trail ──
-    const abonoRecord = await db.abono.create({
-      data: {
-        userId: session.user.id,
-        debtId: id,
-        transactionId: transaction.id,
-        totalAmount: totalAbono,
+      await applyBalanceDelta(tx, {
         accountId,
-        subAccountId: subAccountId || null,
-        date: transactionDate,
-        details: {
-          create: details.map((d) => ({
-            installmentId: d.installmentId,
-            amount: d.abonoAmount,
-            previousBalance: d.previousBalance,
-            newBalance: d.newBalance,
-          })),
-        },
-      },
+        subAccountId,
+        amount: -total,
+      });
+
+      await applyBudgetDelta(tx, {
+        userId: session.user.id,
+        category: debt.category || "Deudas",
+        subCategory: debt.subCategory || null,
+        type: "expense",
+        amount: total,
+      });
+
+      return { totalAbono: total, details: processedDetails, abonoRecord: createdAbono };
     });
-
-    // ── Debit account/subaccount ──
-    if (subAccountId) {
-      await db.subAccount.update({
-        where: { id: subAccountId },
-        data: { balance: { increment: -totalAbono } },
-      });
-    } else {
-      await db.account.update({
-        where: { id: accountId },
-        data: { balance: { increment: -totalAbono } },
-      });
-    }
-
-    // ── Update budget using debt's category ──
-    const categoryToMatch = debt.category || "Deudas";
-    const subCatToMatch = debt.subCategory || null;
-    let budget: BudgetRecord = null;
-    if (subCatToMatch) {
-      budget = await db.budget.findFirst({
-        where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },
-      });
-    }
-    if (!budget) {
-      budget = await db.budget.findFirst({
-        where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: "expense" },
-      });
-    }
-    if (budget) {
-      await db.budget.update({
-        where: { id: budget.id },
-        data: { spent: { increment: totalAbono } },
-      });
-    }
 
     return NextResponse.json({
       success: true,
@@ -266,6 +213,15 @@ export async function POST(
     });
   } catch (error) {
     if (error instanceof Response) return error;
+    if (error instanceof Error) {
+      const knownErrors = [
+        "La subcuenta seleccionada no pertenece a la cuenta de origen",
+        "El monto del abono debe ser mayor a 0",
+      ];
+      if (knownErrors.includes(error.message) || error.message.includes("no encontrada") || error.message.includes("excede el saldo")) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+    }
     console.error("Abono a capital error:", error);
     return NextResponse.json({ error: "Error al procesar el abono" }, { status: 500 });
   }

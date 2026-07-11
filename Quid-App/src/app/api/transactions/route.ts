@@ -4,9 +4,16 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow, createColombiaDate, getColombiaTodayString } from "@/lib/api";
 import { verifyEntityMutationAccess } from "@/lib/auth-guards";
-import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, transactionCreateSchema } from "@/lib/validations";
 import { createAndPushNotification } from "@/lib/push";
+import {
+  applyBalanceDelta,
+  applyBudgetDelta,
+  assertSubAccountBelongsToAccount,
+  getTransactionBalanceDelta,
+  getUniqueBalanceSnapshots,
+  type BalanceSnapshot,
+} from "@/lib/finance-ledger";
 
 function normalizeSubAccountId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -202,218 +209,112 @@ export async function POST(req: NextRequest) {
     const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
     if (accessError) return accessError;
 
-    if (sourceSubAccountId) {
-      const sourceSubAccount = await db.subAccount.findFirst({
-        where: { id: sourceSubAccountId, accountId: accountId || "" },
-      });
-      if (!sourceSubAccount) {
-        return NextResponse.json(
-          { error: "El bolsillo origen no pertenece a la cuenta origen" },
-          { status: 400 }
+    const movementDate = date
+      ? createColombiaDate(date.split("T")[0])
+      : createColombiaDate(getColombiaTodayString());
+
+    const { transaction, updatedBalances } = await db.$transaction(async (tx) => {
+      try {
+        await assertSubAccountBelongsToAccount(
+          tx,
+          sourceSubAccountId,
+          accountId,
+          "El bolsillo origen no pertenece a la cuenta origen"
         );
-      }
-    }
-
-    if (destinationSubAccountId) {
-      const destinationSubAccount = await db.subAccount.findFirst({
-        where: { id: destinationSubAccountId, accountId: transferToAccountId || "" },
-      });
-      if (!destinationSubAccount) {
-        return NextResponse.json(
-          { error: "El bolsillo destino no pertenece a la cuenta destino" },
-          { status: 400 }
+        await assertSubAccountBelongsToAccount(
+          tx,
+          destinationSubAccountId,
+          transferToAccountId,
+          "El bolsillo destino no pertenece a la cuenta destino"
         );
+      } catch (validationError) {
+        throw new Error(validationError instanceof Error ? validationError.message : "Transferencia inválida");
       }
-    }
 
-    // Create transaction
-    const transaction = await db.transaction.create({
-      data: {
-        userId: session.user.id,
-        type,
-        amount,
-        description,
-        accountId: accountId || null,
-        subAccountId: sourceSubAccountId,
-        category: category || null,
-        subCategory: subCategory || null,
-        date: date ? createColombiaDate(date.split("T")[0]) : createColombiaDate(getColombiaTodayString()),
-        sourceModule: sourceModule || null,
-        sourceId: sourceId || null,
-        isRecurring: isRecurring || false,
-        notes: notes || null,
-        excludeFromBudget: excludeFromBudget || false,
-        receiptUrl: receiptUrl || null,
-      },
-      include: {
-        account: { select: { id: true, name: true, type: true, color: true } },
-        subAccount: { select: { id: true, name: true, color: true } },
-      },
-    });
-
-    // Update balance (transfer deducts from source account, same as expense)
-    if (sourceSubAccountId) {
-      // Update subaccount balance when transaction belongs to a subaccount
-      const balanceChange = type === "income" ? amount : (type === "expense" || type === "transfer") ? -amount : 0;
-      if (balanceChange !== 0) {
-        await db.subAccount.update({
-          where: { id: sourceSubAccountId },
-          data: { balance: { increment: balanceChange } },
-        });
-      }
-    } else if (accountId) {
-      // Update account balance when transaction belongs directly to account
-      const balanceChange = type === "income" ? amount : (type === "expense" || type === "transfer") ? -amount : 0;
-      if (balanceChange !== 0) {
-        await db.account.update({
-          where: { id: accountId },
-          data: { balance: { increment: balanceChange } },
-        });
-      }
-    }
-
-    // Helper: find the best matching budget (subCategory-specific first, then parent)
-    const findMatchingBudget = async (cat: string, subCat: string | null, budgetType: string) => {
-      // 1. Try exact match with subCategory
-      if (subCat) {
-        const specific = await db.budget.findFirst({
-          where: { userId: session.user.id, category: cat, subCategory: subCat, type: budgetType },
-        });
-        if (specific) return specific;
-      }
-      // 2. Fall back to parent budget (no subCategory)
-      return db.budget.findFirst({
-        where: { userId: session.user.id, category: cat, subCategory: null, type: budgetType },
-      });
-    };
-
-    // Update budget spent if expense
-    if (type === "expense" && category && !excludeFromBudget) {
-      const budget = await findMatchingBudget(category, subCategory || null, "expense");
-      if (budget) {
-        await db.budget.update({
-          where: { id: budget.id },
-          data: { spent: { increment: amount } },
-        });
-      }
-    }
-
-    // Update income budget if income
-    if (type === "income" && category && !excludeFromBudget) {
-      const budget = await findMatchingBudget(category, subCategory || null, "income");
-      if (budget) {
-        await db.budget.update({
-          where: { id: budget.id },
-          data: { spent: { increment: amount } },
-        });
-      }
-    }
-
-    // If transfer, create the counterpart income transaction and link them
-    // Collect updated balances for notification
-    const updatedBalances: Array<{ id: string; name: string; balance: number; isSubAccount: boolean }> = [];
-
-    if (type === "transfer" && transferToAccountId) {
-      const sourceAccount = await db.account.findUnique({
-        where: { id: accountId || "" },
-        select: { name: true },
-      });
-
-      const counterpart = await db.transaction.create({
+      const createdTransaction = await tx.transaction.create({
         data: {
           userId: session.user.id,
-          type: "income",
+          type,
           amount,
-          description: `Transferencia recibida: ${description}`,
-          accountId: transferToAccountId,
-          subAccountId: destinationSubAccountId,
-          category: "Otros",
-          date: date ? createColombiaDate(date.split("T")[0]) : createColombiaDate(getColombiaTodayString()),
-          notes: `Transferencia desde ${sourceAccount?.name || "cuenta"}`,
-          excludeFromBudget: true, // Counterpart of a transfer — not real income
-          relatedTransactionId: transaction.id,
+          description,
+          accountId: accountId || null,
+          subAccountId: sourceSubAccountId,
+          category: category || null,
+          subCategory: subCategory || null,
+          date: movementDate,
+          sourceModule: sourceModule || null,
+          sourceId: sourceId || null,
+          isRecurring: isRecurring || false,
+          notes: notes || null,
+          excludeFromBudget: excludeFromBudget || false,
+          receiptUrl: receiptUrl || null,
+        },
+        include: {
+          account: { select: { id: true, name: true, type: true, color: true } },
+          subAccount: { select: { id: true, name: true, color: true } },
         },
       });
 
-      // Link source transfer to its counterpart
-      await db.transaction.update({
-        where: { id: transaction.id },
-        data: { relatedTransactionId: counterpart.id },
+      await applyBalanceDelta(tx, {
+        accountId: accountId || null,
+        subAccountId: sourceSubAccountId,
+        amount: getTransactionBalanceDelta(type, amount),
       });
 
-      // Update destination account balance
-      if (destinationSubAccountId) {
-        await db.subAccount.update({
-          where: { id: destinationSubAccountId },
-          data: { balance: { increment: amount } },
-        });
-      } else {
-        await db.account.update({
-          where: { id: transferToAccountId },
-          data: { balance: { increment: amount } },
+      if (type === "expense" || type === "income") {
+        await applyBudgetDelta(tx, {
+          userId: session.user.id,
+          category: category || null,
+          subCategory: subCategory || null,
+          type,
+          amount,
+          excludeFromBudget,
         });
       }
-    }
 
-    // Fetch updated balances for the affected account/subaccount
-    if (sourceSubAccountId) {
-      const updatedSub = await db.subAccount.findUnique({
-        where: { id: sourceSubAccountId },
-        select: { balance: true, name: true, account: { select: { name: true } } },
-      });
-      if (updatedSub) {
-        updatedBalances.push({
-          id: sourceSubAccountId,
-          name: `${updatedSub.account.name} → ${updatedSub.name}`,
-          balance: toNumber(updatedSub.balance),
-          isSubAccount: true,
+      if (type === "transfer" && transferToAccountId) {
+        const sourceAccount = await tx.account.findUnique({
+          where: { id: accountId || "" },
+          select: { name: true },
         });
-      }
-    } else if (accountId) {
-      const updatedAcc = await db.account.findUnique({
-        where: { id: accountId },
-        select: { balance: true, name: true },
-      });
-      if (updatedAcc) {
-        updatedBalances.push({
-          id: accountId,
-          name: updatedAcc.name,
-          balance: toNumber(updatedAcc.balance),
-          isSubAccount: false,
-        });
-      }
-    }
 
-    // For transfers, also fetch destination balance
-    if (type === "transfer" && transferToAccountId) {
-      if (destinationSubAccountId) {
-        const updatedDestSub = await db.subAccount.findUnique({
-          where: { id: destinationSubAccountId },
-          select: { balance: true, name: true, account: { select: { name: true } } },
+        const counterpart = await tx.transaction.create({
+          data: {
+            userId: session.user.id,
+            type: "income",
+            amount,
+            description: `Transferencia recibida: ${description}`,
+            accountId: transferToAccountId,
+            subAccountId: destinationSubAccountId,
+            category: "Otros",
+            date: movementDate,
+            notes: `Transferencia desde ${sourceAccount?.name || "cuenta"}`,
+            excludeFromBudget: true,
+            relatedTransactionId: createdTransaction.id,
+          },
         });
-        if (updatedDestSub) {
-          updatedBalances.push({
-            id: destinationSubAccountId,
-            name: `${updatedDestSub.account.name} → ${updatedDestSub.name}`,
-            balance: toNumber(updatedDestSub.balance),
-            isSubAccount: true,
-          });
-        }
-      } else {
-        const updatedDestAcc = await db.account.findUnique({
-          where: { id: transferToAccountId },
-          select: { balance: true, name: true },
+
+        await tx.transaction.update({
+          where: { id: createdTransaction.id },
+          data: { relatedTransactionId: counterpart.id },
         });
-        if (updatedDestAcc) {
-          updatedBalances.push({
-            id: transferToAccountId,
-            name: updatedDestAcc.name,
-            balance: toNumber(updatedDestAcc.balance),
-            isSubAccount: false,
-          });
-        }
+
+        await applyBalanceDelta(tx, {
+          accountId: transferToAccountId,
+          subAccountId: destinationSubAccountId,
+          amount,
+        });
+
+        createdTransaction.relatedTransactionId = counterpart.id;
       }
-    }
+
+      const balances: BalanceSnapshot[] = await getUniqueBalanceSnapshots(tx, [
+        { accountId: accountId || null, subAccountId: sourceSubAccountId },
+        { accountId: transferToAccountId || null, subAccountId: destinationSubAccountId },
+      ]);
+
+      return { transaction: createdTransaction, updatedBalances: balances };
+    });
 
     // Notify other shared account users about new transaction
     if (accountId) {
@@ -482,6 +383,13 @@ export async function POST(req: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     if (error instanceof Response) return error;
+    if (
+      error instanceof Error &&
+      (error.message === "El bolsillo origen no pertenece a la cuenta origen" ||
+        error.message === "El bolsillo destino no pertenece a la cuenta destino")
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("Create transaction error:", error);
     return NextResponse.json({ error: "Error al crear transacción" }, { status: 500 });
   }

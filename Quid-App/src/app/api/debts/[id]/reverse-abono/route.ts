@@ -4,8 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtReverseAbonoSchema } from "@/lib/validations";
-
-type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+import { applyBalanceDelta, applyBudgetDelta } from "@/lib/finance-ledger";
 
 /**
  * Reverse a specific "abono a capital" by its Abono ID.
@@ -44,115 +43,96 @@ export async function POST(
       return NextResponse.json({ error: "Se requiere el ID del abono" }, { status: 400 });
     }
 
-    // Find the abono record
-    const abono = await db.abono.findFirst({
-      where: {
-        id: abonoId,
-        debtId,
-        userId: session.user.id,
-        isReversed: false,
-      },
-      include: {
-        details: true,
-      },
-    });
-
-    if (!abono) {
-      return NextResponse.json(
-        { error: "Abono no encontrado o ya fue reversado" },
-        { status: 404 }
-      );
-    }
-
-    // ── 1. Restore each installment's remainingBalance ──
-    for (const detail of abono.details) {
-      const installment = await db.installment.findUnique({
-        where: { id: detail.installmentId },
+    const result = await db.$transaction(async (tx) => {
+      const abono = await tx.abono.findFirst({
+        where: {
+          id: abonoId,
+          debtId,
+          userId: session.user.id,
+          isReversed: false,
+        },
+        include: {
+          details: true,
+        },
       });
 
-      if (installment) {
-        // Restore the remainingBalance by the amount that was deducted
-        const currentBalance = toNumber(installment.remainingBalance ?? installment.totalAmount);
-        const restoredBalance = currentBalance + toNumber(detail.amount);
-
-        await db.installment.update({
-          where: { id: installment.id },
-          data: {
-            remainingBalance: restoredBalance,
-          },
-        });
+      if (!abono) {
+        throw new Error("Abono no encontrado o ya fue reversado");
       }
-    }
 
-    // ── 2. Restore debt.currentBalance ──
-    await db.debt.update({
-      where: { id: debtId },
-      data: { currentBalance: { increment: abono.totalAmount } },
-    });
+      for (const detail of abono.details) {
+        const installment = await tx.installment.findUnique({
+          where: { id: detail.installmentId },
+        });
 
-    // ── 3. Restore account/subaccount balance ──
-    if (abono.subAccountId) {
-      await db.subAccount.update({
-        where: { id: abono.subAccountId },
-        data: { balance: { increment: abono.totalAmount } },
-      });
-    } else {
-      await db.account.update({
-        where: { id: abono.accountId },
-        data: { balance: { increment: abono.totalAmount } },
-      });
-    }
+        if (installment) {
+          const currentBalance = toNumber(installment.remainingBalance ?? installment.totalAmount);
+          const restoredBalance = currentBalance + toNumber(detail.amount);
 
-    // ── 4. Reverse budget spending using debt's category ──
-    const debt = await db.debt.findFirst({
-      where: { id: debtId, userId: session.user.id },
-      select: { category: true, subCategory: true },
-    });
-    const categoryToMatch = debt?.category || "Deudas";
-    const subCatToMatch = debt?.subCategory || null;
-    let budget: BudgetRecord = null;
-    if (subCatToMatch) {
-      budget = await db.budget.findFirst({
-        where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },
-      });
-    }
-    if (!budget) {
-      budget = await db.budget.findFirst({
-        where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: "expense" },
-      });
-    }
-    if (budget) {
-      await db.budget.update({
-        where: { id: budget.id },
-        data: { spent: { increment: -abono.totalAmount } },
-      });
-    }
+          await tx.installment.update({
+            where: { id: installment.id },
+            data: { remainingBalance: restoredBalance },
+          });
+        }
+      }
 
-    // ── 5. Delete the associated transaction ──
-    if (abono.transactionId) {
-      await db.transaction.delete({
-        where: { id: abono.transactionId },
-      }).catch(() => {
-        // Transaction may have already been deleted; that's OK
+      await tx.debt.update({
+        where: { id: debtId },
+        data: { currentBalance: { increment: abono.totalAmount } },
       });
-    }
 
-    // ── 6. Mark abono as reversed ──
-    await db.abono.update({
-      where: { id: abono.id },
-      data: {
-        isReversed: true,
-        transactionId: null,
-      },
+      await applyBalanceDelta(tx, {
+        accountId: abono.accountId,
+        subAccountId: abono.subAccountId,
+        amount: toNumber(abono.totalAmount),
+      });
+
+      const debt = await tx.debt.findFirst({
+        where: { id: debtId, userId: session.user.id },
+        select: { category: true, subCategory: true },
+      });
+
+      await applyBudgetDelta(tx, {
+        userId: session.user.id,
+        category: debt?.category || "Deudas",
+        subCategory: debt?.subCategory || null,
+        type: "expense",
+        amount: -toNumber(abono.totalAmount),
+      });
+
+      if (abono.transactionId) {
+        try {
+          await tx.transaction.delete({
+            where: { id: abono.transactionId },
+          });
+        } catch {
+          // The linked transaction may have already been deleted.
+        }
+      }
+
+      await tx.abono.update({
+        where: { id: abono.id },
+        data: {
+          isReversed: true,
+          transactionId: null,
+        },
+      });
+
+      return {
+        totalReversed: toNumber(abono.totalAmount),
+        reversedDetails: abono.details.length,
+      };
     });
 
     return NextResponse.json({
       success: true,
-      totalReversed: toNumber(abono.totalAmount),
-      reversedDetails: abono.details.length,
+      ...result,
     });
   } catch (error) {
     if (error instanceof Response) return error;
+    if (error instanceof Error && error.message === "Abono no encontrado o ya fue reversado") {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
     console.error("Reverse abono error:", error);
     return NextResponse.json({ error: "Error al reversar el abono" }, { status: 500 });
   }

@@ -5,10 +5,9 @@ import { db } from "@/lib/db";
 import { getColombiaNow, getColombiaTodayString, createColombiaDate } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtPaySchema } from "@/lib/validations";
-import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { verifyEntityMutationAccess } from "@/lib/auth-guards";
-
-type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+import { applyBalanceDelta } from "@/lib/finance-ledger";
 
 function normalizeOptionalId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -242,6 +241,7 @@ export async function POST(
       }
     }
 
+    await db.$transaction(async (tx) => {
     // Update each installment — mark as paid
     for (const installment of dueInstallments) {
       let capital: number;
@@ -295,7 +295,7 @@ export async function POST(
       categoryPayments[budgetKey] = (categoryPayments[budgetKey] || 0) + totalPaymentForThis;
 
       // Mark this installment as paid
-      await db.installment.update({
+      await tx.installment.update({
         where: { id: installment.id },
         data: {
           isPaid: true,
@@ -315,7 +315,7 @@ export async function POST(
     // Auto-create the next installment for each multi-installment purchase that was just paid
     // (similar to how recurring payments work: confirm one → create the next)
     for (const paidId of paidInstallmentIds) {
-      const paidInst = await db.installment.findUnique({ where: { id: paidId } });
+      const paidInst = await tx.installment.findUnique({ where: { id: paidId } });
       if (!paidInst) continue;
 
       // Calculate next payment date: one month after the paid installment's nextPaymentDate
@@ -334,7 +334,7 @@ export async function POST(
       const previousBalance = toNumber(paidInst.remainingBalance ?? paidInst.totalAmount);
       const newRemainingBalance = previousBalance - capitalUsed;
 
-      const nextInstallment = await db.installment.create({
+      const nextInstallment = await tx.installment.create({
         data: {
           debtId: paidInst.debtId,
           description: paidInst.description,
@@ -364,6 +364,7 @@ export async function POST(
         subCategory: nextInstallment.subCategory,
         installmentAmount: Number(nextInstallment.installmentAmount),
         nextPaymentDate: nextInstallment.nextPaymentDate,
+        client: tx,
       });
     }
 
@@ -390,7 +391,7 @@ export async function POST(
         totalCapital += toNumber(installment.installmentAmount);
       }
     }
-    await db.debt.update({
+    await tx.debt.update({
       where: { id },
       data: { currentBalance: { increment: -totalCapital } },
     });
@@ -456,7 +457,7 @@ export async function POST(
         const detailsJson = JSON.stringify(group.details);
         const notesWithIds = `installmentIds:${group.installmentIds.join(",")} | ${detailsJson}`;
 
-        await db.transaction.create({
+        await tx.transaction.create({
           data: {
             userId: session.user.id,
             accountId: group.accountId,
@@ -506,7 +507,7 @@ export async function POST(
         const { accountId: effectiveAccountId, subAccountId: effectiveSubAccountId } = getLoanPaymentSource(inst);
 
         if (effectiveAccountId) {
-          await db.transaction.create({
+          await tx.transaction.create({
             data: {
               userId: session.user.id,
               accountId: effectiveAccountId,
@@ -548,40 +549,26 @@ export async function POST(
           categoryToMatch = budgetKey;
         }
 
-        let budget: BudgetRecord = null;
-        if (subCatToMatch) {
-          budget = await db.budget.findFirst({
-            where: { userId: session.user.id, category: categoryToMatch, subCategory: subCatToMatch, type: "expense" },
-          });
-        }
-        if (!budget) {
-          budget = await db.budget.findFirst({
-            where: { userId: session.user.id, category: categoryToMatch, subCategory: null, type: "expense" },
-          });
-        }
-        if (budget) {
-          await db.budget.update({
-            where: { id: budget.id },
-            data: { spent: { increment: amount } },
-          });
-        }
+        await adjustBudgetSpent({
+          userId: session.user.id,
+          category: categoryToMatch,
+          subCategory: subCatToMatch,
+          type: "expense",
+          amount,
+          client: tx,
+        });
       }
     }
 
     // Debit from accounts/subaccounts
     for (const deduction of Object.values(accountBalanceDeductions)) {
-      if (deduction.subAccountId) {
-        await db.subAccount.update({
-          where: { id: deduction.subAccountId },
-          data: { balance: { increment: -deduction.amount } },
-        });
-      } else if (deduction.accountId) {
-        await db.account.update({
-          where: { id: deduction.accountId },
-          data: { balance: { increment: -deduction.amount } },
-        });
-      }
+      await applyBalanceDelta(tx, {
+        accountId: deduction.accountId,
+        subAccountId: deduction.subAccountId,
+        amount: -deduction.amount,
+      });
     }
+    });
 
     return NextResponse.json({
       success: true,

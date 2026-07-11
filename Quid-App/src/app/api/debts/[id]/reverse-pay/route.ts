@@ -3,9 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
-import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
-
-type BudgetRecord = Awaited<ReturnType<typeof db.budget.findFirst>>;
+import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { applyBalanceDelta } from "@/lib/finance-ledger";
 
 /**
  * Reverse the last payment made for a debt's installments.
@@ -153,163 +152,125 @@ export async function POST(
       );
     }
 
-    // ── 3. Find and reverse each installment ──
-    const installments = await db.installment.findMany({
-      where: {
-        id: { in: allInstallmentIds },
-        debtId: debt.id,
-      },
-    });
-
-    let totalReversed = 0;
-    const categoryReversals: Record<string, number> = {};
-
-    for (const installment of installments) {
-      // In the new model, paid installments have isPaid=true and paidAmount=installmentAmount
-      // We need to: (a) delete the auto-created next installment, (b) mark this one back as unpaid
-      const reversalAmount = toNumber(installment.paidAmount || installment.installmentAmount);
-      totalReversed += reversalAmount;
-
-      // Track category for budget reversal
-      const catKey = installment.category || "Deudas";
-      const subCatKey = installment.subCategory || "";
-      const budgetKey = subCatKey ? `${catKey}::${subCatKey}` : catKey;
-      categoryReversals[budgetKey] = (categoryReversals[budgetKey] || 0) + reversalAmount;
-
-      // (a) Delete the auto-created next installment (if it exists)
-      // The "next" installment has: same description, same debtId, currentInstallment = this.currentInstallment + 1
-      if (installment.currentInstallment < installment.totalInstallments) {
-        const nextInstallment = await db.installment.findFirst({
-          where: {
-            debtId: installment.debtId,
-            description: installment.description,
-            currentInstallment: installment.currentInstallment + 1,
-            isPaid: false,
-          },
-        });
-        if (nextInstallment) {
-          await applyCreditInstallmentBudgetImpact({
-            userId: session.user.id,
-            debtType: debt.type,
-            category: nextInstallment.category,
-            subCategory: nextInstallment.subCategory,
-            installmentAmount: Number(nextInstallment.installmentAmount),
-            nextPaymentDate: nextInstallment.nextPaymentDate,
-            direction: -1,
-          });
-
-          await db.installment.delete({ where: { id: nextInstallment.id } });
-        }
-      }
-
-      // (b) Mark this installment back as unpaid, clear interest data
-      await db.installment.update({
-        where: { id: installment.id },
-        data: {
-          isPaid: false,
-          paidAmount: 0,
-          interestRate: null,
-          interestAmount: null,
-          otherChargesAmount: null,
+    const result = await db.$transaction(async (tx) => {
+      const installments = await tx.installment.findMany({
+        where: {
+          id: { in: allInstallmentIds },
+          debtId: debt.id,
         },
       });
-    }
 
-    // ── 4. Restore debt balance (only by the capital that was paid) ──
-    // For loans: only capital reduces the balance (not interest or otherCharges)
-    // For credit cards: installmentAmount is the capital
-    let totalCapitalToRestore = 0;
-    for (const installment of installments) {
-      if (debt.type === "loan") {
-        // For loans: paidAmount includes capital + interest + otherCharges
-        // We only restore capital (= paidAmount - interestAmount - otherChargesAmount)
-        const paidTotal = toNumber(installment.paidAmount || 0);
-        const interestPaid = toNumber(installment.interestAmount || 0);
-        const otherPaid = toNumber(installment.otherChargesAmount || 0);
-        totalCapitalToRestore += (paidTotal - interestPaid - otherPaid);
-      } else {
-        totalCapitalToRestore += toNumber(installment.installmentAmount);
-      }
-    }
-    if (totalCapitalToRestore > 0) {
-      await db.debt.update({
-        where: { id: debt.id },
-        data: { currentBalance: { increment: totalCapitalToRestore } },
-      });
-    }
+      let totalReversed = 0;
+      const categoryReversals: Record<string, number> = {};
 
-    // ── 5. Reverse transactions and restore account/subaccount balances ──
-    for (const tx of batchTransactions) {
-      // Restore subaccount if present, otherwise restore account
-      if (tx.subAccountId) {
-        await db.subAccount.update({
-          where: { id: tx.subAccountId },
-          data: { balance: { increment: toNumber(tx.amount) } },
+      for (const installment of installments) {
+        const reversalAmount = toNumber(installment.paidAmount || installment.installmentAmount);
+        totalReversed += reversalAmount;
+
+        const catKey = installment.category || "Deudas";
+        const subCatKey = installment.subCategory || "";
+        const budgetKey = subCatKey ? `${catKey}::${subCatKey}` : catKey;
+        categoryReversals[budgetKey] = (categoryReversals[budgetKey] || 0) + reversalAmount;
+
+        if (installment.currentInstallment < installment.totalInstallments) {
+          const nextInstallment = await tx.installment.findFirst({
+            where: {
+              debtId: installment.debtId,
+              description: installment.description,
+              currentInstallment: installment.currentInstallment + 1,
+              isPaid: false,
+            },
+          });
+          if (nextInstallment) {
+            await applyCreditInstallmentBudgetImpact({
+              userId: session.user.id,
+              debtType: debt.type,
+              category: nextInstallment.category,
+              subCategory: nextInstallment.subCategory,
+              installmentAmount: Number(nextInstallment.installmentAmount),
+              nextPaymentDate: nextInstallment.nextPaymentDate,
+              direction: -1,
+              client: tx,
+            });
+
+            await tx.installment.delete({ where: { id: nextInstallment.id } });
+          }
+        }
+
+        await tx.installment.update({
+          where: { id: installment.id },
+          data: {
+            isPaid: false,
+            paidAmount: 0,
+            interestRate: null,
+            interestAmount: null,
+            otherChargesAmount: null,
+          },
         });
-      } else if (tx.accountId) {
-        await db.account.update({
-          where: { id: tx.accountId },
-          data: { balance: { increment: toNumber(tx.amount) } },
-        });
       }
 
-      // Delete the transaction
-      await db.transaction.delete({ where: { id: tx.id } });
-    }
-
-    // ── 6. Reverse budget spending (LOANS only) ──
-    // For credit cards: budget was already updated at purchase time (not at payment time),
-    // so we DON'T reverse it here. Reversing the installment (step 3) will cause
-    // the recalculate to properly adjust.
-    // For loans: the payment IS the expense, so we reverse the budget.
-    const isLoan = debt.type === "loan";
-    if (isLoan) {
-      for (const [budgetKey, amount] of Object.entries(categoryReversals)) {
-        let categoryToMatch: string;
-        let subCatToMatch: string | null = null;
-
-        if (budgetKey.includes("::")) {
-          const [cat, sub] = budgetKey.split("::");
-          categoryToMatch = cat;
-          subCatToMatch = sub;
+      let totalCapitalToRestore = 0;
+      for (const installment of installments) {
+        if (debt.type === "loan") {
+          const paidTotal = toNumber(installment.paidAmount || 0);
+          const interestPaid = toNumber(installment.interestAmount || 0);
+          const otherPaid = toNumber(installment.otherChargesAmount || 0);
+          totalCapitalToRestore += (paidTotal - interestPaid - otherPaid);
         } else {
-          categoryToMatch = budgetKey;
+          totalCapitalToRestore += toNumber(installment.installmentAmount);
         }
+      }
 
-        let budget: BudgetRecord = null;
-        if (subCatToMatch) {
-          budget = await db.budget.findFirst({
-            where: {
-              userId: session.user.id,
-              category: categoryToMatch,
-              subCategory: subCatToMatch,
-              type: "expense",
-            },
-          });
-        }
-        if (!budget) {
-          budget = await db.budget.findFirst({
-            where: {
-              userId: session.user.id,
-              category: categoryToMatch,
-              subCategory: null,
-              type: "expense",
-            },
-          });
-        }
-        if (budget) {
-          await db.budget.update({
-            where: { id: budget.id },
-            data: { spent: { increment: -amount } },
+      if (totalCapitalToRestore > 0) {
+        await tx.debt.update({
+          where: { id: debt.id },
+          data: { currentBalance: { increment: totalCapitalToRestore } },
+        });
+      }
+
+      for (const transaction of batchTransactions) {
+        await applyBalanceDelta(tx, {
+          accountId: transaction.accountId,
+          subAccountId: transaction.subAccountId,
+          amount: toNumber(transaction.amount),
+        });
+
+        await tx.transaction.delete({ where: { id: transaction.id } });
+      }
+
+      if (debt.type === "loan") {
+        for (const [budgetKey, amount] of Object.entries(categoryReversals)) {
+          let categoryToMatch: string;
+          let subCatToMatch: string | null = null;
+
+          if (budgetKey.includes("::")) {
+            const [cat, sub] = budgetKey.split("::");
+            categoryToMatch = cat;
+            subCatToMatch = sub;
+          } else {
+            categoryToMatch = budgetKey;
+          }
+
+          await adjustBudgetSpent({
+            userId: session.user.id,
+            category: categoryToMatch,
+            subCategory: subCatToMatch,
+            type: "expense",
+            amount: -amount,
+            client: tx,
           });
         }
       }
-    }
+
+      return {
+        totalReversed,
+        reversedInstallments: installments.length,
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      totalReversed,
-      reversedInstallments: installments.length,
+      ...result,
     });
   } catch (error) {
     console.error("Reverse debt payment error:", error);
