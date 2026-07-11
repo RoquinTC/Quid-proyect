@@ -600,7 +600,50 @@ export function DebtDetail() {
     return sum + amount;
   }, 0);
 
-  // Build payment summary: group SELECTED due installments by their source account/pocket
+  const unpaidCreditInstallments = isCreditCard
+    ? debt.installments
+        .filter((inst) => !inst.isPaid)
+        .sort((a, b) => new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime())
+    : [];
+
+  const nextCycleInstallments = (() => {
+    if (!isCreditCard || unpaidCreditInstallments.length === 0) return [];
+    if (!debt.cutoffDate || !debt.paymentDate) return unpaidCreditInstallments;
+
+    const firstDate = new Date(unpaidCreditInstallments[0].nextPaymentDate);
+    const firstCycle = getCycleFromPaymentDate(firstDate, debt.cutoffDate, debt.paymentDate);
+
+    return unpaidCreditInstallments.filter((inst) => {
+      const cycle = getCycleFromPaymentDate(new Date(inst.nextPaymentDate), debt.cutoffDate!, debt.paymentDate!);
+      return cycle.year === firstCycle.year && cycle.month === firstCycle.month;
+    });
+  })();
+
+  const paymentInsightInstallments = isCreditCard
+    ? selectedDueInstallments.length > 0
+      ? selectedDueInstallments
+      : dueInstallments.length > 0
+      ? dueInstallments
+      : nextCycleInstallments
+    : selectedDueInstallments;
+
+  const paymentInsightMode = isCreditCard
+    ? selectedDueInstallments.length > 0
+      ? "Seleccionado"
+      : dueInstallments.length > 0
+      ? "Vencido"
+      : "Próximo cobro"
+    : "Seleccionado";
+
+  const paymentInsightDescription = isCreditCard
+    ? selectedDueInstallments.length > 0
+      ? "Validando las cuotas que seleccionaste contra su cuenta asociada"
+      : dueInstallments.length > 0
+      ? "Validando lo que ya está listo para pagar contra su cuenta asociada"
+      : "Aún no está vencido; te muestro el próximo cobro estimado"
+    : "Validando contra la cuenta asociada";
+
+  // Build payment summary: group insight installments by their source account/pocket
   const paymentSummary: Record<string, {
     accountName: string;
     subAccountName: string | null;
@@ -610,7 +653,7 @@ export function DebtDetail() {
     purchases: string[];
   }> = {};
 
-  for (const inst of selectedDueInstallments) {
+  for (const inst of paymentInsightInstallments) {
     const key = `${inst.accountId || "none"}-${inst.subAccountId || "none"}`;
     if (!paymentSummary[key]) {
       const balance = getPaymentSourceBalance(inst.accountId, inst.subAccountId);
@@ -632,6 +675,7 @@ export function DebtDetail() {
   }
 
   const paymentSummaryGroups = Object.entries(paymentSummary);
+  const paymentInsightTotal = paymentInsightInstallments.reduce((sum, inst) => sum + inst.installmentAmount, 0);
 
   return (
     <motion.div
@@ -760,6 +804,99 @@ export function DebtDetail() {
           )}
         </CardContent>
       </Card>
+
+      {/* Payment capacity summary — visible for credit cards with pending purchases */}
+      {isCreditCard && paymentInsightInstallments.length > 0 && (
+        <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Estado de pago
+                </h4>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {paymentInsightDescription}
+                </p>
+              </div>
+              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                {paymentInsightMode}
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {paymentSummaryGroups.map(([key, group]) => {
+                const hasLinkedBalance = group.balance !== null;
+                const isShort = hasLinkedBalance && (group.difference ?? 0) < 0;
+                const difference = group.difference ?? 0;
+                const sourceLabel = group.subAccountName
+                  ? `${group.accountName} · ${group.subAccountName}`
+                  : group.accountName;
+
+                return (
+                  <div
+                    key={key}
+                    className={[
+                      "rounded-2xl p-3 border",
+                      isShort
+                        ? "bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900/50"
+                        : "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/50",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Wallet className={isShort ? "size-3.5 text-rose-500" : "size-3.5 text-emerald-500"} />
+                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">
+                            {sourceLabel}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">Por cobrar</p>
+                            <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(group.amount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">Disponible</p>
+                            <p className="font-bold text-gray-900 dark:text-white">
+                              {hasLinkedBalance ? formatCurrency(group.balance ?? 0) : "Sin dato"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-500 dark:text-gray-400">{isShort ? "Te falta" : "Queda"}</p>
+                            <p className={isShort ? "font-bold text-rose-600 dark:text-rose-400" : "font-bold text-emerald-600 dark:text-emerald-400"}>
+                              {hasLinkedBalance ? formatCurrency(Math.abs(difference)) : "-"}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2 truncate">
+                          {group.purchases.length === 1
+                            ? group.purchases[0]
+                            : `${group.purchases.length} compras: ${group.purchases.slice(0, 2).join(", ")}${group.purchases.length > 2 ? "..." : ""}`}
+                        </p>
+                      </div>
+                      <div className={isShort ? "text-rose-500" : "text-emerald-500"}>
+                        {isShort ? <AlertTriangle className="size-5" /> : <CheckCircle2 className="size-5" />}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {paymentSummaryGroups.some(([, group]) => group.balance === null) && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  Hay compras sin cuenta origen enlazada. No se puede calcular disponibilidad para esas cuotas.
+                </p>
+              )}
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Total a revisar
+              </span>
+              <span className="text-base font-bold text-gray-900 dark:text-white">
+                {formatCurrency(paymentInsightTotal)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Installments Section */}
       <div className="space-y-3">
@@ -948,99 +1085,6 @@ export function DebtDetail() {
       {/* ── Credit Card / Other: Pay/Reverse/Abono buttons are handled by InstallmentPlan component ── */}
       {/* The InstallmentPlan component renders its own pay/reverse/abono buttons for non-loan debts */}
       {/* This section was removed to avoid duplicate buttons */}
-
-      {/* Payment capacity summary — only for selected installments */}
-      {selectedDueInstallments.length > 0 && (
-        <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Estado de pago
-                </h4>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Validando contra la cuenta asociada a cada compra
-                </p>
-              </div>
-              <Badge variant="secondary" className="text-xs whitespace-nowrap">
-                {selectedDueInstallments.length} / {dueInstallments.length || selectedDueInstallments.length}
-              </Badge>
-            </div>
-            <div className="space-y-2">
-              {paymentSummaryGroups.map(([key, group]) => {
-                const hasLinkedBalance = group.balance !== null;
-                const isShort = hasLinkedBalance && (group.difference ?? 0) < 0;
-                const difference = group.difference ?? 0;
-                const sourceLabel = group.subAccountName
-                  ? `${group.accountName} · ${group.subAccountName}`
-                  : group.accountName;
-
-                return (
-                  <div
-                    key={key}
-                    className={[
-                      "rounded-2xl p-3 border",
-                      isShort
-                        ? "bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-900/50"
-                        : "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/50",
-                    ].join(" ")}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <Wallet className={isShort ? "size-3.5 text-rose-500" : "size-3.5 text-emerald-500"} />
-                          <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">
-                            {sourceLabel}
-                          </span>
-                        </div>
-                        <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
-                          <div>
-                            <p className="text-gray-500 dark:text-gray-400">Por cobrar</p>
-                            <p className="font-bold text-gray-900 dark:text-white">{formatCurrency(group.amount)}</p>
-                          </div>
-                          <div>
-                            <p className="text-gray-500 dark:text-gray-400">Disponible</p>
-                            <p className="font-bold text-gray-900 dark:text-white">
-                              {hasLinkedBalance ? formatCurrency(group.balance ?? 0) : "Sin dato"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-gray-500 dark:text-gray-400">{isShort ? "Te falta" : "Queda"}</p>
-                            <p className={isShort ? "font-bold text-rose-600 dark:text-rose-400" : "font-bold text-emerald-600 dark:text-emerald-400"}>
-                              {hasLinkedBalance ? formatCurrency(Math.abs(difference)) : "-"}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2 truncate">
-                          {group.purchases.length === 1
-                            ? group.purchases[0]
-                            : `${group.purchases.length} compras: ${group.purchases.slice(0, 2).join(", ")}${group.purchases.length > 2 ? "..." : ""}`}
-                        </p>
-                      </div>
-                      <div className={isShort ? "text-rose-500" : "text-emerald-500"}>
-                        {isShort ? <AlertTriangle className="size-5" /> : <CheckCircle2 className="size-5" />}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {paymentSummaryGroups.some(([, group]) => group.balance === null) && (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                  Hay compras sin cuenta origen enlazada. No se puede calcular disponibilidad para esas cuotas.
-                </p>
-              )}
-            </div>
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
-              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                Total seleccionado
-              </span>
-              <span className="text-base font-bold text-gray-900 dark:text-white">
-                {formatCurrency(totalDue)}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Delete Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

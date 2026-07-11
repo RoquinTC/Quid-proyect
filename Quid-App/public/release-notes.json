@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.0.18",
+  "currentVersion": "1.0.19",
   "releases": [
+    {
+      "version": "1.0.19",
+      "date": "2026-07-11",
+      "title": "Estado de pago visible en tarjetas",
+      "changes": [
+        "El estado de pago de las tarjetas ahora aparece aunque las cuotas todavia no esten vencidas.",
+        "Quid muestra el proximo cobro estimado y compara contra la cuenta o bolsillo asociado.",
+        "El resumen queda arriba del listado de compras para verlo sin buscar entre las cuotas."
+      ]
+    },
     {
       "version": "1.0.18",
       "date": "2026-07-11",
