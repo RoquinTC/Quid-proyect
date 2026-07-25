@@ -605,19 +605,64 @@ export function AccountDetail() {
     };
 
     debts.forEach((debt) => {
-      const unpaidInstallments = (debt.installments || []).filter((inst) => !inst.isPaid);
-      unpaidInstallments.forEach((inst) => {
-        const placeId = inst.subAccountId || inst.accountId || debt.subAccountId || debt.accountId;
-        if (!placeId || !accountPlaceIds.has(placeId)) return;
+      const groupedInstallments = (debt.installments || [])
+        .filter((inst) => !inst.isPaid)
+        .reduce(
+          (groups, inst) => {
+            const placeId = inst.subAccountId || inst.accountId || debt.subAccountId || debt.accountId;
+            if (!placeId || !accountPlaceIds.has(placeId)) return groups;
+
+            const accountId = inst.accountId || debt.accountId || null;
+            const subAccountId = inst.subAccountId || debt.subAccountId || null;
+            const key = `${debt.id}:${accountId || "account"}:${subAccountId || "main"}`;
+            const existing = groups.get(key) || {
+              amount: 0,
+              count: 0,
+              accountId,
+              subAccountId,
+              nextDate: null as string | null,
+            };
+
+            const instDate = inst.nextPaymentDate || null;
+            const nextDate = !existing.nextDate
+              ? instDate
+              : instDate && new Date(instDate).getTime() < new Date(existing.nextDate).getTime()
+                ? instDate
+                : existing.nextDate;
+
+            groups.set(key, {
+              ...existing,
+              amount: existing.amount + Number(inst.installmentAmount || 0),
+              count: existing.count + 1,
+              nextDate,
+            });
+
+            return groups;
+          },
+          new Map<string, {
+            amount: number;
+            count: number;
+            accountId: string | null;
+            subAccountId: string | null;
+            nextDate: string | null;
+          }>()
+        );
+
+      groupedInstallments.forEach((group, key) => {
+        if (group.amount <= 0) return;
+
+        const unitLabel = debt.type === "loan"
+          ? group.count === 1 ? "1 cuota pendiente" : `${group.count} cuotas pendientes`
+          : group.count === 1 ? "1 factura pendiente" : `${group.count} facturas pendientes`;
 
         items.push({
-          id: `debt-${debt.id}-${inst.id}`,
+          id: `debt-${key}`,
           title: debt.name,
-          subtitle: inst.description || (debt.type === "loan" ? "Cuota de préstamo" : "Cuota tarjeta"),
-          amount: Number(inst.installmentAmount || 0),
+          subtitle: unitLabel,
+          amount: group.amount,
           kind: "debt",
-          placeLabel: resolvePlaceLabel(inst.accountId || debt.accountId, inst.subAccountId || debt.subAccountId),
-          date: inst.nextPaymentDate,
+          placeLabel: resolvePlaceLabel(group.accountId, group.subAccountId),
+          date: group.nextDate,
           sourceId: debt.id,
         });
       });
