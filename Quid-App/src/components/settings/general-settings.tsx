@@ -3,6 +3,13 @@
 import { useState } from "react";
 import { useTheme } from "next-themes";
 import { apiFetch } from "@/lib/api";
+import {
+  fetchReleaseNotes,
+  getLastKnownRelease,
+  isReleaseNewer,
+  markReleaseKnown,
+  rememberPendingAppliedRelease,
+} from "@/lib/pwa/release-notes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -41,6 +48,7 @@ import {
   Check,
   Trophy,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { BackupManager } from "@/components/settings/backup-manager";
 import { AchievementsView } from "@/components/settings/achievements-view";
@@ -125,6 +133,7 @@ export function GeneralSettings({
   const { setTheme: applyTheme } = useTheme();
   const push = usePushNotifications();
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme());
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   // Dialog states
   const [showResetFinanceDialog, setShowResetFinanceDialog] = useState(false);
@@ -135,6 +144,54 @@ export function GeneralSettings({
   const [resettingAll, setResettingAll] = useState(false);
   const [resettingTransport, setResettingTransport] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const handleManualUpdateCheck = async () => {
+    setCheckingUpdate(true);
+    try {
+      const manifest = await fetchReleaseNotes();
+      if (!manifest) {
+        setResetResult("No pude consultar actualizaciones en este momento");
+        setTimeout(() => setResetResult(null), 3000);
+        return;
+      }
+
+      const knownVersion = getLastKnownRelease() || appVersion;
+      if (!isReleaseNewer(manifest.currentVersion, knownVersion)) {
+        markReleaseKnown(manifest.currentVersion);
+        setResetResult("Ya tienes la ultima version de Quid");
+        setTimeout(() => setResetResult(null), 3000);
+        return;
+      }
+
+      rememberPendingAppliedRelease(manifest.currentVersion);
+      setResetResult(`Actualizando a Quid ${manifest.currentVersion}...`);
+
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+          registrations.map((registration) => {
+            registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+            registration.active?.postMessage({ type: "CLEAR_CACHE" });
+            return registration.update().catch(() => undefined);
+          })
+        );
+      }
+
+      if ("caches" in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map((name) => caches.delete(name)));
+      }
+
+      markReleaseKnown(manifest.currentVersion);
+      window.location.replace(`/?updated=${Date.now()}`);
+    } catch (error) {
+      console.error("Manual update check failed:", error);
+      setResetResult("No se pudo aplicar la actualizacion");
+      setTimeout(() => setResetResult(null), 3000);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const updateAccentColor = (accent: AccentColor) => {
     setAccentColor(accent);
@@ -606,6 +663,21 @@ export function GeneralSettings({
           <p className="text-[11px] font-semibold text-gray-900 dark:text-white">Quid</p>
           <div className="flex flex-col gap-0.5">
             <p className="text-[11px] text-gray-400">Versión {appVersion}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mx-auto mt-1 h-7 rounded-xl px-3 text-[11px]"
+              onClick={handleManualUpdateCheck}
+              disabled={checkingUpdate}
+            >
+              {checkingUpdate ? (
+                <Loader2 className="mr-1.5 size-3 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1.5 size-3" />
+              )}
+              Buscar actualización
+            </Button>
             <div className="flex items-center justify-center gap-1.5 opacity-70">
               <div className="size-1 rounded-full bg-emerald-500 animate-pulse" />
               <p className="text-[11px] text-gray-500">Canal beta Android/PWA</p>

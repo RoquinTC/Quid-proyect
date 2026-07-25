@@ -3,6 +3,7 @@
   "appName": "Quid",
   "webDir": "out",
   "server": {
+    "url": "https://quid.roquintc.app",
     "androidScheme": "https"
   }
 }

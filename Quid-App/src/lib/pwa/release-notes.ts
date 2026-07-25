@@ -1,6 +1,8 @@
 'use client';
 
-const RELEASE_NOTES_URL = '/release-notes.json';
+import { isNativeApiRuntime } from '@/lib/api-url';
+
+const RELEASE_NOTES_PATH = '/release-notes.json';
 const LAST_KNOWN_RELEASE_KEY = 'quid-last-known-release';
 const PENDING_RELEASE_KEY = 'quid-pending-applied-release';
 
@@ -21,6 +23,15 @@ export interface ReleaseSummary {
   fromVersion: string | null;
   releases: ReleaseNote[];
   totalChanges: number;
+}
+
+function getReleaseNotesUrl() {
+  if (typeof window !== 'undefined' && isNativeApiRuntime()) {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://quid.roquintc.app';
+    return `${backendUrl}${RELEASE_NOTES_PATH}`;
+  }
+
+  return RELEASE_NOTES_PATH;
 }
 
 function readStorage(key: string) {
@@ -65,7 +76,7 @@ function removeSessionStorage(key: string) {
 
 export async function fetchReleaseNotes(): Promise<ReleaseNotesManifest | null> {
   try {
-    const response = await fetch(`${RELEASE_NOTES_URL}?t=${Date.now()}`, {
+    const response = await fetch(`${getReleaseNotesUrl()}?t=${Date.now()}`, {
       cache: 'no-store',
       headers: { Accept: 'application/json' },
     });
@@ -87,6 +98,26 @@ export function getLastKnownRelease() {
 
 export function markReleaseKnown(version: string) {
   writeStorage(LAST_KNOWN_RELEASE_KEY, version);
+}
+
+export function isReleaseNewer(candidate: string | null | undefined, current: string | null | undefined) {
+  if (!candidate) return false;
+  if (!current) return true;
+  if (candidate === current) return false;
+
+  const candidateParts = candidate.split(/[.-]/).map((part) => Number.parseInt(part, 10));
+  const currentParts = current.split(/[.-]/).map((part) => Number.parseInt(part, 10));
+  const length = Math.max(candidateParts.length, currentParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const candidateValue = Number.isFinite(candidateParts[index]) ? candidateParts[index] : 0;
+    const currentValue = Number.isFinite(currentParts[index]) ? currentParts[index] : 0;
+
+    if (candidateValue > currentValue) return true;
+    if (candidateValue < currentValue) return false;
+  }
+
+  return candidate !== current;
 }
 
 export function rememberPendingAppliedRelease(version: string) {

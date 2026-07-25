@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.0.19",
+  "currentVersion": "1.0.20",
   "releases": [
+    {
+      "version": "1.0.20",
+      "date": "2026-07-25",
+      "title": "Cuentas y compromisos mas accionables",
+      "changes": [
+        "La vista de bolsillos ahora esta organizada por pestañas y selector horizontal para revisar cada bolsillo sin saturar la pantalla.",
+        "Los compromisos de una cuenta se separan entre deudas, recurrentes y metas para entender mejor que se debe cubrir.",
+        "Los pagos recurrentes se pueden confirmar desde compromisos ajustando el valor real antes de registrar el movimiento.",
+        "Las deudas se agrupan por tarjeta o prestamo y cuenta asociada, mostrando el total pendiente sin listar cada compra."
+      ]
+    },
     {
       "version": "1.0.19",
       "date": "2026-07-11",

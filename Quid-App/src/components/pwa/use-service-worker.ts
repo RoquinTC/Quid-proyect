@@ -1,12 +1,19 @@
 'use client';
 
 import { useEffect, useState, useCallback, useSyncExternalStore } from 'react';
+import {
+  fetchReleaseNotes,
+  getLastKnownRelease,
+  isReleaseNewer,
+  markReleaseKnown,
+} from '@/lib/pwa/release-notes';
 
 interface SWRegistration {
   registration: ServiceWorkerRegistration | null;
   updateAvailable: boolean;
   currentVersion: string | null;
   pendingVersion: string | null;
+  isNativeCapacitor: boolean;
 }
 
 // Use useSyncExternalStore for online/offline status (avoids setState in effect)
@@ -37,10 +44,18 @@ export function useServiceWorker() {
     updateAvailable: false,
     currentVersion: null,
     pendingVersion: null,
+    isNativeCapacitor: false,
   });
 
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
   const isOffline = useOnlineStatus();
+
+  const clearBrowserCaches = useCallback(async () => {
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map((name) => caches.delete(name)));
+    }
+  }, []);
 
   const getServiceWorkerVersion = useCallback((worker: ServiceWorker | null) => {
     if (!worker) return Promise.resolve<string | null>(null);
@@ -87,14 +102,7 @@ export function useServiceWorker() {
           const registrations = await navigator.serviceWorker.getRegistrations();
           await Promise.all(registrations.map((registration) => registration.unregister()));
 
-          if ('caches' in window) {
-            const cacheNames = await caches.keys();
-            await Promise.all(
-              cacheNames
-                .filter((name) => name.startsWith('quid-'))
-                .map((name) => caches.delete(name))
-            );
-          }
+          await clearBrowserCaches();
 
           console.log('[PWA] Service Worker disabled for Capacitor native app');
         } catch (error) {
@@ -103,7 +111,7 @@ export function useServiceWorker() {
       }
 
       clearNativeWebCaches();
-      setState((prev) => ({ ...prev, updateAvailable: false, pendingVersion: null }));
+      setState((prev) => ({ ...prev, isNativeCapacitor: true, updateAvailable: false, pendingVersion: null }));
       return;
     }
 
@@ -175,10 +183,74 @@ export function useServiceWorker() {
       }
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
-  }, [getServiceWorkerVersion]);
+  }, [clearBrowserCaches, getServiceWorkerVersion]);
+
+  // Capacitor/native WebView updater. Native builds do not use the PWA service
+  // worker, so they need a separate web-version check against the server.
+  useEffect(() => {
+    if (!state.isNativeCapacitor || isOffline) return;
+
+    let cancelled = false;
+
+    const checkNativeWebVersion = async () => {
+      const manifest = await fetchReleaseNotes();
+      if (!manifest || cancelled) return;
+
+      const knownVersion = getLastKnownRelease();
+      if (!knownVersion) {
+        markReleaseKnown(manifest.currentVersion);
+        setState((prev) => ({
+          ...prev,
+          currentVersion: manifest.currentVersion,
+          pendingVersion: null,
+          updateAvailable: false,
+        }));
+        return;
+      }
+
+      if (isReleaseNewer(manifest.currentVersion, knownVersion)) {
+        setState((prev) => ({
+          ...prev,
+          currentVersion: knownVersion,
+          pendingVersion: manifest.currentVersion,
+          updateAvailable: true,
+        }));
+        return;
+      }
+
+      setState((prev) => ({
+        ...prev,
+        currentVersion: knownVersion,
+        pendingVersion: null,
+        updateAvailable: false,
+      }));
+    };
+
+    checkNativeWebVersion();
+    const interval = window.setInterval(checkNativeWebVersion, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isOffline, state.isNativeCapacitor]);
 
   // Apply update — tell the waiting SW to activate
   const applyUpdate = useCallback(() => {
+    if (state.isNativeCapacitor) {
+      const versionToApply = state.pendingVersion;
+      console.log('[PWA] Applying Capacitor web update...');
+
+      (async () => {
+        await clearBrowserCaches();
+        if (versionToApply) markReleaseKnown(versionToApply);
+        window.location.replace(`/?updated=${Date.now()}`);
+      })();
+
+      setState((prev) => ({ ...prev, updateAvailable: false, pendingVersion: null }));
+      return;
+    }
+
     if (!waitingWorker) return;
 
     console.log('[PWA] Applying update...');
@@ -186,7 +258,7 @@ export function useServiceWorker() {
 
     setWaitingWorker(null);
     setState((prev) => ({ ...prev, updateAvailable: false, pendingVersion: null }));
-  }, [waitingWorker]);
+  }, [clearBrowserCaches, state.isNativeCapacitor, state.pendingVersion, waitingWorker]);
 
   // Clear all caches
   const clearCache = useCallback(async () => {
@@ -194,10 +266,9 @@ export function useServiceWorker() {
       state.registration.active.postMessage({ type: 'CLEAR_CACHE' });
     }
 
-    const cacheNames = await caches.keys();
-    await Promise.all(cacheNames.map((name) => caches.delete(name)));
+    await clearBrowserCaches();
     console.log('[PWA] All caches cleared');
-  }, [state.registration]);
+  }, [clearBrowserCaches, state.registration]);
 
   return {
     ...state,
