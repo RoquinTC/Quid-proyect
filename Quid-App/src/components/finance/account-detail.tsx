@@ -48,9 +48,13 @@ import {
   FolderTree,
   Receipt,
   User as UserIcon,
+  ShieldCheck,
+  AlertTriangle,
+  WalletCards,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog,
@@ -64,7 +68,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
-import type { Account, SubAccount, Transaction, CategoryData, UserSettings } from "@/lib/types";
+import type { Account, SubAccount, Transaction, CategoryData, UserSettings, Debt, RecurringPayment } from "@/lib/types";
 
 // Color config per transaction type
 const typeConfig = {
@@ -176,7 +180,10 @@ function formatDayMonth(dateStr: string): { day: string; month: string } {
 export function AccountDetail() {
   const { data: session } = useSession();
   const { setFinanceSubView } = useAppStore();
+  const [detailTab, setDetailTab] = useState("account");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [recurringPayments, setRecurringPayments] = useState<RecurringPayment[]>([]);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [showSubAccountForm, setShowSubAccountForm] = useState(false);
@@ -186,6 +193,7 @@ export function AccountDetail() {
   const [showTxDeleteDialog, setShowTxDeleteDialog] = useState<string | null>(null);
   const [editingSubAccount, setEditingSubAccount] = useState<SubAccount | null>(null);
   const [expandedSubAccount, setExpandedSubAccount] = useState<string | null>(null);
+  const [selectedPocketId, setSelectedPocketId] = useState("all");
   const [subTransactions, setSubTransactions] = useState<Record<string, Transaction[]>>({});
   const [cashbackMode, setCashbackMode] = useState(false);
 
@@ -249,6 +257,14 @@ export function AccountDetail() {
     fetchAccount();
   });
 
+  useDataEvent("debts", () => {
+    fetchCommitmentData();
+  });
+
+  useDataEvent("recurring", () => {
+    fetchCommitmentData();
+  });
+
   // Fetch user settings for budgetCutoffDay
   useEffect(() => {
     apiFetch<UserSettings>("/api/settings")
@@ -256,6 +272,23 @@ export function AccountDetail() {
       .catch(console.error)
       .finally(() => setSettingsLoaded(true));
   }, []);
+
+  const fetchCommitmentData = useCallback(async () => {
+    try {
+      const [debtData, recurringData] = await Promise.all([
+        apiFetch<Debt[]>("/api/debts"),
+        apiFetch<RecurringPayment[]>("/api/recurring"),
+      ]);
+      setDebts(debtData || []);
+      setRecurringPayments(recurringData || []);
+    } catch (error) {
+      console.error("Error fetching account commitments:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCommitmentData();
+  }, [fetchCommitmentData]);
 
   // Fetch transactions with cycle + pagination
   const fetchTransactions = useCallback(async (cursor?: string, append = false) => {
@@ -533,6 +566,82 @@ export function AccountDetail() {
   const projectedYield = account.isHighYield && account.yieldPercentage
     ? calculateProportionalYield(account.balance, account.yieldPercentage, daysRemaining)
     : 0;
+  const subAccountTotal = account.subAccounts.reduce((sum, sub) => sum + Number(sub.balance || 0), 0);
+  const combinedAvailable = Number(account.balance || 0) + subAccountTotal;
+  const accountPlaceIds = new Set([
+    account.id,
+    ...account.subAccounts.map((sub) => sub.id),
+  ]);
+
+  const commitmentItems = (() => {
+    const items: Array<{
+      id: string;
+      title: string;
+      subtitle: string;
+      amount: number;
+      kind: "debt" | "recurring";
+      placeLabel: string;
+      date?: string | null;
+    }> = [];
+
+    const resolvePlaceLabel = (accountId?: string | null, subAccountId?: string | null) => {
+      if (subAccountId) {
+        const sub = account.subAccounts.find((item) => item.id === subAccountId);
+        return sub ? `Bolsillo: ${sub.name}` : "Bolsillo";
+      }
+      if (accountId === account.id) return "Cuenta principal";
+      return "Cuenta";
+    };
+
+    debts.forEach((debt) => {
+      const unpaidInstallments = (debt.installments || []).filter((inst) => !inst.isPaid);
+      unpaidInstallments.forEach((inst) => {
+        const placeId = inst.subAccountId || inst.accountId || debt.subAccountId || debt.accountId;
+        if (!placeId || !accountPlaceIds.has(placeId)) return;
+
+        items.push({
+          id: `debt-${debt.id}-${inst.id}`,
+          title: debt.name,
+          subtitle: inst.description || (debt.type === "loan" ? "Cuota de préstamo" : "Cuota tarjeta"),
+          amount: Number(inst.installmentAmount || 0),
+          kind: "debt",
+          placeLabel: resolvePlaceLabel(inst.accountId || debt.accountId, inst.subAccountId || debt.subAccountId),
+          date: inst.nextPaymentDate,
+        });
+      });
+    });
+
+    recurringPayments
+      .filter((payment) => payment.status === "pending")
+      .forEach((payment) => {
+        const placeId = payment.subAccountId || payment.accountId;
+        const isOutgoing = payment.type === "expense" || payment.type === "transfer" || !!payment.debtId;
+        if (!isOutgoing || !placeId || !accountPlaceIds.has(placeId)) return;
+
+        items.push({
+          id: `recurring-${payment.id}`,
+          title: payment.description,
+          subtitle: payment.debt?.name || payment.category || "Recurrente",
+          amount: Number(payment.amount || 0),
+          kind: "recurring",
+          placeLabel: resolvePlaceLabel(payment.accountId, payment.subAccountId),
+          date: payment.scheduledDate,
+        });
+      });
+
+    return items.sort((a, b) => {
+      const aDate = a.date ? new Date(a.date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bDate = b.date ? new Date(b.date).getTime() : Number.MAX_SAFE_INTEGER;
+      return aDate - bDate;
+    });
+  })();
+
+  const commitmentsTotal = commitmentItems.reduce((sum, item) => sum + item.amount, 0);
+  const commitmentGap = combinedAvailable - commitmentsTotal;
+  const selectedPocket = account.subAccounts.find((sub) => sub.id === selectedPocketId) || null;
+  const selectedPocketTransactions = selectedPocket
+    ? filteredSubTransactions[selectedPocket.id] || []
+    : [];
 
   return (
     <div className="p-4 space-y-4 pb-safe">
@@ -576,6 +685,15 @@ export function AccountDetail() {
         </div>
       </div>
 
+      <Tabs value={detailTab} onValueChange={setDetailTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4 rounded-2xl bg-white/80 dark:bg-gray-900/80 border border-gray-200 dark:border-gray-800 shadow-sm h-auto p-1">
+          <TabsTrigger value="account" className="rounded-xl text-xs py-2">Cuenta</TabsTrigger>
+          <TabsTrigger value="pockets" className="rounded-xl text-xs py-2">Bolsillos</TabsTrigger>
+          <TabsTrigger value="commitments" className="rounded-xl text-xs py-2">Compromisos</TabsTrigger>
+          <TabsTrigger value="history" className="rounded-xl text-xs py-2">Historial</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="account" className="space-y-4 mt-0">
       {/* Account Card */}
       <AccountCard account={account} />
 
@@ -611,8 +729,277 @@ export function AccountDetail() {
         />
       )}
 
+          <div className="grid grid-cols-2 gap-2">
+            <Card className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
+                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Cuenta</span>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(account.balance)}</p>
+                <p className="text-[11px] text-gray-400">Saldo principal</p>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
+                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Bolsillos</span>
+                <p className="text-lg font-bold text-gray-900 dark:text-white">{formatCurrency(subAccountTotal)}</p>
+                <p className="text-[11px] text-gray-400">{account.subAccounts.length} bolsillo{account.subAccounts.length === 1 ? "" : "s"}</p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="pockets" className="space-y-4 mt-0">
+          <Card className="border-0 shadow-md rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-white/70">Total en bolsillos</p>
+                  <p className="text-2xl font-bold">{formatCurrency(subAccountTotal)}</p>
+                </div>
+                <div className="size-12 rounded-2xl bg-white/15 flex items-center justify-center">
+                  <PiggyBank className="size-6" />
+                </div>
+              </div>
+              <p className="text-xs text-white/70 mt-2">
+                Disponible combinado: {formatCurrency(combinedAvailable)}
+              </p>
+            </CardContent>
+          </Card>
+
+          {account.subAccounts.length > 0 && (
+            <div className="space-y-3">
+              <div className="-mx-1 overflow-x-auto px-1 pb-1">
+                <div className="flex min-w-max gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedPocketId("all");
+                      setExpandedSubAccount(null);
+                    }}
+                    className={`rounded-2xl px-4 py-2 text-xs font-semibold transition-all ${
+                      selectedPocketId === "all"
+                        ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/25"
+                        : "bg-white text-gray-600 shadow-sm border border-gray-100 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800"
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  {account.subAccounts.map((sub) => {
+                    const subColor = sub.color || "#10B981";
+                    const isActive = selectedPocketId === sub.id;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedPocketId(sub.id);
+                          if (expandedSubAccount !== sub.id) {
+                            setExpandedSubAccount(sub.id);
+                            fetchSubTransactions(sub.id);
+                          }
+                        }}
+                        className={`flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-semibold transition-all ${
+                          isActive
+                            ? "text-white shadow-lg"
+                            : "bg-white text-gray-600 shadow-sm border-gray-100 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800"
+                        }`}
+                        style={isActive ? { backgroundColor: subColor, borderColor: subColor } : undefined}
+                      >
+                        <span
+                          className="size-6 rounded-xl flex items-center justify-center"
+                          style={{ backgroundColor: isActive ? "rgba(255,255,255,0.2)" : `${subColor}20` }}
+                        >
+                          <PiggyBank className="size-3.5" style={{ color: isActive ? "#fff" : subColor }} />
+                        </span>
+                        {sub.name}
+                      </button>
+                    );
+                  })}
+                  {(!account.isSharedWithMe || account.myRole === "editor") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingSubAccount(null);
+                        setShowSubAccountForm(true);
+                      }}
+                      className="flex items-center gap-2 rounded-2xl border border-dashed border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                    >
+                      <Plus className="size-3.5" />
+                      Nuevo
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {selectedPocket ? (
+                <Card className="border-0 shadow-md rounded-3xl overflow-hidden bg-white dark:bg-gray-900">
+                  <CardContent className="p-0">
+                    <div
+                      className="p-4 text-white"
+                      style={{
+                        background: `linear-gradient(135deg, ${selectedPocket.color || "#10B981"}, #0f172a)`,
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs text-white/70">{subTypeLabels[selectedPocket.type] || "Bolsillo"}</p>
+                          <h3 className="text-xl font-bold">{selectedPocket.name}</h3>
+                          <p className="text-2xl font-black mt-2">{formatCurrency(selectedPocket.balance)}</p>
+                        </div>
+                        <div className="size-12 rounded-2xl bg-white/15 flex items-center justify-center">
+                          <PiggyBank className="size-6" />
+                        </div>
+                      </div>
+                      {selectedPocket.isHighYield && selectedPocket.yieldPercentage && (
+                        <p className="mt-3 text-xs text-white/80">
+                          Rendimiento: {selectedPocket.yieldPercentage}% anual · aprox. {formatCurrency(calculateProportionalYield(selectedPocket.balance, selectedPocket.yieldPercentage, daysRemaining))}/mes
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="p-3 space-y-3">
+                      {(!account.isSharedWithMe || account.myRole === "editor") && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl text-xs"
+                            onClick={() => {
+                              setEditingSubAccount(selectedPocket);
+                              setShowSubAccountForm(true);
+                            }}
+                          >
+                            <Pencil className="size-3 mr-1" />
+                            Editar bolsillo
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl text-xs text-red-500 hover:text-red-600 border-red-200 hover:border-red-300"
+                            onClick={() => setShowSubDeleteDialog(selectedPocket.id)}
+                          >
+                            <Trash2 className="size-3 mr-1" />
+                            Eliminar
+                          </Button>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                            Movimientos recientes
+                          </h4>
+                          <span className="text-[11px] text-gray-400">
+                            {selectedPocketTransactions.length} registro{selectedPocketTransactions.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+
+                        {selectedPocketTransactions.length > 0 ? (
+                          selectedPocketTransactions.slice(0, 8).map((tx) => {
+                            const txType = (tx.type as keyof typeof typeConfig) || "expense";
+                            const config = typeConfig[txType] || typeConfig.expense;
+                            const TxIcon = config.icon;
+                            const { day, month } = formatDayMonth(tx.date);
+
+                            return (
+                              <button
+                                key={tx.id}
+                                type="button"
+                                onClick={() => handleExpandTx(tx)}
+                                className="w-full rounded-2xl bg-gray-50 p-3 text-left transition-colors hover:bg-gray-100 dark:bg-gray-800/70 dark:hover:bg-gray-800"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <div className="w-8 shrink-0 text-center">
+                                      <p className="text-sm font-bold text-gray-900 dark:text-white leading-none">{day}</p>
+                                      <p className="text-[10px] text-gray-400 uppercase">{month}</p>
+                                    </div>
+                                    <div
+                                      className="size-9 shrink-0 rounded-xl flex items-center justify-center"
+                                      style={{ backgroundColor: config.bgLight }}
+                                    >
+                                      <TxIcon className="size-4" style={{ color: config.color }} />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                                        {tx.description}
+                                      </p>
+                                      <p className="truncate text-xs text-gray-400">
+                                        {tx.category || config.label}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="shrink-0 text-sm font-bold" style={{ color: config.color }}>
+                                    {tx.type === "income" ? "+" : tx.type === "transfer" ? "↔" : "-"}
+                                    {formatCurrency(Math.abs(tx.amount))}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-gray-200 p-4 text-center dark:border-gray-800">
+                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                              Este bolsillo todavía no tiene movimientos.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {account.subAccounts.map((sub) => {
+                    const subColor = sub.color || "#10B981";
+                    const subYield = sub.isHighYield && sub.yieldPercentage
+                      ? calculateProportionalYield(sub.balance, sub.yieldPercentage, daysRemaining)
+                      : 0;
+
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedPocketId(sub.id);
+                          setExpandedSubAccount(sub.id);
+                          fetchSubTransactions(sub.id);
+                        }}
+                        className="w-full rounded-2xl bg-white p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-gray-900"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className="size-11 rounded-2xl flex items-center justify-center" style={{ backgroundColor: `${subColor}20` }}>
+                              <PiggyBank className="size-5" style={{ color: subColor }} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{sub.name}</p>
+                              <p className="truncate text-xs text-gray-400">
+                                {subTypeLabels[sub.type] || "Otro"}
+                                {sub.isHighYield && ` · ${sub.yieldPercentage}% anual`}
+                              </p>
+                              {subYield > 0 && (
+                                <p className="truncate text-[11px] font-semibold text-emerald-500">
+                                  +{formatCurrency(subYield)}/mes estimado
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-gray-900 dark:text-white">{formatCurrency(sub.balance)}</p>
+                            <p className="text-[11px] text-gray-400">Ver detalle</p>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
       {/* Sub-Accounts - ONLY show when there are sub-accounts */}
-      {account.subAccounts.length > 0 && (
+      {account.subAccounts.length > 0 && selectedPocketId === "__legacy__" && (
         <div>
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -1075,6 +1462,102 @@ export function AccountDetail() {
           Crear bolsillo
         </Button>
       )}
+
+        </TabsContent>
+
+        <TabsContent value="commitments" className="space-y-4 mt-0">
+          <Card className={`border-0 shadow-md rounded-2xl overflow-hidden ${
+            commitmentGap >= 0
+              ? "bg-gradient-to-br from-emerald-500 to-teal-600 text-white"
+              : "bg-gradient-to-br from-rose-500 to-orange-500 text-white"
+          }`}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs text-white/75">Cobertura de pagos</p>
+                  <p className="text-2xl font-bold">{commitmentGap >= 0 ? "Cubierto" : "Falta dinero"}</p>
+                  <p className="text-sm text-white/85 mt-1">
+                    {commitmentGap >= 0
+                      ? `Sobran ${formatCurrency(commitmentGap)} después de compromisos`
+                      : `Faltan ${formatCurrency(Math.abs(commitmentGap))} para cubrir todo`}
+                  </p>
+                </div>
+                <div className="size-12 rounded-2xl bg-white/15 flex items-center justify-center">
+                  {commitmentGap >= 0 ? <ShieldCheck className="size-6" /> : <AlertTriangle className="size-6" />}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-3 gap-2">
+            <Card className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
+                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Disponible</span>
+                <p className="text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(combinedAvailable)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
+                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Por pagar</span>
+                <p className="text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(commitmentsTotal)}</p>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-900">
+              <CardContent className="p-3">
+                <span className="text-[11px] text-gray-400 uppercase tracking-wider">Items</span>
+                <p className="text-sm font-bold text-gray-900 dark:text-white">{commitmentItems.length}</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pagos ligados a esta cuenta</h3>
+              <Badge variant="outline" className="rounded-xl text-xs">
+                {formatCurrency(commitmentsTotal)}
+              </Badge>
+            </div>
+
+            {commitmentItems.length === 0 ? (
+              <Card className="border-0 shadow-sm rounded-2xl bg-gray-50 dark:bg-gray-800/50">
+                <CardContent className="p-6 text-center">
+                  <WalletCards className="size-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">Sin compromisos asociados a esta cuenta o sus bolsillos</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {commitmentItems.map((item) => (
+                  <Card key={item.id} className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-900">
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`size-10 rounded-xl flex items-center justify-center ${
+                            item.kind === "debt"
+                              ? "bg-rose-50 text-rose-500 dark:bg-rose-900/20"
+                              : "bg-blue-50 text-blue-500 dark:bg-blue-900/20"
+                          }`}>
+                            {item.kind === "debt" ? <Receipt className="size-5" /> : <Repeat className="size-5" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</p>
+                            <p className="text-xs text-gray-400 truncate">{item.subtitle} · {item.placeLabel}</p>
+                            {item.date && (
+                              <p className="text-[11px] text-gray-400">Vence: {formatDate(item.date)}</p>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-sm font-bold text-gray-900 dark:text-white shrink-0">{formatCurrency(item.amount)}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-4 mt-0">
 
       <Separator />
 
@@ -1708,6 +2191,8 @@ export function AccountDetail() {
           </>
         )}
       </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Forms */}
       <AccountForm

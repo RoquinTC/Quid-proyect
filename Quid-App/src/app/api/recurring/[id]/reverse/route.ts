@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { toNumber } from "@/lib/decimal-serializer";
+import { applyBalanceDelta } from "@/lib/finance-ledger";
 
 /**
  * Reverse a confirmed recurring payment.
@@ -65,188 +67,132 @@ export async function POST(
       },
     });
 
-    for (const tx of linkedTransactions) {
-      // Reverse the balance impact
-      if (tx.type === "transfer" && tx.accountId) {
-        // Restore the exact source balance that was decremented.
-        if (tx.subAccountId) {
-          await db.subAccount.update({
-            where: { id: tx.subAccountId },
-            data: { balance: { increment: tx.amount } },
+    await db.$transaction(async (txClient) => {
+      for (const transaction of linkedTransactions) {
+        if (transaction.type === "transfer" && transaction.accountId) {
+          await applyBalanceDelta(txClient, {
+            accountId: transaction.accountId,
+            subAccountId: transaction.subAccountId,
+            amount: toNumber(transaction.amount),
           });
-        } else {
-          await db.account.update({
-            where: { id: tx.accountId },
-            data: { balance: { increment: tx.amount } },
+
+          if (transaction.relatedTransactionId) {
+            const counterpart = await txClient.transaction.findUnique({
+              where: { id: transaction.relatedTransactionId },
+            });
+            if (counterpart) {
+              await applyBalanceDelta(txClient, {
+                accountId: counterpart.accountId,
+                subAccountId: counterpart.subAccountId,
+                amount: -toNumber(counterpart.amount),
+              });
+              await txClient.transaction.delete({ where: { id: counterpart.id } });
+            }
+          }
+        } else if (transaction.type === "expense" && transaction.accountId) {
+          await applyBalanceDelta(txClient, {
+            accountId: transaction.accountId,
+            subAccountId: transaction.subAccountId,
+            amount: toNumber(transaction.amount),
+          });
+        } else if (transaction.type === "income" && transaction.accountId) {
+          await applyBalanceDelta(txClient, {
+            accountId: transaction.accountId,
+            subAccountId: transaction.subAccountId,
+            amount: -toNumber(transaction.amount),
           });
         }
 
-        // Find and reverse the counterpart income transaction
-        if (tx.relatedTransactionId) {
-          const counterpart = await db.transaction.findUnique({
-            where: { id: tx.relatedTransactionId },
-          });
-          if (counterpart) {
-            // Reverse destination account/subaccount balance (was incremented)
-            if (counterpart.subAccountId) {
-              await db.subAccount.update({
-                where: { id: counterpart.subAccountId },
-                data: { balance: { increment: -counterpart.amount } },
-              });
-            } else if (counterpart.accountId) {
-              await db.account.update({
-                where: { id: counterpart.accountId },
-                data: { balance: { increment: -counterpart.amount } },
-              });
-            }
-            // Delete the counterpart transaction
-            await db.transaction.delete({ where: { id: counterpart.id } });
-          }
-        }
-      } else if (tx.type === "expense" && tx.accountId) {
-        // Restore the exact account/subaccount balance that was decremented.
-        if (tx.subAccountId) {
-          await db.subAccount.update({
-            where: { id: tx.subAccountId },
-            data: { balance: { increment: tx.amount } },
-          });
-        } else {
-          await db.account.update({
-            where: { id: tx.accountId },
-            data: { balance: { increment: tx.amount } },
-          });
-        }
-      } else if (tx.type === "income" && tx.accountId) {
-        // Reverse income: decrement account/subaccount balance (was incremented)
-        if (tx.subAccountId) {
-          await db.subAccount.update({
-            where: { id: tx.subAccountId },
-            data: { balance: { increment: -tx.amount } },
-          });
-        } else {
-          await db.account.update({
-            where: { id: tx.accountId },
-            data: { balance: { increment: -tx.amount } },
-          });
-        }
+        await txClient.transaction.delete({ where: { id: transaction.id } });
       }
 
-      // Delete the linked transaction
-      await db.transaction.delete({ where: { id: tx.id } });
-    }
-
-    // ============================================
-    // Reverse Installment created for debt/TC payments
-    // When a debt-type recurring payment is confirmed, an Installment is created
-    // (NOT a Transaction). We need to delete it and reverse the debt balance.
-    // ============================================
-    if (payment.debtId) {
-      // Find the installment linked to this recurring payment
-      // First try by recurringPaymentId (new code), then fall back to description match (legacy)
-      let linkedInstallment = await db.installment.findFirst({
-        where: {
-          debtId: payment.debtId,
-          recurringPaymentId: payment.id,
-          isPaid: false,
-        },
-      });
-
-      // Fallback: search by description pattern for installments created before the fix
-      if (!linkedInstallment) {
-        const descriptionPattern = `${payment.description}${payment.isRecurring ? ` (Recurrente - ${payment.frequency})` : ""}`;
-        linkedInstallment = await db.installment.findFirst({
+      if (payment.debtId) {
+        let linkedInstallment = await txClient.installment.findFirst({
           where: {
             debtId: payment.debtId,
-            description: descriptionPattern,
+            recurringPaymentId: payment.id,
             isPaid: false,
-            paidAmount: 0,
           },
-          orderBy: { createdAt: "desc" },
+        });
+
+        if (!linkedInstallment) {
+          const descriptionPattern = `${payment.description}${payment.isRecurring ? ` (Recurrente - ${payment.frequency})` : ""}`;
+          linkedInstallment = await txClient.installment.findFirst({
+            where: {
+              debtId: payment.debtId,
+              description: descriptionPattern,
+              isPaid: false,
+              paidAmount: 0,
+            },
+            orderBy: { createdAt: "desc" },
+          });
+        }
+
+        if (linkedInstallment) {
+          await applyCreditInstallmentBudgetImpact({
+            userId: session.user.id,
+            debtType: payment.debt?.type,
+            category: linkedInstallment.category,
+            subCategory: linkedInstallment.subCategory,
+            installmentAmount: Number(linkedInstallment.installmentAmount),
+            nextPaymentDate: linkedInstallment.nextPaymentDate,
+            direction: -1,
+            client: txClient,
+          });
+
+          await txClient.installment.delete({ where: { id: linkedInstallment.id } });
+        }
+
+        await txClient.debt.update({
+          where: { id: payment.debtId },
+          data: { currentBalance: { increment: -confirmedAmount } },
         });
       }
 
-      if (linkedInstallment) {
-        await applyCreditInstallmentBudgetImpact({
+      if (!payment.debtId && (payment.type === "expense" || payment.type === "income")) {
+        const budgetType = payment.type === "expense" ? "expense" : "income";
+        const categoryToMatch = payment.category || (payment.type === "expense" ? "Pagos Recurrentes" : "Ingresos");
+        const subCatToMatch = payment.subCategory || null;
+        await adjustBudgetSpent({
           userId: session.user.id,
-          debtType: payment.debt?.type,
-          category: linkedInstallment.category,
-          subCategory: linkedInstallment.subCategory,
-          installmentAmount: Number(linkedInstallment.installmentAmount),
-          nextPaymentDate: linkedInstallment.nextPaymentDate,
-          direction: -1,
-        });
-
-        // Reverse the debt balance (was incremented during confirmation)
-        await db.debt.update({
-          where: { id: payment.debtId },
-          data: { currentBalance: { increment: -confirmedAmount } },
-        });
-
-        // Delete the linked installment
-        await db.installment.delete({ where: { id: linkedInstallment.id } });
-      } else {
-        // Even if we can't find the installment, we should still reverse the debt balance
-        // (the installment might have been manually deleted or paid)
-        await db.debt.update({
-          where: { id: payment.debtId },
-          data: { currentBalance: { increment: -confirmedAmount } },
+          category: categoryToMatch,
+          subCategory: subCatToMatch,
+          type: budgetType,
+          amount: -Number(confirmedAmount),
+          client: txClient,
         });
       }
-    }
 
-    // ============================================
-    // Reverse budget spent for account/income payments.
-    // Debt/TC purchases are reversed above through their linked installment so they
-    // do not fall into "Deudas" unless the purchase itself was categorized that way.
-    // ============================================
-    if (!payment.debtId && (payment.type === "expense" || payment.type === "income")) {
-      const budgetType = payment.type === "expense" ? "expense" : "income";
-      const categoryToMatch = payment.category || (payment.type === "expense" ? "Pagos Recurrentes" : "Ingresos");
-      const subCatToMatch = payment.subCategory || null;
-      await adjustBudgetSpent({
-        userId: session.user.id,
-        category: categoryToMatch,
-        subCategory: subCatToMatch,
-        type: budgetType,
-        amount: -Number(confirmedAmount),
+      const nextPending = await txClient.recurringPayment.findFirst({
+        where: {
+          userId: session.user.id,
+          description: payment.description,
+          amount: payment.amount,
+          type: payment.type,
+          accountId: payment.accountId,
+          debtId: payment.debtId,
+          destinationAccountId: payment.destinationAccountId,
+          destinationSubAccountId: payment.destinationSubAccountId,
+          category: payment.category,
+          subCategory: payment.subCategory,
+          frequency: payment.frequency,
+          isRecurring: payment.isRecurring,
+          status: "pending",
+          createdAt: { gte: payment.confirmedDate || payment.updatedAt },
+        },
       });
-    }
+      if (nextPending) {
+        await txClient.recurringPayment.delete({ where: { id: nextPending.id } });
+      }
 
-    // ============================================
-    // Delete the auto-generated next recurring payment (if it exists)
-    // ============================================
-    const nextPending = await db.recurringPayment.findFirst({
-      where: {
-        userId: session.user.id,
-        description: payment.description,
-        amount: payment.amount,
-        type: payment.type,
-        accountId: payment.accountId,
-        debtId: payment.debtId,
-        destinationAccountId: payment.destinationAccountId,
-        destinationSubAccountId: payment.destinationSubAccountId,
-        category: payment.category,
-        subCategory: payment.subCategory,
-        frequency: payment.frequency,
-        isRecurring: payment.isRecurring,
-        status: "pending",
-        createdAt: { gte: payment.confirmedDate || payment.updatedAt },
-      },
-    });
-    if (nextPending) {
-      await db.recurringPayment.delete({ where: { id: nextPending.id } });
-    }
-
-    // ============================================
-    // Reset the payment back to pending
-    // ============================================
-    await db.recurringPayment.update({
-      where: { id },
-      data: {
-        status: "pending",
-        actualAmount: null,
-        confirmedDate: null,
-      },
+      await txClient.recurringPayment.update({
+        where: { id },
+        data: {
+          status: "pending",
+          actualAmount: null,
+          confirmedDate: null,
+        },
+      });
     });
 
     return NextResponse.json({

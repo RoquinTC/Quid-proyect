@@ -1,5 +1,34 @@
 # Propuesta: Panel de Administración Nativo en Quid-App
 
+## Pendiente Prioritario: Botón Manual para Buscar Actualizaciones
+
+Agregar en **Ajustes > Versión / Acerca de** un botón visible de **Buscar actualización** para que el usuario pueda forzar la revisión de cambios cuando la PWA o la APK con Capacitor no detecten automáticamente una versión nueva.
+
+### Comportamiento Esperado
+* Consultar al servidor la versión publicada y compararla con la versión activa en el dispositivo.
+* Renovar/limpiar cachés del service worker cuando haya una nueva versión web disponible.
+* Mostrar un único aviso bonito y definitivo con información útil para el usuario: qué cambió, qué mejora y por qué conviene actualizar.
+* Permitir **Actualizar ahora** y recargar la app ya con la nueva versión.
+* Si no hay cambios, mostrar un mensaje simple: "Ya tienes la última versión".
+* Si la app se actualizó mientras el usuario no la usaba, mostrar: "Quick se actualizó mientras no estabas" junto con las novedades.
+
+### Alcance
+Este botón debe resolver actualizaciones web/UI/lógica servida desde el servidor tanto en PWA como en APK. No reemplaza una nueva APK cuando existan cambios nativos de Android, plugins Capacitor, permisos, huella, cámara, notificaciones nativas u OAuth Android.
+
+---
+
+## Implementado: Rediseño de Cuentas, Bolsillos y Compromisos
+
+Se reorganizó el detalle de cuentas en pestañas para separar mejor la información:
+* **Cuenta:** saldo principal, rendimiento, cuenta compartida y resumen.
+* **Bolsillos:** selector horizontal con `Todos`, cada bolsillo y acción de crear uno nuevo. La vista `Todos` muestra bolsillos compactos y cada bolsillo tiene detalle propio con saldo, rendimiento y movimientos recientes.
+* **Compromisos:** resumen de deudas/recurrentes vinculados a la cuenta o a sus bolsillos, mostrando cobertura disponible, faltantes y próximos pagos.
+* **Historial:** movimientos y filtros quedan separados para evitar que todo aparezca montado en una sola pantalla.
+
+También se blindó la lógica de recurrentes para aplicar y revertir saldos/presupuestos de forma transaccional.
+
+---
+
 ## Visión General
 Implementar un "Modo Administrador" integrado directamente en la aplicación, exclusivo y seguro, atado al correo del propietario (`rqcquintero@gmail.com`). El objetivo principal es tener un lugar desde donde hacer limpieza y mantenimiento de la base de datos (PostgreSQL) sin necesidad de acceder a herramientas de desarrollo como Prisma Studio o conectarse directamente por SQL.
 

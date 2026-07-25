@@ -8,6 +8,7 @@ import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, recurringConfirmSchema } from "@/lib/validations";
 import { createColombiaDate, getColombiaTodayString } from "@/lib/api";
+import { applyBalanceDelta } from "@/lib/finance-ledger";
 
 function normalizeSubAccountId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -220,419 +221,339 @@ export async function POST(
       }
     }
 
-    // 1. Mark payment as confirmed
-    await db.recurringPayment.update({
-      where: { id },
-      data: {
-        status: "confirmed",
-        actualAmount: confirmedAmount,
-        confirmedDate: todayColombia,
-        // Update destination if provided (for savings goals)
-        destinationAccountId: effectiveDestAccountId || payment.destinationAccountId,
-        destinationSubAccountId: effectiveDestSubAccountId,
-      },
-    });
+    let shouldSyncSavingsBudget = false;
 
-    // ============================================
-    // TRANSFER TYPE: Create bidirectional transfer
-    // ============================================
-    if (payment.type === "transfer" && payment.accountId && effectiveDestAccountId) {
-      // Create the outgoing transfer transaction (deducts from source)
-      const sourceAccount = await db.account.findUnique({
-        where: { id: payment.accountId },
-        select: { name: true },
-      });
-      const destAccount = await db.account.findUnique({
-        where: { id: effectiveDestAccountId },
-        select: { name: true },
-      });
-
-      const transferTx = await db.transaction.create({
+    await db.$transaction(async (tx) => {
+      await tx.recurringPayment.update({
+        where: { id },
         data: {
-          userId: session.user.id,
-          accountId: payment.accountId,
-          subAccountId: sourceSubAccountId,
-          type: "transfer",
-          amount: confirmedAmount,
-          description: payment.description,
-          category: payment.category || null,
-          subCategory: payment.subCategory || null,
-          date: todayColombia,
-          sourceModule: "finance",
-          sourceId: payment.id,
-          isRecurring: true,
-          notes: `Transferencia recurrente confirmada - ${payment.frequency}`,
-        },
-      });
-
-      if (sourceSubAccountId) {
-        await db.subAccount.update({
-          where: { id: sourceSubAccountId },
-          data: { balance: { increment: -confirmedAmount } },
-        });
-      } else {
-        await db.account.update({
-          where: { id: payment.accountId },
-          data: { balance: { increment: -confirmedAmount } },
-        });
-      }
-
-      // Create the incoming income transaction (adds to destination)
-      const destSubAccount = effectiveDestSubAccountId
-        ? await db.subAccount.findUnique({ where: { id: effectiveDestSubAccountId }, select: { name: true } })
-        : null;
-
-      const counterpart = await db.transaction.create({
-        data: {
-          userId: session.user.id,
-          accountId: effectiveDestAccountId,
-          subAccountId: effectiveDestSubAccountId || null,
-          type: "income",
-          amount: confirmedAmount,
-          description: `Transferencia recibida: ${payment.description}`,
-          category: isSavingsGoal ? "Ahorros" : "Otros",
-          subCategory: isSavingsGoal ? payment.subCategory : null,
-          date: todayColombia,
-          sourceModule: isSavingsGoal ? "finance" : undefined,
-          excludeFromBudget: true, // Counterpart of a transfer — not real income
-          notes: `Transferencia recurrente desde ${sourceAccount?.name || "cuenta"}`,
-          relatedTransactionId: transferTx.id,
-        },
-      });
-
-      // Link source transfer to its counterpart
-      await db.transaction.update({
-        where: { id: transferTx.id },
-        data: { relatedTransactionId: counterpart.id },
-      });
-
-      // Increment destination account/subaccount balance
-      if (effectiveDestSubAccountId) {
-        await db.subAccount.update({
-          where: { id: effectiveDestSubAccountId },
-          data: { balance: { increment: confirmedAmount } },
-        });
-      } else {
-        await db.account.update({
-          where: { id: effectiveDestAccountId },
-          data: { balance: { increment: confirmedAmount } },
-        });
-      }
-
-      // If this is a savings goal transfer, add the contribution to the goal
-      if (isSavingsGoal && linkedGoalId) {
-        await db.savingsContribution.create({
-          data: {
-            goalId: linkedGoalId,
-            amount: confirmedAmount,
-            date: todayColombia,
-            description: `Cuota de ahorro (${payment.frequency})`,
-            accountId: effectiveDestAccountId,
-            transactionId: counterpart.id,
-          },
-        });
-
-        await db.savingsGoal.update({
-          where: { id: linkedGoalId },
-          data: { currentAmount: { increment: confirmedAmount } },
-        });
-
-        // Recalculate cuota for the goal
-        const goal = await db.savingsGoal.findUnique({ where: { id: linkedGoalId } });
-        if (goal && goal.deadline) {
-          const remaining = toNumber(goal.targetAmount) - toNumber(goal.currentAmount);
-          if (remaining <= 0) {
-            // Goal complete — cancel future payments linked to this goal
-            await db.recurringPayment.updateMany({
-              where: { savingsGoalId: goal.id, status: "pending" },
-              data: { status: "cancelled" },
-            });
-          } else {
-            // Recalculate cuota for remaining payments linked to this goal
-            const diffMs = goal.deadline.getTime() - todayColombia.getTime();
-            const diffDays = diffMs / (1000 * 60 * 60 * 24);
-            let periods: number;
-            switch (goal.frequency) {
-              case "weekly": periods = Math.max(Math.ceil(diffDays / 7), 1); break;
-              case "biweekly": periods = Math.max(Math.ceil(diffDays / 15), 1); break;
-              default: periods = Math.max(Math.ceil(diffDays / 30), 1); break;
-            }
-            const newCuota = Math.round(remaining / periods);
-            const nextPending = await db.recurringPayment.findFirst({
-              where: { savingsGoalId: goal.id, status: "pending" },
-            });
-            if (nextPending) {
-              await db.recurringPayment.update({
-                where: { id: nextPending.id },
-                data: { amount: newCuota },
-              });
-            }
-          }
-        }
-
-        // Sync savings budget
-        await syncSavingsBudget(session.user.id);
-      }
-    } else if (payment.debtId) {
-      // ============================================
-      // EXPENSE TYPE — CREDIT CARD / DEBT
-      // Register as an Installment (Compra en Cuotas) on the TC.
-      // ============================================
-
-      // 1. Increment the debt's currentBalance
-      if (payment.debt) {
-        await db.debt.update({
-          where: { id: payment.debtId },
-          data: { currentBalance: { increment: confirmedAmount } },
-        });
-      }
-
-      // 2. Create an Installment record
-      // Calculate nextPaymentDate based on cutoff and payment dates
-      const nextPayment = new Date(todayColombia);
-      if (payment.debt?.paymentDate) {
-        // Determine which cycle this purchase belongs to
-        let cycleMonth: number;
-        let cycleYear: number;
-        if (payment.debt.cutoffDate && todayColombia.getDate() >= payment.debt.cutoffDate) {
-          // Purchase is ON or AFTER cutoff → belongs to NEXT month's cycle
-          cycleMonth = todayColombia.getMonth() + 1;
-          cycleYear = todayColombia.getFullYear();
-          if (cycleMonth > 11) {
-            cycleMonth = 0;
-            cycleYear += 1;
-          }
-        } else {
-          // Purchase is BEFORE cutoff → belongs to THIS month's cycle
-          cycleMonth = todayColombia.getMonth();
-          cycleYear = todayColombia.getFullYear();
-        }
-
-        // Calculate payment month based on relationship between paymentDate and cutoffDate
-        let payMonth: number;
-        let payYear: number;
-        if (payment.debt.cutoffDate && payment.debt.paymentDate > payment.debt.cutoffDate) {
-          // Payment same month as cycle (e.g. cutoff=3, payment=23)
-          payMonth = cycleMonth;
-          payYear = cycleYear;
-        } else {
-          // Payment next month after cycle (e.g. cutoff=20, payment=4)
-          payMonth = cycleMonth + 1;
-          payYear = cycleYear;
-          if (payMonth > 11) {
-            payMonth = 0;
-            payYear += 1;
-          }
-        }
-        const maxDaysInPayMonth = new Date(payYear, payMonth + 1, 0).getDate();
-        const payDay = Math.min(payment.debt.paymentDate, maxDaysInPayMonth);
-        nextPayment.setTime(new Date(payYear, payMonth, payDay, 12, 0, 0).getTime());
-      } else {
-        nextPayment.setMonth(nextPayment.getMonth() + 1);
-      }
-
-      const installment = await db.installment.create({
-        data: {
-          debtId: payment.debtId,
-          description: `${payment.description}${payment.isRecurring ? ` (Recurrente - ${payment.frequency})` : ""}`,
-          totalAmount: confirmedAmount,
-          totalInstallments: 1,
-          currentInstallment: 1,
-          installmentAmount: confirmedAmount,
-          paidAmount: 0,
-          purchaseDate: todayColombia,
-          nextPaymentDate: nextPayment,
-          isPaid: false,
-          accountId: payment.accountId || null,
-          subAccountId: sourceSubAccountId,
-          category: payment.category || null,
-          subCategory: payment.subCategory || null,
-          recurringPaymentId: payment.id,
-          sourceModule: "finance",
-          sourceId: payment.id,
-        },
-      });
-
-      // 3. Update budget spent if category matches
-      // IMPORTANT: For credit cards (not loans), we do NOT update the budget here because
-      // the recalculate route counts CC installments via Source B (installments with purchaseDate
-      // in period). Updating the budget here would cause double-counting:
-      //   once here (direct increment) + once via recalculate (Source B).
-      // For loans, budget IS updated because loan installments are NOT counted by recalculate
-      // Source B (it only counts CC installments, not loan installments).
-        const isLoan = payment.debt?.type === "loan";
-      if (isLoan) {
-        const categoryToMatch = payment.category || "Deudas";
-        const subCatToMatch = payment.subCategory || null;
-        await adjustBudgetSpent({
-          userId: session.user.id,
-          category: categoryToMatch,
-          subCategory: subCatToMatch,
-          type: "expense",
-          amount: confirmedAmount,
-        });
-      } else {
-        await applyCreditInstallmentBudgetImpact({
-          userId: session.user.id,
-          debtType: payment.debt?.type,
-          category: installment.category,
-          subCategory: installment.subCategory,
-          installmentAmount: Number(installment.installmentAmount),
-          nextPaymentDate: installment.nextPaymentDate,
-        });
-      }
-    } else if (payment.type === "income") {
-      // ============================================
-      // INCOME TYPE — (Payroll / Nómina)
-      // Add to account/subaccount balance and create transaction
-      // ============================================
-
-      if (payment.accountId) {
-        await db.transaction.create({
-          data: {
-            userId: session.user.id,
-            accountId: payment.accountId,
-            subAccountId: sourceSubAccountId,
-            type: "income",
-            amount: confirmedAmount,
-            description: payment.description,
-            category: payment.category || "Sueldo",
-            subCategory: payment.subCategory || null,
-            date: todayColombia,
-            sourceModule: "finance",
-            sourceId: payment.id,
-            isRecurring: true,
-            notes: `Ingreso recurrente confirmado - ${payment.frequency}`,
-          },
-        });
-
-        // Increment account balance
-        if (sourceSubAccountId) {
-          await db.subAccount.update({
-            where: { id: sourceSubAccountId },
-            data: { balance: { increment: confirmedAmount } },
-          });
-        } else {
-          await db.account.update({
-            where: { id: payment.accountId },
-            data: { balance: { increment: confirmedAmount } },
-          });
-        }
-      }
-
-      // Update income budget spent if category matches
-      const categoryToMatch = payment.category || "Sueldo";
-      const subCatToMatch = payment.subCategory || null;
-      await adjustBudgetSpent({
-        userId: session.user.id,
-        category: categoryToMatch,
-        subCategory: subCatToMatch,
-        type: "income",
-        amount: confirmedAmount,
-      });
-    } else {
-      // ============================================
-      // EXPENSE TYPE — NORMAL (from account, no debt)
-      // Deduct from account balance and create transaction
-      // ============================================
-
-      if (payment.accountId && payment.account) {
-        await db.transaction.create({
-          data: {
-            userId: session.user.id,
-            accountId: payment.accountId,
-            subAccountId: sourceSubAccountId,
-            type: "expense",
-            amount: confirmedAmount,
-            description: payment.description,
-            category: payment.category || "Pagos Recurrentes",
-            subCategory: payment.subCategory || null,
-            date: todayColombia,
-            sourceModule: "finance",
-            sourceId: payment.id,
-            isRecurring: true,
-            notes: `Pago recurrente confirmado - ${payment.frequency}`,
-          },
-        });
-
-        if (sourceSubAccountId) {
-          await db.subAccount.update({
-            where: { id: sourceSubAccountId },
-            data: { balance: { increment: -confirmedAmount } },
-          });
-        } else {
-          await db.account.update({
-            where: { id: payment.accountId },
-            data: { balance: { increment: -confirmedAmount } },
-          });
-        }
-      }
-
-      // Update budget spent if category matches
-      const categoryToMatch = payment.category || "Pagos Recurrentes";
-      const subCatToMatch = payment.subCategory || null;
-      await adjustBudgetSpent({
-        userId: session.user.id,
-        category: categoryToMatch,
-        subCategory: subCatToMatch,
-        type: "expense",
-        amount: confirmedAmount,
-      });
-    }
-
-    // 5. For recurring payments (isRecurring=true), auto-generate next scheduled date
-    if (payment.isRecurring && payment.frequency !== "one_time") {
-      const nextDate = getNextScheduledDate(payment.scheduledDate, payment.frequency, payment.customDays);
-
-      // Calculate the amount for the next payment based on periodAmounts
-      let nextAmount = payment.amount;
-      if (payment.periodAmounts) {
-        try {
-          const dist = JSON.parse(payment.periodAmounts);
-          if (Array.isArray(dist) && dist.length > 0) {
-            // Determine which index we're on based on the scheduled date
-            // For biweekly: 0 = first day, 1 = second day
-            // For weekly: 0 = week 1, 1 = week 2, 2 = week 3, 3 = week 4
-            let nextIndex = 0;
-            if (payment.frequency === "biweekly" && payment.customDays) {
-              const days = JSON.parse(payment.customDays).sort((a: number, b: number) => a - b);
-              const nextDay = nextDate.getDate();
-              if (nextDay >= days[1]) nextIndex = 1;
-            } else if (payment.frequency === "weekly") {
-              // Week of the month (1-4)
-              nextIndex = Math.min(Math.floor((nextDate.getDate() - 1) / 7), dist.length - 1);
-            }
-            if (dist[nextIndex] && dist[nextIndex] > 0) {
-              nextAmount = dist[nextIndex];
-            }
-          }
-        } catch { /* use current amount */ }
-      }
-
-      await db.recurringPayment.create({
-        data: {
-          userId: session.user.id,
-          description: payment.description,
-          amount: nextAmount,
-          type: payment.type,
-          accountId: payment.accountId,
-          subAccountId: sourceSubAccountId,
-          debtId: payment.debtId,
+          status: "confirmed",
+          actualAmount: confirmedAmount,
+          confirmedDate: todayColombia,
           destinationAccountId: effectiveDestAccountId || payment.destinationAccountId,
           destinationSubAccountId: effectiveDestSubAccountId,
-          category: payment.category,
-          subCategory: payment.subCategory,
-          scheduledDate: nextDate,
-          frequency: payment.frequency,
-          customDays: payment.customDays, // Carry over custom days
-          periodAmounts: payment.periodAmounts, // Carry over period amounts
-          notes: payment.notes,
-          isRecurring: true,
-          status: "pending",
-          payrollGroupId: payment.payrollGroupId || null, // Carry over payroll group link
-          savingsGoalId: payment.savingsGoalId || null, // Carry over savings goal link
         },
       });
+
+      if (payment.type === "transfer" && payment.accountId && effectiveDestAccountId) {
+        const sourceAccount = await tx.account.findUnique({
+          where: { id: payment.accountId },
+          select: { name: true },
+        });
+
+        const transferTx = await tx.transaction.create({
+          data: {
+            userId: session.user.id,
+            accountId: payment.accountId,
+            subAccountId: sourceSubAccountId,
+            type: "transfer",
+            amount: confirmedAmount,
+            description: payment.description,
+            category: payment.category || null,
+            subCategory: payment.subCategory || null,
+            date: todayColombia,
+            sourceModule: "finance",
+            sourceId: payment.id,
+            isRecurring: true,
+            notes: `Transferencia recurrente confirmada - ${payment.frequency}`,
+          },
+        });
+
+        await applyBalanceDelta(tx, {
+          accountId: payment.accountId,
+          subAccountId: sourceSubAccountId,
+          amount: -confirmedAmount,
+        });
+
+        const counterpart = await tx.transaction.create({
+          data: {
+            userId: session.user.id,
+            accountId: effectiveDestAccountId,
+            subAccountId: effectiveDestSubAccountId || null,
+            type: "income",
+            amount: confirmedAmount,
+            description: `Transferencia recibida: ${payment.description}`,
+            category: isSavingsGoal ? "Ahorros" : "Otros",
+            subCategory: isSavingsGoal ? payment.subCategory : null,
+            date: todayColombia,
+            sourceModule: isSavingsGoal ? "finance" : undefined,
+            excludeFromBudget: true,
+            notes: `Transferencia recurrente desde ${sourceAccount?.name || "cuenta"}`,
+            relatedTransactionId: transferTx.id,
+          },
+        });
+
+        await tx.transaction.update({
+          where: { id: transferTx.id },
+          data: { relatedTransactionId: counterpart.id },
+        });
+
+        await applyBalanceDelta(tx, {
+          accountId: effectiveDestAccountId,
+          subAccountId: effectiveDestSubAccountId,
+          amount: confirmedAmount,
+        });
+
+        if (isSavingsGoal && linkedGoalId) {
+          await tx.savingsContribution.create({
+            data: {
+              goalId: linkedGoalId,
+              amount: confirmedAmount,
+              date: todayColombia,
+              description: `Cuota de ahorro (${payment.frequency})`,
+              accountId: effectiveDestAccountId,
+              transactionId: counterpart.id,
+            },
+          });
+
+          await tx.savingsGoal.update({
+            where: { id: linkedGoalId },
+            data: { currentAmount: { increment: confirmedAmount } },
+          });
+
+          const goal = await tx.savingsGoal.findUnique({ where: { id: linkedGoalId } });
+          if (goal && goal.deadline) {
+            const remaining = toNumber(goal.targetAmount) - toNumber(goal.currentAmount);
+            if (remaining <= 0) {
+              await tx.recurringPayment.updateMany({
+                where: { savingsGoalId: goal.id, status: "pending" },
+                data: { status: "cancelled" },
+              });
+            } else {
+              const diffMs = goal.deadline.getTime() - todayColombia.getTime();
+              const diffDays = diffMs / (1000 * 60 * 60 * 24);
+              let periods: number;
+              switch (goal.frequency) {
+                case "weekly": periods = Math.max(Math.ceil(diffDays / 7), 1); break;
+                case "biweekly": periods = Math.max(Math.ceil(diffDays / 15), 1); break;
+                default: periods = Math.max(Math.ceil(diffDays / 30), 1); break;
+              }
+              const newCuota = Math.round(remaining / periods);
+              const nextPending = await tx.recurringPayment.findFirst({
+                where: { savingsGoalId: goal.id, status: "pending" },
+              });
+              if (nextPending) {
+                await tx.recurringPayment.update({
+                  where: { id: nextPending.id },
+                  data: { amount: newCuota },
+                });
+              }
+            }
+          }
+
+          shouldSyncSavingsBudget = true;
+        }
+      } else if (payment.debtId) {
+        if (payment.debt) {
+          await tx.debt.update({
+            where: { id: payment.debtId },
+            data: { currentBalance: { increment: confirmedAmount } },
+          });
+        }
+
+        const nextPayment = new Date(todayColombia);
+        if (payment.debt?.paymentDate) {
+          let cycleMonth: number;
+          let cycleYear: number;
+          if (payment.debt.cutoffDate && todayColombia.getDate() >= payment.debt.cutoffDate) {
+            cycleMonth = todayColombia.getMonth() + 1;
+            cycleYear = todayColombia.getFullYear();
+            if (cycleMonth > 11) {
+              cycleMonth = 0;
+              cycleYear += 1;
+            }
+          } else {
+            cycleMonth = todayColombia.getMonth();
+            cycleYear = todayColombia.getFullYear();
+          }
+
+          let payMonth: number;
+          let payYear: number;
+          if (payment.debt.cutoffDate && payment.debt.paymentDate > payment.debt.cutoffDate) {
+            payMonth = cycleMonth;
+            payYear = cycleYear;
+          } else {
+            payMonth = cycleMonth + 1;
+            payYear = cycleYear;
+            if (payMonth > 11) {
+              payMonth = 0;
+              payYear += 1;
+            }
+          }
+          const maxDaysInPayMonth = new Date(payYear, payMonth + 1, 0).getDate();
+          const payDay = Math.min(payment.debt.paymentDate, maxDaysInPayMonth);
+          nextPayment.setTime(new Date(payYear, payMonth, payDay, 12, 0, 0).getTime());
+        } else {
+          nextPayment.setMonth(nextPayment.getMonth() + 1);
+        }
+
+        const installment = await tx.installment.create({
+          data: {
+            debtId: payment.debtId,
+            description: `${payment.description}${payment.isRecurring ? ` (Recurrente - ${payment.frequency})` : ""}`,
+            totalAmount: confirmedAmount,
+            totalInstallments: 1,
+            currentInstallment: 1,
+            installmentAmount: confirmedAmount,
+            paidAmount: 0,
+            purchaseDate: todayColombia,
+            nextPaymentDate: nextPayment,
+            isPaid: false,
+            accountId: payment.accountId || null,
+            subAccountId: sourceSubAccountId,
+            category: payment.category || null,
+            subCategory: payment.subCategory || null,
+            recurringPaymentId: payment.id,
+            sourceModule: "finance",
+            sourceId: payment.id,
+          },
+        });
+
+        const isLoan = payment.debt?.type === "loan";
+        if (isLoan) {
+          await adjustBudgetSpent({
+            userId: session.user.id,
+            category: payment.category || "Deudas",
+            subCategory: payment.subCategory || null,
+            type: "expense",
+            amount: confirmedAmount,
+            client: tx,
+          });
+        } else {
+          await applyCreditInstallmentBudgetImpact({
+            userId: session.user.id,
+            debtType: payment.debt?.type,
+            category: installment.category,
+            subCategory: installment.subCategory,
+            installmentAmount: Number(installment.installmentAmount),
+            nextPaymentDate: installment.nextPaymentDate,
+            client: tx,
+          });
+        }
+      } else if (payment.type === "income") {
+        if (payment.accountId) {
+          await tx.transaction.create({
+            data: {
+              userId: session.user.id,
+              accountId: payment.accountId,
+              subAccountId: sourceSubAccountId,
+              type: "income",
+              amount: confirmedAmount,
+              description: payment.description,
+              category: payment.category || "Sueldo",
+              subCategory: payment.subCategory || null,
+              date: todayColombia,
+              sourceModule: "finance",
+              sourceId: payment.id,
+              isRecurring: true,
+              notes: `Ingreso recurrente confirmado - ${payment.frequency}`,
+            },
+          });
+
+          await applyBalanceDelta(tx, {
+            accountId: payment.accountId,
+            subAccountId: sourceSubAccountId,
+            amount: confirmedAmount,
+          });
+        }
+
+        await adjustBudgetSpent({
+          userId: session.user.id,
+          category: payment.category || "Sueldo",
+          subCategory: payment.subCategory || null,
+          type: "income",
+          amount: confirmedAmount,
+          client: tx,
+        });
+      } else {
+        if (payment.accountId && payment.account) {
+          await tx.transaction.create({
+            data: {
+              userId: session.user.id,
+              accountId: payment.accountId,
+              subAccountId: sourceSubAccountId,
+              type: "expense",
+              amount: confirmedAmount,
+              description: payment.description,
+              category: payment.category || "Pagos Recurrentes",
+              subCategory: payment.subCategory || null,
+              date: todayColombia,
+              sourceModule: "finance",
+              sourceId: payment.id,
+              isRecurring: true,
+              notes: `Pago recurrente confirmado - ${payment.frequency}`,
+            },
+          });
+
+          await applyBalanceDelta(tx, {
+            accountId: payment.accountId,
+            subAccountId: sourceSubAccountId,
+            amount: -confirmedAmount,
+          });
+        }
+
+        await adjustBudgetSpent({
+          userId: session.user.id,
+          category: payment.category || "Pagos Recurrentes",
+          subCategory: payment.subCategory || null,
+          type: "expense",
+          amount: confirmedAmount,
+          client: tx,
+        });
+      }
+
+      if (payment.isRecurring && payment.frequency !== "one_time") {
+        const nextDate = getNextScheduledDate(payment.scheduledDate, payment.frequency, payment.customDays);
+
+        let nextAmount = payment.amount;
+        if (payment.periodAmounts) {
+          try {
+            const dist = JSON.parse(payment.periodAmounts);
+            if (Array.isArray(dist) && dist.length > 0) {
+              let nextIndex = 0;
+              if (payment.frequency === "biweekly" && payment.customDays) {
+                const days = JSON.parse(payment.customDays).sort((a: number, b: number) => a - b);
+                const nextDay = nextDate.getDate();
+                if (nextDay >= days[1]) nextIndex = 1;
+              } else if (payment.frequency === "weekly") {
+                nextIndex = Math.min(Math.floor((nextDate.getDate() - 1) / 7), dist.length - 1);
+              }
+              if (dist[nextIndex] && dist[nextIndex] > 0) {
+                nextAmount = dist[nextIndex];
+              }
+            }
+          } catch { /* use current amount */ }
+        }
+
+        await tx.recurringPayment.create({
+          data: {
+            userId: session.user.id,
+            description: payment.description,
+            amount: nextAmount,
+            type: payment.type,
+            accountId: payment.accountId,
+            subAccountId: sourceSubAccountId,
+            debtId: payment.debtId,
+            destinationAccountId: effectiveDestAccountId || payment.destinationAccountId,
+            destinationSubAccountId: effectiveDestSubAccountId,
+            category: payment.category,
+            subCategory: payment.subCategory,
+            scheduledDate: nextDate,
+            frequency: payment.frequency,
+            customDays: payment.customDays,
+            periodAmounts: payment.periodAmounts,
+            notes: payment.notes,
+            isRecurring: true,
+            status: "pending",
+            payrollGroupId: payment.payrollGroupId || null,
+            savingsGoalId: payment.savingsGoalId || null,
+          },
+        });
+      }
+    });
+
+    if (shouldSyncSavingsBudget) {
+      await syncSavingsBudget(session.user.id);
     }
 
     // Fetch the updated payment with relations for the response
