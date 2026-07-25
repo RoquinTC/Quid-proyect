@@ -51,6 +51,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   WalletCards,
+  Target,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
@@ -105,6 +106,21 @@ const typeConfig = {
 } as const;
 
 
+type CommitmentKind = "debt" | "recurring" | "savings";
+
+interface CommitmentItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  amount: number;
+  kind: CommitmentKind;
+  placeLabel: string;
+  date?: string | null;
+  sourceId: string;
+  recurringId?: string;
+  savingsGoalId?: string | null;
+  canQuickConfirm?: boolean;
+}
 
 const subTypeLabels: Record<string, string> = {
   pocket: "Bolsillo",
@@ -196,6 +212,9 @@ export function AccountDetail() {
   const [selectedPocketId, setSelectedPocketId] = useState("all");
   const [subTransactions, setSubTransactions] = useState<Record<string, Transaction[]>>({});
   const [cashbackMode, setCashbackMode] = useState(false);
+  const [quickConfirmItem, setQuickConfirmItem] = useState<CommitmentItem | null>(null);
+  const [quickConfirmAmount, setQuickConfirmAmount] = useState("");
+  const [quickConfirmLoading, setQuickConfirmLoading] = useState(false);
 
   // Inline edit state
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
@@ -574,15 +593,7 @@ export function AccountDetail() {
   ]);
 
   const commitmentItems = (() => {
-    const items: Array<{
-      id: string;
-      title: string;
-      subtitle: string;
-      amount: number;
-      kind: "debt" | "recurring";
-      placeLabel: string;
-      date?: string | null;
-    }> = [];
+    const items: CommitmentItem[] = [];
 
     const resolvePlaceLabel = (accountId?: string | null, subAccountId?: string | null) => {
       if (subAccountId) {
@@ -607,6 +618,7 @@ export function AccountDetail() {
           kind: "debt",
           placeLabel: resolvePlaceLabel(inst.accountId || debt.accountId, inst.subAccountId || debt.subAccountId),
           date: inst.nextPaymentDate,
+          sourceId: debt.id,
         });
       });
     });
@@ -618,14 +630,23 @@ export function AccountDetail() {
         const isOutgoing = payment.type === "expense" || payment.type === "transfer" || !!payment.debtId;
         if (!isOutgoing || !placeId || !accountPlaceIds.has(placeId)) return;
 
+        const isSavingsCommitment = Boolean(payment.savingsGoalId);
+        const hasTransferDestination = payment.type !== "transfer" || Boolean(payment.destinationAccountId);
+
         items.push({
           id: `recurring-${payment.id}`,
-          title: payment.description,
-          subtitle: payment.debt?.name || payment.category || "Recurrente",
+          title: payment.savingsGoal?.name || payment.description,
+          subtitle: isSavingsCommitment
+            ? payment.description || "Aporte programado a meta"
+            : payment.debt?.name || payment.category || "Recurrente",
           amount: Number(payment.amount || 0),
-          kind: "recurring",
+          kind: isSavingsCommitment ? "savings" : "recurring",
           placeLabel: resolvePlaceLabel(payment.accountId, payment.subAccountId),
           date: payment.scheduledDate,
+          sourceId: isSavingsCommitment ? payment.savingsGoalId || payment.id : payment.id,
+          recurringId: payment.id,
+          savingsGoalId: payment.savingsGoalId,
+          canQuickConfirm: hasTransferDestination,
         });
       });
 
@@ -638,10 +659,163 @@ export function AccountDetail() {
 
   const commitmentsTotal = commitmentItems.reduce((sum, item) => sum + item.amount, 0);
   const commitmentGap = combinedAvailable - commitmentsTotal;
+  const debtCommitments = commitmentItems.filter((item) => item.kind === "debt");
+  const recurringCommitments = commitmentItems.filter((item) => item.kind === "recurring");
+  const savingsCommitments = commitmentItems.filter((item) => item.kind === "savings");
   const selectedPocket = account.subAccounts.find((sub) => sub.id === selectedPocketId) || null;
   const selectedPocketTransactions = selectedPocket
     ? filteredSubTransactions[selectedPocket.id] || []
     : [];
+  const openCommitment = (item: CommitmentItem) => {
+    if (typeof window === "undefined") return;
+
+    if (item.kind === "debt") {
+      sessionStorage.setItem("selectedDebtId", item.sourceId);
+      setFinanceSubView("debt-detail");
+      return;
+    }
+
+    if (item.kind === "savings" && item.savingsGoalId) {
+      sessionStorage.setItem("selectedSavingsGoalId", item.savingsGoalId);
+      setFinanceSubView("savings-detail");
+      return;
+    }
+
+    if (item.recurringId) {
+      sessionStorage.setItem("selectedRecurringPaymentId", item.recurringId);
+    }
+    setFinanceSubView("recurring");
+  };
+
+  const openQuickConfirm = (item: CommitmentItem) => {
+    setQuickConfirmItem(item);
+    setQuickConfirmAmount(String(item.amount));
+  };
+
+  const confirmCommitment = async () => {
+    if (!quickConfirmItem?.recurringId) return;
+
+    const parsedAmount = Number(quickConfirmAmount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      toast.error("Ingresa un valor valido para confirmar");
+      return;
+    }
+
+    setQuickConfirmLoading(true);
+    try {
+      await apiFetch(`/api/recurring/${quickConfirmItem.recurringId}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ actualAmount: parsedAmount }),
+      });
+      toast.success("Compromiso confirmado");
+      setQuickConfirmItem(null);
+      setQuickConfirmAmount("");
+      await Promise.all([fetchAccount(), fetchCommitmentData()]);
+    } catch (error: any) {
+      console.error("Error confirming commitment:", error);
+      toast.error(error?.message || "No se pudo confirmar este compromiso");
+    } finally {
+      setQuickConfirmLoading(false);
+    }
+  };
+
+  const renderCommitmentSection = ({
+    title,
+    subtitle,
+    items,
+    icon: SectionIcon,
+    toneClass,
+  }: {
+    title: string;
+    subtitle: string;
+    items: typeof commitmentItems;
+    icon: typeof Receipt;
+    toneClass: string;
+  }) => {
+    if (items.length === 0) return null;
+
+    const sectionTotal = items.reduce((sum, item) => sum + item.amount, 0);
+
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={`size-9 rounded-xl flex items-center justify-center ${toneClass}`}>
+              <SectionIcon className="size-4" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{title}</h3>
+              <p className="text-xs text-gray-400 truncate">{subtitle}</p>
+            </div>
+          </div>
+          <Badge variant="outline" className="rounded-xl text-xs shrink-0">
+            {formatCurrency(sectionTotal)}
+          </Badge>
+        </div>
+
+        <div className="space-y-2">
+          {items.map((item) => {
+            const ItemIcon = item.kind === "debt" ? Receipt : item.kind === "savings" ? Target : Repeat;
+            const itemTone = item.kind === "debt"
+              ? "bg-rose-50 text-rose-500 dark:bg-rose-900/20"
+              : item.kind === "savings"
+                ? "bg-violet-50 text-violet-500 dark:bg-violet-900/20"
+                : "bg-blue-50 text-blue-500 dark:bg-blue-900/20";
+
+            return (
+              <Card
+                key={item.id}
+                className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-900 cursor-pointer transition-shadow hover:shadow-md"
+                onClick={() => openCommitment(item)}
+              >
+                <CardContent className="p-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className={`size-9 shrink-0 rounded-xl flex items-center justify-center ${itemTone}`}>
+                        <ItemIcon className="size-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">{item.title}</p>
+                        </div>
+                        <p className="truncate text-[11px] text-gray-400">{item.subtitle} · {item.placeLabel}</p>
+                        <p className="text-[11px] text-gray-400">
+                          {item.date ? `Vence: ${formatDate(item.date)}` : "Tocar para ver detalle"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">{formatCurrency(item.amount)}</p>
+                      {item.kind !== "debt" && (
+                        item.canQuickConfirm ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-6 rounded-lg bg-emerald-500 px-2 text-[11px] hover:bg-emerald-600"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openQuickConfirm(item);
+                            }}
+                          >
+                            <Check className="size-3 mr-1" />
+                            Confirmar
+                          </Button>
+                        ) : (
+                          <span className="rounded-lg bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                            Gestionar
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="p-4 space-y-4 pb-safe">
@@ -1510,14 +1684,7 @@ export function AccountDetail() {
             </Card>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pagos ligados a esta cuenta</h3>
-              <Badge variant="outline" className="rounded-xl text-xs">
-                {formatCurrency(commitmentsTotal)}
-              </Badge>
-            </div>
-
+          <div className="space-y-4">
             {commitmentItems.length === 0 ? (
               <Card className="border-0 shadow-sm rounded-2xl bg-gray-50 dark:bg-gray-800/50">
                 <CardContent className="p-6 text-center">
@@ -1526,33 +1693,29 @@ export function AccountDetail() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-2">
-                {commitmentItems.map((item) => (
-                  <Card key={item.id} className="border-0 shadow-sm rounded-2xl bg-white dark:bg-gray-900">
-                    <CardContent className="p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`size-10 rounded-xl flex items-center justify-center ${
-                            item.kind === "debt"
-                              ? "bg-rose-50 text-rose-500 dark:bg-rose-900/20"
-                              : "bg-blue-50 text-blue-500 dark:bg-blue-900/20"
-                          }`}>
-                            {item.kind === "debt" ? <Receipt className="size-5" /> : <Repeat className="size-5" />}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</p>
-                            <p className="text-xs text-gray-400 truncate">{item.subtitle} · {item.placeLabel}</p>
-                            {item.date && (
-                              <p className="text-[11px] text-gray-400">Vence: {formatDate(item.date)}</p>
-                            )}
-                          </div>
-                        </div>
-                        <p className="text-sm font-bold text-gray-900 dark:text-white shrink-0">{formatCurrency(item.amount)}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              <>
+                {renderCommitmentSection({
+                  title: "Deudas y tarjetas",
+                  subtitle: "Cuotas, pagos de tarjeta y préstamos",
+                  items: debtCommitments,
+                  icon: Receipt,
+                  toneClass: "bg-rose-50 text-rose-500 dark:bg-rose-900/20",
+                })}
+                {renderCommitmentSection({
+                  title: "Pagos recurrentes",
+                  subtitle: "Servicios, suscripciones y gastos programados",
+                  items: recurringCommitments,
+                  icon: Repeat,
+                  toneClass: "bg-blue-50 text-blue-500 dark:bg-blue-900/20",
+                })}
+                {renderCommitmentSection({
+                  title: "Compromisos con metas",
+                  subtitle: "Aportes programados a objetivos de ahorro",
+                  items: savingsCommitments,
+                  icon: Target,
+                  toneClass: "bg-violet-50 text-violet-500 dark:bg-violet-900/20",
+                })}
+              </>
             )}
           </div>
         </TabsContent>
@@ -2234,6 +2397,80 @@ export function AccountDetail() {
         subAccount={editingSubAccount}
         onSuccess={fetchAccount}
       />
+
+      {/* Quick Confirm Commitment Dialog */}
+      <AlertDialog
+        open={!!quickConfirmItem}
+        onOpenChange={(open) => {
+          if (!open) {
+            setQuickConfirmItem(null);
+            setQuickConfirmAmount("");
+          }
+        }}
+      >
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Confirmar compromiso?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {quickConfirmItem ? (
+                <>
+                  Se confirmará <strong>{quickConfirmItem.title}</strong> desde{" "}
+                  <strong>{quickConfirmItem.placeLabel}</strong>. Quid hará el movimiento correspondiente y actualizará los saldos.
+                </>
+              ) : (
+                "Confirma este compromiso para actualizar tus saldos."
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {quickConfirmItem && (
+            <div className="space-y-2">
+              <div className="rounded-2xl bg-gray-50 p-3 text-xs dark:bg-gray-800/60">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-gray-500 dark:text-gray-400">Valor programado</span>
+                  <span className="font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(quickConfirmItem.amount)}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Valor real a confirmar</Label>
+                <CurrencyInput
+                  value={quickConfirmAmount}
+                  onChange={setQuickConfirmAmount}
+                  showPrefix
+                  placeholder="0"
+                  className="rounded-xl font-bold"
+                />
+                <p className="text-[11px] text-gray-400">
+                  Puedes ajustar el valor si este mes llegó diferente al programado.
+                </p>
+              </div>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl" disabled={quickConfirmLoading}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-xl bg-emerald-500 hover:bg-emerald-600"
+              onClick={(event) => {
+                event.preventDefault();
+                confirmCommitment();
+              }}
+              disabled={quickConfirmLoading}
+            >
+              {quickConfirmLoading ? (
+                <>
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  Confirmando...
+                </>
+              ) : (
+                "Confirmar"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete Account Dialog */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

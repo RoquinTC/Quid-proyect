@@ -50,6 +50,13 @@ export async function GET() {
             currentBalance: true,
           },
         },
+        savingsGoal: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        },
       },
       orderBy: { scheduledDate: "asc" },
     });

@@ -212,6 +212,7 @@ export interface RecurringPayment {
   account?: { id: string; name: string; color: string } | null;
   destinationAccount?: { id: string; name: string; color: string } | null;
   debt?: { id: string; name: string; type: string; color: string } | null;
+  savingsGoal?: { id: string; name: string; color: string } | null;
   createdAt?: string;
   updatedAt?: string;
 }
