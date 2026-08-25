@@ -9,6 +9,7 @@ import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, recurringConfirmSchema } from "@/lib/validations";
 import { createColombiaDate, getColombiaTodayString } from "@/lib/api";
 import { applyBalanceDelta } from "@/lib/finance-ledger";
+import { getCreditCardNextPaymentDate } from "@/lib/credit-card-cycle";
 
 function normalizeSubAccountId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -351,41 +352,11 @@ export async function POST(
           });
         }
 
-        const nextPayment = new Date(todayColombia);
-        if (payment.debt?.paymentDate) {
-          let cycleMonth: number;
-          let cycleYear: number;
-          if (payment.debt.cutoffDate && todayColombia.getDate() >= payment.debt.cutoffDate) {
-            cycleMonth = todayColombia.getMonth() + 1;
-            cycleYear = todayColombia.getFullYear();
-            if (cycleMonth > 11) {
-              cycleMonth = 0;
-              cycleYear += 1;
-            }
-          } else {
-            cycleMonth = todayColombia.getMonth();
-            cycleYear = todayColombia.getFullYear();
-          }
-
-          let payMonth: number;
-          let payYear: number;
-          if (payment.debt.cutoffDate && payment.debt.paymentDate > payment.debt.cutoffDate) {
-            payMonth = cycleMonth;
-            payYear = cycleYear;
-          } else {
-            payMonth = cycleMonth + 1;
-            payYear = cycleYear;
-            if (payMonth > 11) {
-              payMonth = 0;
-              payYear += 1;
-            }
-          }
-          const maxDaysInPayMonth = new Date(payYear, payMonth + 1, 0).getDate();
-          const payDay = Math.min(payment.debt.paymentDate, maxDaysInPayMonth);
-          nextPayment.setTime(new Date(payYear, payMonth, payDay, 12, 0, 0).getTime());
-        } else {
-          nextPayment.setMonth(nextPayment.getMonth() + 1);
-        }
+        const nextPayment = getCreditCardNextPaymentDate({
+          purchaseDate: todayColombia,
+          cutoffDate: payment.debt?.cutoffDate,
+          paymentDate: payment.debt?.paymentDate,
+        });
 
         const installment = await tx.installment.create({
           data: {

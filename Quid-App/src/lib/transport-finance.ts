@@ -10,6 +10,7 @@
 import { db } from "@/lib/db";
 import { MAINTENANCE_SUBCATEGORY_MAP, DOCUMENT_SUBCATEGORY_MAP } from "@/lib/types/transport";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { getCreditCardNextPaymentDate } from "@/lib/credit-card-cycle";
 import { getVehicleTypeLabel } from "@/lib/constants/vehicle-catalog";
 
 // ─── Types ───
@@ -161,30 +162,12 @@ export async function createFinanceEntry(
     const totalInstallments = installmentCount && installmentCount > 1 ? installmentCount : 1;
     const installmentAmount = Math.round((amount / totalInstallments) * 100) / 100;
 
-    // 1. Calculate nextPaymentDate based on CC billing cycle
     const debt = await db.debt.findUnique({ where: { id: debtId } });
-    let nextPaymentDate = new Date(date);
-
-    if (debt?.cutoffDate && debt?.paymentDate) {
-      const purchaseDay = date.getDate();
-      const cutoffDay = debt.cutoffDate;
-      const paymentDay = debt.paymentDate;
-
-      if (purchaseDay >= cutoffDay) {
-        // Purchase after cutoff → next month's cycle → payment the month after
-        nextPaymentDate = new Date(date.getFullYear(), date.getMonth() + 2, paymentDay);
-      } else {
-        // Purchase before cutoff → this month's cycle → payment next month (or same month)
-        if (paymentDay > cutoffDay) {
-          nextPaymentDate = new Date(date.getFullYear(), date.getMonth() + 1, paymentDay);
-        } else {
-          nextPaymentDate = new Date(date.getFullYear(), date.getMonth() + 2, paymentDay);
-        }
-      }
-    } else {
-      // No billing cycle → payment due in 30 days
-      nextPaymentDate = new Date(date.getTime() + 30 * 24 * 60 * 60 * 1000);
-    }
+    const nextPaymentDate = getCreditCardNextPaymentDate({
+      purchaseDate: date,
+      cutoffDate: debt?.cutoffDate,
+      paymentDate: debt?.paymentDate,
+    });
 
     // 2. Create installment on the CC
     const installment = await db.installment.create({

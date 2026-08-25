@@ -7,6 +7,7 @@ import { toNumber } from "@/lib/decimal-serializer";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { validateBody, shoppingListConfirmSchema } from "@/lib/validations";
 import { verifyEntityMutationAccess } from "@/lib/auth-guards";
+import { getCreditCardNextPaymentDate } from "@/lib/credit-card-cycle";
 
 function normalizeOptionalId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -117,24 +118,11 @@ export async function POST(
         return NextResponse.json({ error: "Tarjeta de crédito no encontrada" }, { status: 404 });
       }
 
-      if (debt.cutoffDate && debt.paymentDate) {
-        const purchaseDay = purchaseDate.getDate();
-        const cutoffDay = debt.cutoffDate;
-        const paymentDay = debt.paymentDate;
-        const monthsToAdd = purchaseDay >= cutoffDay ? 2 : paymentDay > cutoffDay ? 1 : 2;
-        const payMonth = purchaseDate.getMonth() + monthsToAdd;
-        const maxDaysInPayMonth = new Date(purchaseDate.getFullYear(), payMonth + 1, 0).getDate();
-        nextPaymentDate = new Date(
-          purchaseDate.getFullYear(),
-          payMonth,
-          Math.min(paymentDay, maxDaysInPayMonth),
-          12,
-          0,
-          0
-        );
-      } else {
-        nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
-      }
+      nextPaymentDate = getCreditCardNextPaymentDate({
+        purchaseDate,
+        cutoffDate: debt.cutoffDate,
+        paymentDate: debt.paymentDate,
+      });
     }
 
     const updatedList = await db.$transaction(async (tx) => {

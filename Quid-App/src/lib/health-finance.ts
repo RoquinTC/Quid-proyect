@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { getCreditCardNextPaymentDate } from "@/lib/credit-card-cycle";
 
 export type PaymentType = "account" | "credit_card";
 
@@ -39,23 +40,11 @@ export async function createHealthFinanceEntry(params: {
   if (debtId) {
     // Compra con Tarjeta de Crédito
     const debt = await db.debt.findUnique({ where: { id: debtId } });
-    let nextPaymentDate = new Date();
-    if (debt?.cutoffDate && debt?.paymentDate) {
-      const purchaseDay = nextPaymentDate.getDate();
-      const cutoffDay = debt.cutoffDate;
-      const paymentDay = debt.paymentDate;
-      if (purchaseDay >= cutoffDay) {
-        nextPaymentDate = new Date(nextPaymentDate.getFullYear(), nextPaymentDate.getMonth() + 2, paymentDay);
-      } else {
-        if (paymentDay > cutoffDay) {
-          nextPaymentDate = new Date(nextPaymentDate.getFullYear(), nextPaymentDate.getMonth() + 1, paymentDay);
-        } else {
-          nextPaymentDate = new Date(nextPaymentDate.getFullYear(), nextPaymentDate.getMonth() + 2, paymentDay);
-        }
-      }
-    } else {
-      nextPaymentDate = new Date(nextPaymentDate.getTime() + 30 * 24 * 60 * 60 * 1000);
-    }
+    const nextPaymentDate = getCreditCardNextPaymentDate({
+      purchaseDate: date,
+      cutoffDate: debt?.cutoffDate,
+      paymentDate: debt?.paymentDate,
+    });
 
     const installment = await db.installment.create({
       data: {

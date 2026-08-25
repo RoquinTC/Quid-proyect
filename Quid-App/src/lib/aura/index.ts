@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { createFinanceEntry, getTransportDescription } from "@/lib/transport-finance";
 import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
+import { getCreditCardNextPaymentDate } from "@/lib/credit-card-cycle";
 import { calculateFuelLevel } from "@/lib/fuel-level";
 import {
   parsePreviousProposal,
@@ -558,17 +559,16 @@ export async function createCreditCardPurchaseFromAura(params: {
 }) {
   const debt = await db.debt.findUnique({
     where: { id: params.debtId },
-    select: { id: true, paymentDate: true, type: true },
+    select: { id: true, cutoffDate: true, paymentDate: true, type: true },
   });
 
   if (!debt) throw new Error("No encontré la tarjeta o deuda indicada.");
 
-  const nextPaymentDate = new Date(params.date);
-  nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
-  if (debt.paymentDate) {
-    const lastDay = new Date(nextPaymentDate.getFullYear(), nextPaymentDate.getMonth() + 1, 0).getDate();
-    nextPaymentDate.setDate(Math.min(debt.paymentDate, lastDay));
-  }
+  const nextPaymentDate = getCreditCardNextPaymentDate({
+    purchaseDate: params.date,
+    cutoffDate: debt.cutoffDate,
+    paymentDate: debt.paymentDate,
+  });
 
   const installment = await db.$transaction(async (tx) => {
     const createdInstallment = await tx.installment.create({
