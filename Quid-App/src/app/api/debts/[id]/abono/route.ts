@@ -11,7 +11,6 @@ import {
   applyBudgetDelta,
   assertSubAccountBelongsToAccount,
 } from "@/lib/finance-ledger";
-import { getNextInstallmentCapital } from "@/lib/installment-payment";
 
 function normalizeOptionalId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -133,12 +132,22 @@ export async function POST(
 
         if (isFullyPaid) {
           updateData.isPaid = true;
+          updateData.installmentAmount = 0;
         } else {
           // If 1 installment total, the remaining installment amount to be paid is the new balance
           if (installment.totalInstallments === 1) {
             updateData.installmentAmount = newBalance;
-          } else if (newBalance < toNumber(installment.installmentAmount)) {
-            updateData.installmentAmount = getNextInstallmentCapital(installment, newBalance);
+          } else {
+            // Multi-installment purchase: apply the abono as a prepayment toward the
+            // current cycle's cuota, so the UI reflects the partial payment already made.
+            // Capped to the remaining capital so the due amount never exceeds what's owed
+            // (financially identical to a capital abono, since interest is computed on the
+            // remaining balance in /pay).
+            const currentDue = toNumber(installment.installmentAmount);
+            updateData.installmentAmount = Math.min(
+              Math.max(0, currentDue - payment.amount),
+              newBalance
+            );
           }
         }
 
