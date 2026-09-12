@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Installment } from "@/lib/types";
+import { getEffectiveInstallmentCapital, getRemainingCapital } from "@/lib/installment-payment";
 
 interface BillingCycle {
   cycleKey: string; // e.g. "2026-04"
@@ -167,7 +168,7 @@ export function InstallmentPlan({
   };
 
   // Separate paid/unpaid
-  const unpaidInstallments = installments.filter((inst) => !inst.isPaid);
+  const unpaidInstallments = installments.filter((inst) => !inst.isPaid && getRemainingCapital(inst) > 0);
   const paidInstallments = installments.filter((inst) => inst.isPaid);
 
   // ── Determine if credit card with cycles ──
@@ -268,7 +269,7 @@ export function InstallmentPlan({
         };
       }
       groups[key].installments.push(inst);
-      groups[key].totalAmount += inst.installmentAmount;
+      groups[key].totalAmount += getEffectiveInstallmentCapital(inst);
     }
 
     return Object.entries(groups);
@@ -298,7 +299,7 @@ export function InstallmentPlan({
         };
       }
       groups[dateKey].installments.push(inst);
-      groups[dateKey].totalAmount += inst.installmentAmount;
+      groups[dateKey].totalAmount += getEffectiveInstallmentCapital(inst);
     }
 
     // Sort by date descending (most recent first)
@@ -330,7 +331,7 @@ export function InstallmentPlan({
         };
       }
       groups[key].installments.push(inst);
-      groups[key].totalAmount += inst.installmentAmount;
+      groups[key].totalAmount += getEffectiveInstallmentCapital(inst);
     }
 
     // Sort: accounts with sub-accounts first, then by total amount descending
@@ -400,13 +401,13 @@ export function InstallmentPlan({
     return nextUnpaid.length > 0 ? [nextUnpaid[0]] : [];
   }, [hasCycles, billingCycles, unpaidInstallments, today]);
 
-  const totalDue = dueInstallments.reduce((sum, i) => sum + i.installmentAmount, 0);
+  const totalDue = dueInstallments.reduce((sum, i) => sum + getEffectiveInstallmentCapital(i), 0);
 
   // Selected due installments for partial payment
   const selectedDue = selectedInstallmentIds
     ? dueInstallments.filter((inst) => selectedInstallmentIds.has(inst.id))
     : dueInstallments;
-  const selectedTotal = selectedDue.reduce((sum, i) => sum + i.installmentAmount, 0);
+  const selectedTotal = selectedDue.reduce((sum, i) => sum + getEffectiveInstallmentCapital(i), 0);
 
   // ── Helper: determine installment status ──
   const getInstallmentStatus = (inst: Installment): "due" | "future" | "paid" => {
@@ -485,7 +486,7 @@ export function InstallmentPlan({
                     Cuota {inst.currentInstallment}/{inst.totalInstallments}
                   </span>
                   <span>•</span>
-                  <span>{formatCurrency(inst.installmentAmount)}/mes{inst.totalInstallments > 1 ? " capital" : ""}</span>
+            <span>{formatCurrency(getEffectiveInstallmentCapital(inst))}/mes{inst.totalInstallments > 1 ? " capital" : ""}</span>
                   {inst.totalInstallments > 1 && inst.remainingBalance != null && (
                     <>
                       <span>•</span>
@@ -602,7 +603,7 @@ export function InstallmentPlan({
 
           // Group installments within this cycle by account/subaccount
           const accountGroups = getAccountGroups(cycle.installments);
-          const cycleTotal = cycle.installments.reduce((sum, i) => sum + i.installmentAmount, 0);
+            const cycleTotal = cycle.installments.reduce((sum, i) => sum + getEffectiveInstallmentCapital(i), 0);
 
           return (
             <div key={cycle.cycleKey}>
@@ -674,7 +675,7 @@ export function InstallmentPlan({
                   >
                     {accountGroups.map(([groupKey, group]) => {
                       const isGroupExpanded = expandedGroups[`${cycle.cycleKey}-${groupKey}`] ?? false;
-                      const groupTotal = group.installments.reduce((sum, i) => sum + i.installmentAmount, 0);
+                      const groupTotal = group.installments.reduce((sum, i) => sum + getEffectiveInstallmentCapital(i), 0);
 
                       return (
                         <div key={groupKey} className="mb-2">
@@ -1147,7 +1148,7 @@ export function InstallmentPlan({
                     </span>
                   </div>
                   <span className="text-xs text-gray-400">
-                    {formatCurrency(paidInstallments.reduce((sum, i) => sum + i.installmentAmount, 0))}
+                    {formatCurrency(paidInstallments.reduce((sum, i) => sum + i.paidAmount, 0))}
                   </span>
                 </div>
               </CardContent>
@@ -1166,7 +1167,7 @@ export function InstallmentPlan({
                 {/* Group paid by account */}
                 {paidGroups.map(([groupKey, group]) => {
                   const isGroupExpanded = expandedPaidGroups[groupKey] ?? false;
-                  const groupTotal = group.installments.reduce((sum, i) => sum + i.installmentAmount, 0);
+                  const groupTotal = group.installments.reduce((sum, i) => sum + i.paidAmount, 0);
 
                   return (
                     <div key={groupKey} className="mb-2">

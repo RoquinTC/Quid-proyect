@@ -8,6 +8,7 @@ import { validateBody, debtPaySchema } from "@/lib/validations";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 import { applyBalanceDelta } from "@/lib/finance-ledger";
+import { getEffectiveInstallmentCapital, getNextInstallmentCapital, getRemainingCapital } from "@/lib/installment-payment";
 
 function normalizeOptionalId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -99,12 +100,15 @@ export async function POST(
 
     // ── Determine which installments are due for payment ──
     type InstallmentToPay = typeof debt.installments[number];
+    const activeInstallments = debt.installments.filter(
+      (inst) => !inst.isPaid && getRemainingCapital(inst) > 0
+    );
     let dueInstallments: InstallmentToPay[];
 
     if (selectedInstallmentIds && selectedInstallmentIds.length > 0) {
       // User selected specific installments to pay (partial payment)
-      dueInstallments = debt.installments.filter(
-        (inst) => selectedInstallmentIds.includes(inst.id) && !inst.isPaid
+      dueInstallments = activeInstallments.filter(
+        (inst) => selectedInstallmentIds.includes(inst.id)
       );
       if (dueInstallments.length === 0) {
         return NextResponse.json({ error: "Las cuotas seleccionadas no existen o ya están pagadas" }, { status: 400 });
@@ -114,7 +118,7 @@ export async function POST(
       // whose cutoff date has passed (the bank has already generated the statement)
       const cycleMap = new Map<string, { installments: typeof debt.installments; cutoffDate: Date; paymentDueDate: Date }>();
 
-      for (const inst of debt.installments) {
+      for (const inst of activeInstallments) {
         const nextPayDate = new Date(inst.nextPaymentDate);
         const { year, month } = getCycleFromPaymentDate(nextPayDate, debt.cutoffDate!, debt.paymentDate!);
         const cycleKey = `${year}-${String(month + 1).padStart(2, "0")}`;
@@ -164,15 +168,14 @@ export async function POST(
       dueInstallments = dueCycle.installments;
     } else {
       // Non-credit-card debt: pay installments with nextPaymentDate <= today
-      dueInstallments = debt.installments.filter(
-        (inst) => new Date(inst.nextPaymentDate) <= today && !inst.isPaid
+      dueInstallments = activeInstallments.filter(
+        (inst) => new Date(inst.nextPaymentDate) <= today
       );
 
       // For loans: if no due installments, allow paying the next upcoming one
       // (user may want to pay early or the payment date just hasn't arrived yet)
       if (dueInstallments.length === 0 && debt.type === "loan") {
-        const nextUnpaid = debt.installments
-          .filter(inst => !inst.isPaid)
+        const nextUnpaid = activeInstallments
           .sort((a, b) => new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime());
         if (nextUnpaid.length > 0) {
           // If the user explicitly selected specific installments, respect that
@@ -194,7 +197,8 @@ export async function POST(
     let totalPayment = 0;
 
     // Track which installments were paid (so we can auto-create the next ones after)
-    const paidInstallmentIds: string[] = [];
+    const paidInstallmentsForNext: Array<{ installment: InstallmentToPay; capital: number; balanceAfterPayment: number }> = [];
+    const paymentResults = new Map<string, { capital: number; interest: number; other: number; total: number; balanceBeforePayment: number }>();
 
     // Determine if this is a loan with fixed cuota
     const isLoan = debt.type === "loan";
@@ -249,6 +253,8 @@ export async function POST(
       let interestRate: number;
       let otherChargesAmount: number;
 
+      const balanceBeforePayment = getRemainingCapital(installment);
+
       if (isLoanFixed) {
         // ── Préstamo con cuota fija: usar valores confirmados por el usuario ──
         // Capital = lo que va a saldo (confirmado por el usuario vs el extracto del banco)
@@ -260,7 +266,7 @@ export async function POST(
         if (capital === 0 && interestAmount === 0) {
           // Fallback: calcular automáticamente si el usuario no confirmó
           // interestRate for loans is NMV (annual nominal), monthly rate = NMV / 12
-          const balance = toNumber(installment.remainingBalance ?? debt.currentBalance);
+          const balance = balanceBeforePayment || toNumber(debt.currentBalance);
           const annualRate = toNumber(debt.interestRate ?? 0);
           const monthlyRate = annualRate > 0 ? annualRate / 12 : 0;
           interestRate = monthlyRate;
@@ -270,7 +276,9 @@ export async function POST(
         }
       } else {
         // ── Tarjeta de crédito o cuota variable: lógica original ──
-        capital = toNumber(installment.installmentAmount); // Fixed capital = totalAmount / totalInstallments
+        // Capital is limited by the actual remaining balance (which may have been reduced by abonos)
+        const effectiveBalance = balanceBeforePayment;
+        capital = getEffectiveInstallmentCapital(installment);
 
         // Calculate interest for multi-installment purchases
         interestAmount = 0;
@@ -280,13 +288,24 @@ export async function POST(
         if (installment.totalInstallments > 1 && interestRates[installment.id] !== undefined) {
           // Interest = remainingBalance × (rate / 100)
           interestRate = interestRates[installment.id];
-          const balance = toNumber(installment.remainingBalance ?? installment.totalAmount);
-          interestAmount = balance * (interestRate / 100);
+          interestAmount = effectiveBalance * (interestRate / 100);
         }
       }
 
+      // A payment can never reduce capital below zero, including fixed-rate loans
+      // whose quoted monthly capital is greater than the balance left after abonos.
+      capital = Math.min(capital, balanceBeforePayment);
+
       const totalPaymentForThis = capital + interestAmount + otherChargesAmount;
+      const balanceAfterPayment = Math.max(balanceBeforePayment - capital, 0);
       totalPayment += totalPaymentForThis;
+      paymentResults.set(installment.id, {
+        capital,
+        interest: interestAmount,
+        other: otherChargesAmount,
+        total: totalPaymentForThis,
+        balanceBeforePayment,
+      });
 
       // Track category spending for budget updates
       const catKey = installment.category || debt.category || "Deudas";
@@ -299,40 +318,34 @@ export async function POST(
         where: { id: installment.id },
         data: {
           isPaid: true,
-          paidAmount: totalPaymentForThis,
+          paidAmount: toNumber(installment.paidAmount ?? 0) + totalPaymentForThis,
           interestRate: interestRate || null,
           interestAmount: interestAmount || null,
           otherChargesAmount: otherChargesAmount || null,
+          remainingBalance: 0,
         },
       });
 
       // If NOT the last installment, we'll auto-create the next one below
+      // but only if there is still remaining balance to pay
       if (installment.currentInstallment < installment.totalInstallments) {
-        paidInstallmentIds.push(installment.id);
+        if (balanceAfterPayment > 0) {
+          paidInstallmentsForNext.push({ installment, capital, balanceAfterPayment });
+        }
       }
     }
 
     // Auto-create the next installment for each multi-installment purchase that was just paid
     // (similar to how recurring payments work: confirm one → create the next)
-    for (const paidId of paidInstallmentIds) {
-      const paidInst = await tx.installment.findUnique({ where: { id: paidId } });
-      if (!paidInst) continue;
+    for (const { installment: paidInst, capital: capitalUsed, balanceAfterPayment: newRemainingBalance } of paidInstallmentsForNext) {
 
       // Calculate next payment date: one month after the paid installment's nextPaymentDate
       const nextDate = new Date(paidInst.nextPaymentDate.getTime());
       nextDate.setUTCMonth(nextDate.getUTCMonth() + 1);
 
-      // Update remainingBalance: capital reduces the balance, not interest or other charges
-      let capitalUsed: number;
-      if (isLoanFixed) {
-        // For loans: capital is what the user confirmed (paidAmount - interest - otherCharges)
-        capitalUsed = toNumber((paidInst.paidAmount ?? 0)) - toNumber(paidInst.interestAmount ?? 0) - toNumber(paidInst.otherChargesAmount ?? 0);
-      } else {
-        // For credit cards: installmentAmount is the fixed capital
-        capitalUsed = toNumber(paidInst.installmentAmount);
-      }
-      const previousBalance = toNumber(paidInst.remainingBalance ?? paidInst.totalAmount);
-      const newRemainingBalance = previousBalance - capitalUsed;
+      const nextInstallmentAmount = isLoanFixed
+        ? Math.min(capitalUsed, newRemainingBalance)
+        : getNextInstallmentCapital(paidInst, newRemainingBalance);
 
       const nextInstallment = await tx.installment.create({
         data: {
@@ -341,9 +354,9 @@ export async function POST(
           totalAmount: toNumber(paidInst.totalAmount),
           totalInstallments: paidInst.totalInstallments,
           currentInstallment: paidInst.currentInstallment + 1,
-          installmentAmount: isLoanFixed ? capitalUsed : toNumber(paidInst.installmentAmount), // Loan: variable capital; CC: same fixed capital
+          installmentAmount: nextInstallmentAmount,
           paidAmount: 0,
-          remainingBalance: Math.max(newRemainingBalance, 0), // Never negative
+          remainingBalance: newRemainingBalance,
           purchaseDate: paidInst.purchaseDate,
           nextPaymentDate: nextDate,
           isPaid: false,
@@ -369,28 +382,10 @@ export async function POST(
     }
 
     // Update debt balance — only capital reduces the balance, not interest or other charges
-    let totalCapital = 0;
-    for (const installment of dueInstallments) {
-      if (isLoanFixed) {
-        const capital = confirmedCapital[installment.id] ?? 0;
-        const interest = confirmedInterest[installment.id] ?? 0;
-        const other = confirmedOtherCharges[installment.id] ?? (debt.otherCharges ?? 0);
-        if (capital === 0 && interest === 0) {
-          // Fallback calculation
-          // interestRate for loans is NMV (annual nominal), monthly rate = NMV / 12
-          const balance = toNumber(installment.remainingBalance ?? debt.currentBalance);
-          const annualRate = toNumber(debt.interestRate ?? 0);
-          const monthlyRate = annualRate > 0 ? annualRate / 12 : 0;
-          const iAmount = balance * (monthlyRate / 100);
-          const fixedCuota = toNumber(debt.monthlyPayment ?? 0);
-          totalCapital += Math.max(fixedCuota - iAmount - other, 0);
-        } else {
-          totalCapital += capital;
-        }
-      } else {
-        totalCapital += toNumber(installment.installmentAmount);
-      }
-    }
+    const totalCapital = dueInstallments.reduce(
+      (sum, installment) => sum + (paymentResults.get(installment.id)?.capital ?? getEffectiveInstallmentCapital(installment)),
+      0
+    );
     await tx.debt.update({
       where: { id },
       data: { currentBalance: { increment: -totalCapital } },
@@ -417,10 +412,8 @@ export async function POST(
       }> = {};
 
       for (const inst of dueInstallments) {
-        const instInterestRate = interestRates[inst.id] ?? 0;
-        const balance = toNumber(inst.remainingBalance ?? inst.totalAmount);
-        const instInterest = (inst.totalInstallments > 1 && instInterestRate) ? balance * (instInterestRate / 100) : 0;
-        const instTotal = toNumber(inst.installmentAmount) + instInterest;
+        const result = paymentResults.get(inst.id);
+        const instTotal = result?.total ?? getEffectiveInstallmentCapital(inst);
 
         const effectiveAccountId = inst.accountId;
         const effectiveSubAccountId = inst.subAccountId;
@@ -486,20 +479,8 @@ export async function POST(
     } else {
       // ── LOAN: individual transactions per installment with correct category ──
       for (const inst of dueInstallments) {
-        const capital = isLoanFixed ? (confirmedCapital[inst.id] ?? 0) : toNumber(inst.installmentAmount);
-        const interest = isLoanFixed ? (confirmedInterest[inst.id] ?? 0) : 0;
-        const other = isLoanFixed ? (confirmedOtherCharges[inst.id] ?? (debt.otherCharges ?? 0)) : 0;
-        let instTotal: number;
-        if (isLoanFixed && capital === 0 && interest === 0) {
-          const balance = toNumber(inst.remainingBalance ?? debt.currentBalance);
-          const annualRate = toNumber(debt.interestRate ?? 0);
-          const monthlyRate = annualRate > 0 ? annualRate / 12 : 0;
-          const iAmount = balance * (monthlyRate / 100);
-          const fixedCuota = toNumber(debt.monthlyPayment ?? 0);
-          instTotal = Math.max(fixedCuota - iAmount - other, 0) + iAmount + other;
-        } else {
-          instTotal = capital + interest + other;
-        }
+        const result = paymentResults.get(inst.id);
+        const instTotal = result?.total ?? 0;
 
         const txCategory = inst.category || debt.category || "Deudas";
         const txSubCategory = inst.subCategory || debt.subCategory || null;
@@ -575,19 +556,20 @@ export async function POST(
       totalPayment,
       paidInstallments: dueInstallments.length,
       details: dueInstallments.map(inst => {
+        const result = paymentResults.get(inst.id);
         if (isLoan) {
-          const capital = confirmedCapital[inst.id] ?? 0;
-          const interest = confirmedInterest[inst.id] ?? 0;
-          const other = confirmedOtherCharges[inst.id] ?? (debt.otherCharges ?? 0);
+          const capital = result?.capital ?? 0;
+          const interest = result?.interest ?? 0;
+          const other = result?.other ?? 0;
           const source = getLoanPaymentSource(inst);
           return {
             id: inst.id,
             description: inst.description,
-            capital: isLoanFixed ? capital : toNumber(inst.installmentAmount),
+            capital,
             interestRate: debt.interestRate ?? null,
             interestAmount: isLoanFixed ? (interest || null) : null,
             otherChargesAmount: isLoanFixed ? (other || null) : null,
-            totalAmount: isLoanFixed ? capital + interest + other : toNumber(inst.installmentAmount),
+            totalAmount: result?.total ?? capital + interest + other,
             currentInstallment: inst.currentInstallment,
             totalInstallments: inst.totalInstallments,
             remainingBalance: inst.remainingBalance ?? inst.totalAmount,
@@ -596,9 +578,9 @@ export async function POST(
           };
         } else {
           const rate = interestRates[inst.id] ?? 0;
-          const balance = toNumber(inst.remainingBalance ?? inst.totalAmount);
+          const balance = result?.balanceBeforePayment ?? getRemainingCapital(inst);
           const interest = (inst.totalInstallments > 1 && rate) ? balance * (rate / 100) : 0;
-          const capital = toNumber(inst.installmentAmount);
+          const capital = result?.capital ?? getEffectiveInstallmentCapital(inst);
           return {
             id: inst.id,
             description: inst.description,
@@ -606,7 +588,7 @@ export async function POST(
             interestRate: rate || null,
             interestAmount: interest || null,
             otherChargesAmount: null,
-            totalAmount: capital + interest,
+            totalAmount: result?.total ?? capital + interest,
             currentInstallment: inst.currentInstallment,
             totalInstallments: inst.totalInstallments,
             remainingBalance: inst.remainingBalance ?? inst.totalAmount,

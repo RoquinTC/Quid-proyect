@@ -49,6 +49,7 @@ import {
 import { motion } from "framer-motion";
 import { CurrencyInput } from "@/components/ui/currency-input";
 import type { Debt, Installment, Account, Abono, AbonoDetail } from "@/lib/types";
+import { getEffectiveInstallmentCapital, getRemainingCapital } from "@/lib/installment-payment";
 
 /**
  * Determine which billing cycle an installment belongs to based on nextPaymentDate.
@@ -75,7 +76,7 @@ function getCycleFromPaymentDate(
  * an installment is due when its billing cycle's cutoff date has passed.
  */
 function getDueInstallments(debt: Debt, today: Date): Installment[] {
-  const unpaid = debt.installments.filter((inst) => !inst.isPaid);
+  const unpaid = debt.installments.filter((inst) => !inst.isPaid && getRemainingCapital(inst) > 0);
 
   if (debt.cutoffDate && debt.paymentDate) {
     // Credit card with billing cycle: use cycle logic
@@ -591,7 +592,7 @@ export function DebtDetail() {
   const hasPaidInstallments = debt.installments.some((inst) => inst.paidAmount > 0);
 
   const totalDue = selectedDueInstallments.reduce((sum, i) => {
-    let amount = i.installmentAmount;
+    let amount = getEffectiveInstallmentCapital(i);
     const rate = parseFloat(interestRates[i.id] || "0");
     if (!isNaN(rate) && rate > 0 && i.totalInstallments > 1) {
       const balance = i.remainingBalance ?? i.totalAmount;
@@ -602,7 +603,7 @@ export function DebtDetail() {
 
   const unpaidCreditInstallments = isCreditCard
     ? debt.installments
-        .filter((inst) => !inst.isPaid)
+        .filter((inst) => !inst.isPaid && getRemainingCapital(inst) > 0)
         .sort((a, b) => new Date(a.nextPaymentDate).getTime() - new Date(b.nextPaymentDate).getTime())
     : [];
 
@@ -666,7 +667,7 @@ export function DebtDetail() {
         purchases: [],
       };
     }
-    paymentSummary[key].amount += inst.installmentAmount;
+    paymentSummary[key].amount += getEffectiveInstallmentCapital(inst);
     paymentSummary[key].purchases.push(inst.description);
   }
 
@@ -675,7 +676,7 @@ export function DebtDetail() {
   }
 
   const paymentSummaryGroups = Object.entries(paymentSummary);
-  const paymentInsightTotal = paymentInsightInstallments.reduce((sum, inst) => sum + inst.installmentAmount, 0);
+  const paymentInsightTotal = paymentInsightInstallments.reduce((sum, inst) => sum + getEffectiveInstallmentCapital(inst), 0);
 
   return (
     <motion.div
@@ -1325,8 +1326,8 @@ export function DebtDetail() {
                   </div>
                 );
               }) : selectedDueInstallments.map((inst) => {
-                const balance = inst.remainingBalance ?? inst.totalAmount;
-                const paymentAmount = inst.installmentAmount;
+                const balance = getRemainingCapital(inst);
+                const paymentAmount = getEffectiveInstallmentCapital(inst);
                 const newBalance = Math.max(balance - paymentAmount, 0);
 
                 return (
@@ -1402,11 +1403,12 @@ export function DebtDetail() {
               selectedDueInstallments
                 .filter((inst) => inst.totalInstallments > 1)
                 .map((inst) => {
-                  const balance = inst.remainingBalance ?? inst.totalAmount;
+                  const balance = getRemainingCapital(inst);
                   const rate = interestRates[inst.id] ?? (debt?.interestRate ? String(debt.interestRate) : "");
                   const rateNum = parseFloat(rate) || 0;
                   const estimatedInterest = rateNum > 0 ? balance * (rateNum / 100) : 0;
-                  const totalWithInterest = inst.installmentAmount + estimatedInterest;
+                  const capital = getEffectiveInstallmentCapital(inst);
+                  const totalWithInterest = capital + estimatedInterest;
 
                   return (
                     <div key={inst.id} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 space-y-2">
@@ -1419,7 +1421,7 @@ export function DebtDetail() {
                         </Badge>
                       </div>
                       <div className="text-xs text-gray-500">
-                        Capital fijo: {formatCurrency(inst.installmentAmount)} • Saldo pendiente: {formatCurrency(balance)}
+                        Capital exigible: {formatCurrency(capital)} • Saldo pendiente: {formatCurrency(balance)}
                       </div>
 
                       {/* Interest Rate Input */}
@@ -1444,8 +1446,8 @@ export function DebtDetail() {
                       {rateNum > 0 && (
                         <div className="text-xs space-y-0.5 bg-white dark:bg-gray-900 rounded-lg p-2">
                           <div className="flex justify-between text-gray-500">
-                            <span>Capital fijo:</span>
-                            <span>{formatCurrency(inst.installmentAmount)}</span>
+                            <span>Capital exigible:</span>
+                            <span>{formatCurrency(capital)}</span>
                           </div>
                           <div className="flex justify-between text-gray-500">
                             <span>Interés estimado ({rateNum}%):</span>
@@ -1505,80 +1507,49 @@ export function DebtDetail() {
               </div>
             ) : (
               debt.installments
-                .filter((inst) => !inst.isPaid)
+                .filter((inst) => !inst.isPaid && getRemainingCapital(inst) > 0)
                 .map((inst) => {
-                  const sel = abonoSelections[inst.id] || { selected: false, amount: "" };
-                  const balance = inst.remainingBalance ?? inst.totalAmount;
-                  const abonoNum = parseFloat(sel.amount) || 0;
-                  const newBalance = Math.max(balance - abonoNum, 0);
+                  const selection = abonoSelections[inst.id] || { selected: false, amount: "" };
+                  const balance = getRemainingCapital(inst);
+                  const oneInstallment = getEffectiveInstallmentCapital(inst);
+                  const abonoAmount = parseFloat(selection.amount) || 0;
+                  const resultingBalance = Math.max(balance - abonoAmount, 0);
 
                   return (
                     <div key={inst.id} className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           <button
-                            onClick={() => setAbonoSelections(prev => ({
-                              ...prev,
-                              [inst.id]: { ...prev[inst.id], selected: !prev[inst.id]?.selected }
+                            type="button"
+                            onClick={() => setAbonoSelections((previous) => ({
+                              ...previous,
+                              [inst.id]: { ...previous[inst.id], selected: !previous[inst.id]?.selected },
                             }))}
-                            className={`flex-shrink-0 size-5 rounded-md border-2 flex items-center justify-center transition-all ${
-                              sel.selected
-                                ? "bg-blue-500 border-blue-500 text-white"
-                                : "border-gray-300 dark:border-gray-600 hover:border-blue-400"
-                            }`}
+                            className={`flex-shrink-0 size-5 rounded-md border-2 flex items-center justify-center transition-all ${selection.selected ? "bg-blue-500 border-blue-500 text-white" : "border-gray-300 dark:border-gray-600 hover:border-blue-400"}`}
                           >
-                            {sel.selected && (
-                              <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
+                            {selection.selected && <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                           </button>
-                          <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                            {inst.description}
-                          </span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{inst.description}</span>
                         </div>
-                        <Badge variant="secondary" className="text-xs">
-                          Cuota {inst.currentInstallment}/{inst.totalInstallments}
-                        </Badge>
+                        <Badge variant="secondary" className="text-xs shrink-0">Cuota {inst.currentInstallment}/{inst.totalInstallments}</Badge>
                       </div>
-                      <div className="text-xs text-gray-500 ml-7">
-                        Saldo pendiente: {formatCurrency(balance)} • Capital: {formatCurrency(inst.installmentAmount)}
-                      </div>
+                      <div className="text-xs text-gray-500 ml-7">Saldo pendiente: {formatCurrency(balance)} • Próxima cuota: {formatCurrency(oneInstallment)}</div>
 
-                      {/* Amount input — only when selected */}
-                      {sel.selected && (
+                      {selection.selected && (
                         <div className="ml-7 space-y-2">
+                          <div className="flex gap-2">
+                            <Button type="button" size="sm" variant="outline" className="h-7 text-xs rounded-lg" onClick={() => setAbonoSelections((previous) => ({ ...previous, [inst.id]: { selected: true, amount: String(balance) } }))}>Saldo total</Button>
+                            <Button type="button" size="sm" variant="outline" className="h-7 text-xs rounded-lg" onClick={() => setAbonoSelections((previous) => ({ ...previous, [inst.id]: { selected: true, amount: String(oneInstallment) } }))}>1 cuota</Button>
+                          </div>
                           <div className="flex items-center gap-2">
                             <label className="text-xs text-gray-500 w-12 flex-shrink-0">Abono:</label>
-                            <div className="flex-1">
-                              <CurrencyInput
-                                value={sel.amount}
-                                onChange={(v) => setAbonoSelections(prev => ({
-                                  ...prev,
-                                  [inst.id]: { ...prev[inst.id], amount: v }
-                                }))}
-                                showPrefix
-                                placeholder="Monto del abono"
-                                className="rounded-lg border border-blue-200 dark:border-blue-700 bg-white dark:bg-gray-900 h-8 text-sm focus:ring-1 focus:ring-blue-400"
-                              />
-                            </div>
+                            <CurrencyInput value={selection.amount} onChange={(value) => setAbonoSelections((previous) => ({ ...previous, [inst.id]: { ...previous[inst.id], amount: value } }))} showPrefix placeholder="Monto del abono" className="rounded-lg border border-blue-200 dark:border-blue-700 bg-white dark:bg-gray-900 h-8 text-sm focus:ring-1 focus:ring-blue-400" />
                           </div>
-
-                          {/* Show resulting balance */}
-                          {abonoNum > 0 && (
+                          {abonoAmount > 0 && (
                             <div className="text-xs space-y-0.5 bg-white dark:bg-gray-900 rounded-lg p-2">
-                              <div className="flex justify-between text-gray-500">
-                                <span>Saldo actual:</span>
-                                <span>{formatCurrency(balance)}</span>
-                              </div>
-                              <div className="flex justify-between text-blue-600 dark:text-blue-400">
-                                <span>Abono a capital:</span>
-                                <span>-{formatCurrency(abonoNum)}</span>
-                              </div>
-                              <div className="flex justify-between text-gray-900 dark:text-white font-medium pt-1 border-t">
-                                <span>Nuevo saldo:</span>
-                                <span className="text-emerald-600">{formatCurrency(newBalance)}</span>
-                              </div>
+                              <div className="flex justify-between text-gray-500"><span>Saldo actual:</span><span>{formatCurrency(balance)}</span></div>
+                              <div className="flex justify-between text-blue-600 dark:text-blue-400"><span>Abono a capital:</span><span>-{formatCurrency(abonoAmount)}</span></div>
+                              <div className="flex justify-between text-gray-900 dark:text-white font-medium pt-1 border-t"><span>Nuevo saldo:</span><span className="text-emerald-600">{formatCurrency(resultingBalance)}</span></div>
                             </div>
                           )}
                         </div>

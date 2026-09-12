@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtReverseAbonoSchema } from "@/lib/validations";
 import { applyBalanceDelta, applyBudgetDelta } from "@/lib/finance-ledger";
+import { getNextInstallmentCapital } from "@/lib/installment-payment";
 
 /**
  * Reverse a specific "abono a capital" by its Abono ID.
@@ -60,6 +61,13 @@ export async function POST(
         throw new Error("Abono no encontrado o ya fue reversado");
       }
 
+      const debt = await tx.debt.findFirst({
+        where: { id: debtId, userId: session.user.id },
+        select: { category: true, subCategory: true },
+      });
+
+      const categoryReversals: Record<string, { category: string; subCategory: string | null; amount: number }> = {};
+
       for (const detail of abono.details) {
         const installment = await tx.installment.findUnique({
           where: { id: detail.installmentId },
@@ -68,11 +76,37 @@ export async function POST(
         if (installment) {
           const currentBalance = toNumber(installment.remainingBalance ?? installment.totalAmount);
           const restoredBalance = currentBalance + toNumber(detail.amount);
+          const currentPaidAmount = toNumber(installment.paidAmount ?? 0);
+          const restoredPaidAmount = Math.max(0, currentPaidAmount - toNumber(detail.amount));
+
+          if (installment.isPaid && currentPaidAmount > toNumber(detail.amount)) {
+            throw new Error("No puedes reversar este abono porque ya se registró un pago posterior de la cuota");
+          }
+
+          const updateData: Record<string, unknown> = {
+            remainingBalance: restoredBalance,
+            paidAmount: restoredPaidAmount,
+            isPaid: false, // Restoring debt balance makes it unpaid
+          };
+
+          if (installment.totalInstallments === 1) {
+            updateData.installmentAmount = restoredBalance;
+          } else {
+            updateData.installmentAmount = getNextInstallmentCapital(installment, restoredBalance);
+          }
 
           await tx.installment.update({
             where: { id: installment.id },
-            data: { remainingBalance: restoredBalance },
+            data: updateData,
           });
+
+          const cat = installment.category || debt?.category || "Deudas";
+          const subCat = installment.subCategory || debt?.subCategory || null;
+          const key = subCat ? `${cat}::${subCat}` : cat;
+          if (!categoryReversals[key]) {
+            categoryReversals[key] = { category: cat, subCategory: subCat, amount: 0 };
+          }
+          categoryReversals[key].amount += toNumber(detail.amount);
         }
       }
 
@@ -87,18 +121,15 @@ export async function POST(
         amount: toNumber(abono.totalAmount),
       });
 
-      const debt = await tx.debt.findFirst({
-        where: { id: debtId, userId: session.user.id },
-        select: { category: true, subCategory: true },
-      });
-
-      await applyBudgetDelta(tx, {
-        userId: session.user.id,
-        category: debt?.category || "Deudas",
-        subCategory: debt?.subCategory || null,
-        type: "expense",
-        amount: -toNumber(abono.totalAmount),
-      });
+      for (const item of Object.values(categoryReversals)) {
+        await applyBudgetDelta(tx, {
+          userId: session.user.id,
+          category: item.category,
+          subCategory: item.subCategory,
+          type: "expense",
+          amount: -item.amount,
+        });
+      }
 
       if (abono.transactionId) {
         try {
@@ -130,7 +161,7 @@ export async function POST(
     });
   } catch (error) {
     if (error instanceof Response) return error;
-    if (error instanceof Error && error.message === "Abono no encontrado o ya fue reversado") {
+    if (error instanceof Error && (error.message === "Abono no encontrado o ya fue reversado" || error.message.includes("pago posterior"))) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
     console.error("Reverse abono error:", error);

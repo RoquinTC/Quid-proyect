@@ -70,6 +70,7 @@ import {
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import type { Account, SubAccount, Transaction, CategoryData, UserSettings, Debt, RecurringPayment } from "@/lib/types";
+import { getEffectiveInstallmentCapital, getRemainingCapital } from "@/lib/installment-payment";
 
 // Color config per transaction type
 const typeConfig = {
@@ -606,7 +607,7 @@ export function AccountDetail() {
 
     debts.forEach((debt) => {
       const groupedInstallments = (debt.installments || [])
-        .filter((inst) => !inst.isPaid)
+        .filter((inst) => !inst.isPaid && getRemainingCapital(inst) > 0)
         .reduce(
           (groups, inst) => {
             const placeId = inst.subAccountId || inst.accountId || debt.subAccountId || debt.accountId;
@@ -632,7 +633,7 @@ export function AccountDetail() {
 
             groups.set(key, {
               ...existing,
-              amount: existing.amount + Number(inst.installmentAmount || 0),
+              amount: existing.amount + getEffectiveInstallmentCapital(inst),
               count: existing.count + 1,
               nextDate,
             });

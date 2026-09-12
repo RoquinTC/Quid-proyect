@@ -11,6 +11,7 @@ import {
   applyBudgetDelta,
   assertSubAccountBelongsToAccount,
 } from "@/lib/finance-ledger";
+import { getNextInstallmentCapital } from "@/lib/installment-payment";
 
 function normalizeOptionalId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -114,6 +115,7 @@ export async function POST(
         }
 
         const previousBalance = toNumber(installment.remainingBalance ?? installment.totalAmount);
+        const currentPaidAmount = toNumber(installment.paidAmount ?? 0);
 
         if (payment.amount > previousBalance) {
           throw new Error(
@@ -122,10 +124,27 @@ export async function POST(
         }
 
         const newBalance = Math.max(previousBalance - payment.amount, 0);
+        const isFullyPaid = newBalance === 0;
+
+        const updateData: Record<string, unknown> = {
+          remainingBalance: newBalance,
+          paidAmount: currentPaidAmount + payment.amount,
+        };
+
+        if (isFullyPaid) {
+          updateData.isPaid = true;
+        } else {
+          // If 1 installment total, the remaining installment amount to be paid is the new balance
+          if (installment.totalInstallments === 1) {
+            updateData.installmentAmount = newBalance;
+          } else if (newBalance < toNumber(installment.installmentAmount)) {
+            updateData.installmentAmount = getNextInstallmentCapital(installment, newBalance);
+          }
+        }
 
         await tx.installment.update({
           where: { id: installment.id },
-          data: { remainingBalance: newBalance },
+          data: updateData,
         });
 
         total += payment.amount;
@@ -193,13 +212,28 @@ export async function POST(
         amount: -total,
       });
 
-      await applyBudgetDelta(tx, {
-        userId: session.user.id,
-        category: debt.category || "Deudas",
-        subCategory: debt.subCategory || null,
-        type: "expense",
-        amount: total,
-      });
+      // Track category spending for budget updates
+      const categoryPayments: Record<string, { category: string; subCategory: string | null; amount: number }> = {};
+      for (const d of processedDetails) {
+        const inst = await tx.installment.findUnique({ where: { id: d.installmentId }, select: { category: true, subCategory: true } });
+        const cat = inst?.category || debt.category || "Deudas";
+        const subCat = inst?.subCategory || debt.subCategory || null;
+        const key = subCat ? `${cat}::${subCat}` : cat;
+        if (!categoryPayments[key]) {
+          categoryPayments[key] = { category: cat, subCategory: subCat, amount: 0 };
+        }
+        categoryPayments[key].amount += d.abonoAmount;
+      }
+
+      for (const item of Object.values(categoryPayments)) {
+        await applyBudgetDelta(tx, {
+          userId: session.user.id,
+          category: item.category,
+          subCategory: item.subCategory,
+          type: "expense",
+          amount: item.amount,
+        });
+      }
 
       return { totalAbono: total, details: processedDetails, abonoRecord: createdAbono };
     });
