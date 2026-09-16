@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +80,24 @@ export function PantryItemForm({ open, onOpenChange, item, onSuccess }: PantryIt
   const [showConverter, setShowConverter] = useState(false);
 
   const isEditing = !!item;
+
+  // Re-sync the form whenever the target item changes (id), not just on mount.
+  // Without this the Dialog keeps stale/blank values when opening "Editar"
+  // for a product different from the one the component was first mounted with.
+  const itemId = item?.id ?? null;
+  useEffect(() => {
+    setLoading(false);
+    setName(item?.name || "");
+    setCategory(item?.category || "other");
+    setQuantity(item?.quantity?.toString() || "1");
+    setUnit(item?.unit || "unit");
+    setExpirationDate(
+      item?.expirationDate ? toColombiaDateString(item.expirationDate) : ""
+    );
+    setPurchasePrice(item?.purchasePrice?.toString() || "");
+    setMinStock(item?.minStock?.toString() || "");
+    setShowConverter(false);
+  }, [itemId, open]);
 
   const handleSubmit = async () => {
     if (!name) return;

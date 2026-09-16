@@ -18,14 +18,25 @@ export async function GET() {
     });
 
     // Identify low stock items
-    const lowStockItems = items.filter(
-      (item) =>
-        item.minStock !== null &&
-        item.minStock !== undefined &&
-        item.quantity < item.minStock
-    );
+        const lowStockItems = items.filter(
+          (item) =>
+            item.minStock !== null &&
+            item.minStock !== undefined &&
+            item.quantity < item.minStock
+        );
 
-    return NextResponse.json({ items, lowStockItems });
+        // Healthy stock (at or above target) and deficit precomputed per item
+        // deficit = max(0, target - quantity); if no target set, fall back to minStock as target
+        const withDeficit = items.map((item) => {
+          const target =
+            item.targetQuantity ??
+            item.minStock ??
+            item.quantity;
+          const deficit = Math.max(0, target - item.quantity);
+          return { ...item, deficit, targetQuantity: target };
+        });
+
+        return NextResponse.json({ items: withDeficit, lowStockItems });
   } catch (error) {
     console.error("Get pantry items error:", error);
     return NextResponse.json({ error: "Error al obtener items de despensa" }, { status: 500 });

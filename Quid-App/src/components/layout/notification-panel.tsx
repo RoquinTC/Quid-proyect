@@ -294,7 +294,9 @@ export function NotificationPanel() {
 
       <PopoverContent
         align="end"
-        className="w-[calc(100vw-2rem)] sm:w-96 p-0 rounded-xl bg-white text-gray-900 shadow-xl ring-1 ring-black/5 dark:bg-gray-950 dark:text-gray-100 dark:ring-white/10"
+        side="bottom"
+        sideOffset={8}
+        className="w-full sm:w-96 max-h-[85vh] overflow-hidden p-0 rounded-xl bg-white text-gray-900 shadow-xl ring-1 ring-black/5 dark:bg-gray-950 dark:text-gray-100 dark:ring-white/10"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">

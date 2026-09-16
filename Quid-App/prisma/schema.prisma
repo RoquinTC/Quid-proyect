@@ -43,6 +43,9 @@ model User {
   pantryItems         PantryItem[]
   shoppingLists       ShoppingList[]
   healthProfiles      HealthProfile[]
+  pantryMovements     PantryMovement[]
+  priceHistory        PriceHistory[]
+  recipes             Recipe[]
   sharedAccounts      SharedAccountUser[]
   transactions        Transaction[]
   recurringPayments   RecurringPayment[]
@@ -892,12 +895,55 @@ model PantryItem {
   purchaseDate    DateTime?
   purchasePrice   Decimal?  // CHANGED: Float -> Decimal (money)
   minStock        Float?    // threshold (NOT money — stays Float)
+  unitWeightFactor Float?    // conversion factor to canonical unit (e.g. 0.4536 to convert lb→kg)
+  targetQuantity   Float?    // desired stock level (what you want to have)
+  lastUsedAt       DateTime? // last time this item was consumed/used
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movements   PantryMovement[]
+  priceHistory PriceHistory[]
 
   @@map("pantry_items")
+}
+
+model PantryMovement {
+  id              String    @id @default(cuid())
+  itemId          String
+  userId          String
+  type            String    // in, out, adjust (in=added to inventory, out=consumed, adjust=manual correction)
+  quantity        Float     // amount added or removed (positive always)
+  unit            String?   // unit of the movement (defaults to item's unit)
+  note            String?   // reason: purchase, recipe, manual, expired, etc.
+  sourceListId    String?   // links to ShoppingList.id if movement was from a purchase
+  sourceRecipeId  String?   // links to Recipe.id if movement was from cooking
+  createdAt       DateTime  @default(now())
+
+  item            PantryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@map("pantry_movements")
+}
+
+model PriceHistory {
+  id              String    @id @default(cuid())
+  itemId          String
+  userId          String
+  price           Decimal   // price paid per unit
+  quantity        Float     // quantity purchased
+  unit            String?   // unit purchased in
+  date            DateTime  // date of purchase
+  sourceListId    String?   // links to ShoppingList if from a verified purchase
+  createdAt       DateTime  @default(now())
+
+  item            PantryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([date])
+  @@map("price_history")
 }
 
 model ShoppingList {
@@ -952,6 +998,42 @@ model HealthProfile {
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("health_profiles")
+}
+
+model Recipe {
+  id              String    @id @default(cuid())
+  userId          String
+  name            String
+  description     String?   // AI-generated description
+  type            String?   // almuerzo, desayuno, cena, postre, snack
+  servings        Int       @default(1) // base servings the recipe is written for
+  cookingTime     Int?      // minutes
+  instructions    String?   // JSON array of steps
+  aiGenerated     Boolean   @default(false)
+  aiPrompt        String?   // prompt used to generate
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredients     RecipeIngredient[]
+
+  @@index([userId])
+  @@map("recipes")
+}
+
+model RecipeIngredient {
+  id              String    @id @default(cuid())
+  recipeId        String
+  name            String    // ingredient name
+  quantity        Float     // amount needed
+  unit            String?   // unit (should be canonical: kg, unit, l, etc.)
+  category        String?   // category hint for matching (dairy, meat, etc.)
+  createdAt       DateTime  @default(now())
+
+  recipe          Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([recipeId])
+  @@map("recipe_ingredients")
 }
 
 // ============================================

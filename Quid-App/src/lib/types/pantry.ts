@@ -11,9 +11,13 @@ export interface PantryItem {
   purchaseDate: string | null;
   purchasePrice: number | null;
   minStock: number | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
+    targetQuantity?: number | null;
+    unitWeightFactor?: number | null;
+    lastUsedAt?: string | null;
+    deficit?: number;
+    createdAt?: string;
+    updatedAt?: string;
+  }
 
 export interface ShoppingList {
   id: string;

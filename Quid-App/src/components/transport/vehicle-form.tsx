@@ -384,10 +384,9 @@ export function VehicleForm({ open, onOpenChange, vehicle, onSuccess }: VehicleF
             <div className="overflow-hidden rounded-2xl border border-dashed border-cyan-300/70 bg-cyan-50/40 dark:border-cyan-700/50 dark:bg-cyan-950/20">
               {photoUrl ? (
                 <div className="relative">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={photoUrl}
-                    alt="Vista previa del vehículo"
+                                  src={photoUrl}
+                                  alt="Vista previa del vehículo"
                     className="h-36 w-full object-cover"
                     style={{ objectPosition: `${photoFocusX}% ${photoFocusY}%` }}
                   />

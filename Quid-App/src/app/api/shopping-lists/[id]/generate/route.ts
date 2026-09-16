@@ -34,13 +34,15 @@ export async function POST(
       where: { userId: session.user.id },
     });
 
-    // Find items below minStock
-    const lowStockItems = pantryItems.filter(
-      (item) =>
-        item.minStock !== null &&
-        item.minStock !== undefined &&
-        toNumber(item.quantity) < toNumber(item.minStock)
-    );
+    // Find items below their target (targetQuantity if set, else fall back to minStock)
+    const lowStockItems = pantryItems.filter((item) => {
+      const target = item.targetQuantity ?? item.minStock;
+      return (
+        target !== null &&
+        target !== undefined &&
+        toNumber(item.quantity) < toNumber(target)
+      );
+    });
 
     if (lowStockItems.length === 0) {
       return NextResponse.json({
@@ -83,13 +85,14 @@ export async function POST(
       }
 
       await tx.shoppingListItem.createMany({
-        data: lowStockItems.map((item) => {
-          const needed = Math.max(toNumber(item.minStock ?? 0) - toNumber(item.quantity), 0);
-          return {
-            shoppingListId: list.id,
-            name: item.name,
-            quantity: needed,
-            unit: item.unit,
+              data: lowStockItems.map((item) => {
+                const target = item.targetQuantity ?? item.minStock ?? 0;
+                const needed = Math.max(toNumber(target) - toNumber(item.quantity), 0);
+                return {
+                  shoppingListId: list.id,
+                  name: item.name,
+                  quantity: needed,
+                  unit: item.unit,
             // estimatedPrice is unit price; the UI multiplies it by quantity.
             estimatedPrice: item.purchasePrice ? toNumber(item.purchasePrice) : null,
             actualPrice: null,

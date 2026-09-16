@@ -49,6 +49,12 @@ export async function POST(
     const storeName = cleanText(body.storeName);
     const purpose = cleanText(body.purpose);
     const customDescription = cleanText(body.description);
+    // "Convertir a stock": selected items with their (stepper) quantities, and
+    // whether to write the bought amount as the pantry item's minStock.
+    const stockSelection = body.items;
+    const minMode = body.minMode ?? false;
+    const selectedById = new Map((stockSelection ?? []).map((s) => [s.id, s]));
+    const hasSelection = stockSelection !== undefined;
 
     const list = await db.shoppingList.findFirst({
       where: { id, userId: session.user.id },
@@ -128,30 +134,52 @@ export async function POST(
     const updatedList = await db.$transaction(async (tx) => {
       for (const item of list.items) {
         if (!item.isPurchased) continue;
+        // If a selection was sent ("Convertir a stock"), only selected items
+        // land in the pantry; unselected = "no lo muevas a stock".
+        if (hasSelection && !selectedById.has(item.id)) continue;
 
+        const sel = selectedById.get(item.id);
+        const movedQty = sel !== undefined ? sel.quantity : item.quantity;
         const itemPrice = toNumber(item.actualPrice ?? item.estimatedPrice ?? 0);
 
         if (item.pantryItemId) {
+          const existing = await tx.pantryItem.findUnique({
+            where: { id: item.pantryItemId },
+            select: { minStock: true },
+          });
+          // "Convertir a stock": never lower an existing min; seed it from the
+          // (stepper) bought quantity when the "Recordar mínimos" toggle is on.
+          const nextMin =
+            minMode && !Number.isNaN(movedQty)
+              ? Math.max(toNumber(existing?.minStock ?? 0), movedQty)
+              : existing?.minStock ?? null;
+
           await tx.pantryItem.update({
             where: { id: item.pantryItemId },
             data: {
-              quantity: { increment: item.quantity },
+              quantity: { increment: movedQty },
               purchaseDate,
               purchasePrice: itemPrice || undefined,
+              minStock: nextMin ?? null,
             },
           });
         } else {
-          await tx.pantryItem.create({
+          const created = await tx.pantryItem.create({
             data: {
               userId: session.user.id,
               name: item.name,
               category: "other",
-              quantity: item.quantity,
+              quantity: movedQty,
               unit: item.unit || "unit",
               purchaseDate,
               purchasePrice: itemPrice || null,
-              minStock: null,
+              minStock: minMode && !Number.isNaN(movedQty) ? movedQty : null,
             },
+          });
+          // Link the fresh pantry item back so future conversions edit it.
+          await tx.shoppingListItem.update({
+            where: { id: item.id },
+            data: { pantryItemId: created.id },
           });
         }
       }

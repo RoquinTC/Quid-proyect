@@ -899,6 +899,17 @@ export const shoppingListConfirmSchema = z.object({
   storeName: z.string().nullable().optional(),
   purpose: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
+  // "Convertir a stock" (fila-edit): selected items with their (stepper) quantities,
+  // plus whether to write the bought amount as the pantry item's minStock.
+  items: z
+    .array(
+      z.object({
+        id: z.string(),
+        quantity: z.number().min(0),
+      })
+    )
+    .optional(),
+  minMode: z.boolean().optional(),
 });
 
 // ============================================

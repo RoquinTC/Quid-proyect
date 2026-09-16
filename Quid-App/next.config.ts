@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
+import path from "node:path";
 
 const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
@@ -10,8 +11,7 @@ const nextConfig: NextConfig = {
   },
   webpack: (config) => {
     if (process.env.STATIC_EXPORT === "true") {
-      const path = require("path");
-      config.resolve.alias["next-auth/react"] = path.resolve(process.cwd(), "src/lib/mocks/next-auth-react.tsx");
+          config.resolve.alias["next-auth/react"] = path.resolve(process.cwd(), "src/lib/mocks/next-auth-react.tsx");
       config.resolve.alias["next-intl/server"] = path.resolve(process.cwd(), "src/lib/mocks/next-intl-server.ts");
     }
     return config;

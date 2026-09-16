@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency } from "@/lib/api";
 import { ShoppingItemForm } from "./shopping-item-form";
+import { ShoppingListRow } from "./shopping-list-row";
+import { ShoppingListDetailSkeleton } from "./shopping-list-detail-skeleton";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +19,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Select,
   SelectContent,
@@ -34,6 +38,7 @@ import {
   Loader2,
   Wallet,
   CreditCard,
+  ChevronDown,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Account, Debt, ShoppingListItem, ShoppingList, HealthProfile } from "@/lib/types";
@@ -59,6 +64,7 @@ interface ShoppingListDetailProps {
 export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) {
   const [list, setList] = useState<ShoppingList | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showItemForm, setShowItemForm] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
@@ -76,13 +82,23 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   const [confirmPurpose, setConfirmPurpose] = useState("Mercado");
   const [confirmDescription, setConfirmDescription] = useState("");
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  // "Convertir a stock": which purchased items land in the pantry, the stepper
+  // quantity per item, and whether to seed the pantry minStock ("Recordar mínimos").
+  const [stockSelection, setStockSelection] = useState<Record<string, number>>({});
+  const [stockEditing, setStockEditing] = useState<Record<string, boolean>>({});
+  const [minMode, setMinMode] = useState(true);
 
   const fetchList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const data = await apiFetch<ShoppingList>(`/api/shopping-lists/${listId}`);
       setList(data);
     } catch (error) {
       console.error("Error fetching list:", error);
+      setError(error instanceof Error ? error.message : "No pudimos cargar la lista.");
+      setList(null);
     } finally {
       setLoading(false);
     }
@@ -183,6 +199,29 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
     }
   };
 
+  // Open the market-purchase confirm dialog. Seeds "Convertir a stock" with
+  // Todo selected (every purchased item, each at its bought quantity) and the
+  // "Recordar mínimos" toggle on — the normal case is one tap to confirm.
+  const openConfirmDialog = () => {
+    setConfirmError(null);
+    setConfirmStoreName(list?.storeName || "");
+    setConfirmPurpose(list?.purpose || list?.name || "Mercado");
+    setPurchaseDate(
+      list?.purchaseDate
+        ? list.purchaseDate.slice(0, 10)
+        : new Date().toISOString().slice(0, 10)
+    );
+    setConfirmDescription("");
+    const sel: Record<string, number> = {};
+    (list?.items || [])
+      .filter((i) => i.isPurchased)
+      .forEach((i) => { sel[i.id] = i.quantity; });
+    setStockSelection(sel);
+    setStockEditing({});
+    setMinMode(true);
+    setConfirmDialogOpen(true);
+  };
+
   const handleConfirm = async () => {
     setConfirmError(null);
     if (paymentType === "account" && !paymentAccountId) {
@@ -208,6 +247,11 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
           storeName: confirmStoreName || null,
           purpose: confirmPurpose || null,
           description: confirmDescription || null,
+          items: Object.entries(stockSelection).map(([id, quantity]) => ({
+            id,
+            quantity,
+          })),
+          minMode,
         }),
       });
       setConfirmDialogOpen(false);
@@ -232,17 +276,16 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
     }
   };
 
-  if (loading) {
+  if (loading || !list) {
     return (
-      <div className="p-4 space-y-3 pb-safe">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-16 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
-        ))}
-      </div>
+      <ShoppingListDetailSkeleton
+        loading={loading}
+        errorMessage={error ?? undefined}
+        onRetry={fetchList}
+        onBack={onBack}
+      />
     );
   }
-
-  if (!list) return null;
 
   const buildSuggestedDescription = () => {
     const store = confirmStoreName.trim();
@@ -551,30 +594,19 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
               Agregar antojo o producto
             </Button>
             <Button
-              onClick={() => handleStatusChange("verified")}
-              disabled={updatingStatus}
-              className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-teal-500"
+              onClick={openConfirmDialog}
+              disabled={confirming}
+              className="w-full rounded-xl bg-gradient-to-r from-amber-600 to-orange-500"
             >
-              {updatingStatus ? (
-                <Loader2 className="size-4 animate-spin mr-2" />
-              ) : (
-                <ClipboardCheck className="size-4 mr-2" />
-              )}
-              Verificar Compra
+              <CheckCircle2 className="size-4 mr-2" />
+              Confirmar y Actualizar Despensa
             </Button>
           </>
         )}
 
         {list.status === "verified" && (
           <Button
-            onClick={() => {
-              setConfirmError(null);
-              setConfirmStoreName(list.storeName || "");
-              setConfirmPurpose(list.purpose || list.name || "Mercado");
-              setPurchaseDate(list.purchaseDate ? list.purchaseDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
-              setConfirmDescription("");
-              setConfirmDialogOpen(true);
-            }}
+            onClick={openConfirmDialog}
             disabled={confirming}
             className="w-full rounded-xl bg-gradient-to-r from-green-600 to-emerald-500"
           >
@@ -603,6 +635,103 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
               <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(totalActual)}</p>
               <p className="text-xs text-gray-500 mt-1">Categoría: Alimentación / Mercado</p>
             </div>
+
+            {/* Resumen (lectura) — revisión fina sin re-crear el paso "Verificar" */}
+            <Collapsible open={summaryOpen} onOpenChange={setSummaryOpen}>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl border border-gray-100 bg-white px-3 py-2 text-left dark:border-gray-700 dark:bg-gray-800"
+                >
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    🛒 Listo para confirmar
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-white">
+                      {list.items.filter((i) => i.isPurchased).length} ítems
+                    </span>
+                    <ChevronDown
+                      className={`size-4 text-gray-400 transition-transform ${summaryOpen ? "rotate-180" : ""}`}
+                    />
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-1.5 overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800">
+                  {list.items
+                    .filter((i) => i.isPurchased)
+                    .map((it) => (
+                      <div
+                        key={it.id}
+                        className="flex items-center justify-between border-b border-gray-50 px-3 py-1.5 text-xs last:border-0 dark:border-gray-800"
+                      >
+                        <span className="truncate pr-2 text-gray-700 dark:text-gray-300">
+                          {it.quantity}× {it.name}
+                        </span>
+                        <span className="shrink-0 text-gray-400">
+                          {unitLabels[it.unit] || it.unit}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Convertir a stock: what lands in the pantry + min stock seeding */}
+            {list.items.some((i) => i.isPurchased) && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    Convertir a stock
+                  </span>
+                  <label className="flex items-center gap-2 text-xs text-gray-500">
+                    <Switch
+                      checked={minMode}
+                      onCheckedChange={setMinMode}
+                      aria-label="Recordar mínimos"
+                    />
+                    Recordar mínimos
+                  </label>
+                </div>
+                <ul className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800">
+                  {list.items
+                    .filter((i) => i.isPurchased)
+                    .map((item) => (
+                      <ShoppingListRow
+                        key={item.id}
+                        item={item}
+                        selected={stockSelection[item.id] !== undefined}
+                        minMode={minMode}
+                        editing={!!stockEditing[item.id]}
+                        quantity={stockSelection[item.id] ?? item.quantity}
+                        onToggle={() =>
+                          setStockSelection((prev) => {
+                            const next = { ...prev };
+                            if (next[item.id] !== undefined) delete next[item.id];
+                            else next[item.id] = item.quantity;
+                            return next;
+                          })
+                        }
+                        onChangeQuantity={(q) =>
+                          setStockSelection((prev) => {
+                            const next = { ...prev };
+                            if (next[item.id] === undefined) {
+                              next[item.id] = item.quantity;
+                            }
+                            next[item.id] = q;
+                            setStockEditing((e) => ({ ...e, [item.id]: true }));
+                            return next;
+                          })
+                        }
+                      />
+                    ))}
+                </ul>
+                <p className="px-1 text-[11px] text-gray-400">
+                  Desmarca lo que NO quieras mover a la despensa. El mínimo respeta el existente
+                  (solo sube, nunca baja).
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
