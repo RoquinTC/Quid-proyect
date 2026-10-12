@@ -102,7 +102,25 @@ async function resolveUser(
 }
 
 /** Catálogo de herramientas. Sirve para que Aura sepa qué puede ofrecer. */
-export async function GET() {
+export async function GET(req: Request) {
+  // Aura necesita descubrir las herramientas para saber qué ofrecer, así que este
+  // endpoint acepta su token además de la sesión web. El catálogo no expone datos
+  // del usuario: son solo nombres, tipos y descripciones de lo que existe.
+  const headersList = await headers();
+  const auraToken = headersList.get("x-aura-token");
+  const isTrustedAuraClient =
+    Boolean(process.env.AURA_API_KEY) && auraToken === process.env.AURA_API_KEY;
+
+  if (!isTrustedAuraClient) {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "No autorizado. Inicia sesión o usa el canal seguro de Aura." },
+        { status: 401 }
+      );
+    }
+  }
+
   return NextResponse.json({
     tools: TOOL_REGISTRY.map((tool) => ({
       name: tool.name,

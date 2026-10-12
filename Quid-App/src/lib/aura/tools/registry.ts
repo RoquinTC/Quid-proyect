@@ -121,7 +121,7 @@ export const REGISTRAR_TANQUEO: ToolDefinition = {
 export const CONSULTAR_GASTOS: ToolDefinition = {
   name: "consultar_gastos",
   kind: "read",
-  implemented: false,
+  implemented: true,
   description: "Devuelve el total gastado por categoría en un período.",
   parameters: [
     { name: "period", type: "enum", required: false, values: ["hoy", "semana", "mes", "año"], defaultValue: "mes", description: "Período a consultar." },
@@ -132,7 +132,7 @@ export const CONSULTAR_GASTOS: ToolDefinition = {
 export const CONSULTAR_SALDO: ToolDefinition = {
   name: "consultar_saldo",
   kind: "read",
-  implemented: false,
+  implemented: true,
   description: "Devuelve el saldo de las cuentas y bolsillos del usuario.",
   parameters: [
     { name: "accountName", type: "string", required: false, description: "Limita la consulta a una cuenta." },
@@ -142,7 +142,7 @@ export const CONSULTAR_SALDO: ToolDefinition = {
 export const CONSULTAR_MEDICAMENTOS: ToolDefinition = {
   name: "consultar_medicamentos",
   kind: "read",
-  implemented: false,
+  implemented: true,
   description: "Lista los medicamentos activos del usuario con su dosis y horarios.",
   parameters: [],
 };
@@ -150,7 +150,7 @@ export const CONSULTAR_MEDICAMENTOS: ToolDefinition = {
 export const CONSULTAR_CITAS: ToolDefinition = {
   name: "consultar_citas",
   kind: "read",
-  implemented: false,
+  implemented: true,
   description: "Lista las citas médicas programadas del usuario.",
   parameters: [
     { name: "onlyUpcoming", type: "boolean", required: false, defaultValue: true, description: "Solo citas futuras." },

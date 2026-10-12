@@ -113,11 +113,30 @@ export async function proxy(request: NextRequest) {
   }
 
   // ---- Aura AI Bypass ----
-  // Permite que el agente autonomo acceda a sus endpoints de sincronizacion
-  // usando su API Key en lugar de una sesion de usuario.
-  if (pathname.startsWith("/api/aura/sync") || pathname === "/api/aura/chat") {
+  // Permite que el agente autonomo acceda a sus endpoints usando su API Key en
+  // lugar de una sesion de usuario: el bot de Telegram no tiene cookies.
+  //
+  // `Boolean(process.env.AURA_API_KEY)` NO es decorativo. Sin el, si la variable
+  // no estuviera definida ambos lados de la comparacion serian `undefined`, la
+  // igualdad daria `true` y el bypass quedaria ABIERTO a cualquiera que mandara
+  // el header. Es la clase de fallo que no se nota en desarrollo, donde la
+  // variable siempre existe.
+  const AURA_BYPASS_PATHS = [
+    "/api/aura/sync",
+    "/api/aura/chat",
+    "/api/aura/tools",
+    "/api/aura/digest",
+    "/api/aura/categories",
+  ];
+
+  const isAuraPath =
+    AURA_BYPASS_PATHS.some((route) => pathname.startsWith(route)) ||
+    pathname.startsWith("/api/aura/sync/");
+
+  if (isAuraPath) {
     const auraToken = request.headers.get("x-aura-token");
-    if (auraToken === process.env.AURA_API_KEY) {
+    const expected = process.env.AURA_API_KEY;
+    if (Boolean(expected) && auraToken === expected) {
       return addCorsHeaders(NextResponse.next(), request);
     }
   }

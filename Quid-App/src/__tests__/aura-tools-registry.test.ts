@@ -7,6 +7,8 @@ import {
   isImplemented,
   isWriteTool,
 } from "@/lib/aura/tools/registry";
+import { getReadExecutor } from "@/lib/aura/tools/executors";
+import { hasWriteExecutor } from "@/lib/aura/tools/execute-confirmed";
 
 /**
  * El registro declara qué puede hacer Aura. Antes esa lista no existía en ningún
@@ -84,5 +86,48 @@ describe("registro de herramientas — integridad", () => {
     // Si alguna quedara en cero, el gateway anunciaría una capacidad vacía.
     expect(getToolsByKind("read").length).toBeGreaterThan(0);
     expect(getToolsByKind("write").length).toBeGreaterThan(0);
+  });
+
+  it("toda herramienta marcada como implementada TIENE un ejecutor", () => {
+    // Este test existe por un error real: al escribir los ejecutores de lectura
+    // dejé `implemented: false` en el registro, y el gateway respondía 501
+    // "todavía no puedo hacer eso" a pesar de que el código ya funcionaba.
+    // Los tests de ejecución pasaban por llamar al ejecutor directamente, así que
+    // nada detectaba la incoherencia hasta probar por HTTP.
+    const sinEjecutor: string[] = [];
+
+    for (const tool of TOOL_REGISTRY) {
+      if (!tool.implemented) continue;
+      const hasExecutor =
+        tool.kind === "read" ? Boolean(getReadExecutor(tool.name)) : hasWriteExecutor(tool.name);
+      if (!hasExecutor) sinEjecutor.push(`${tool.name} (${tool.kind})`);
+    }
+
+    expect(
+      sinEjecutor,
+      sinEjecutor.length === 0
+        ? ""
+        : `Declaradas como implementadas pero sin ejecutor registrado: ${sinEjecutor.join(
+            ", "
+          )}. El gateway respondería 501 aunque el código exista.`
+    ).toEqual([]);
+  });
+
+  it("toda herramienta con ejecutor está marcada como implementada", () => {
+    // La inversa: un ejecutor que no se anuncia es código muerto.
+    const noAnunciadas: string[] = [];
+
+    for (const tool of TOOL_REGISTRY) {
+      const hasExecutor =
+        tool.kind === "read" ? Boolean(getReadExecutor(tool.name)) : hasWriteExecutor(tool.name);
+      if (hasExecutor && !tool.implemented) noAnunciadas.push(tool.name);
+    }
+
+    expect(
+      noAnunciadas,
+      noAnunciadas.length === 0
+        ? ""
+        : `Tienen ejecutor pero no se anuncian como implementadas: ${noAnunciadas.join(", ")}.`
+    ).toEqual([]);
   });
 });

@@ -1,6 +1,13 @@
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { requestAiCompletion } from "@/lib/ai/llm";
+import {
+  createPendingAction,
+  getLatestPendingAction,
+  markActionCancelled,
+  markActionConfirmed,
+} from "@/lib/aura/pending-actions";
+import { executeConfirmedTool } from "@/lib/aura/tools/execute-confirmed";
 import { createFinanceEntry, getTransportDescription } from "@/lib/transport-finance";
 import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { getCreditCardNextPaymentDate } from "@/lib/credit-card-cycle";
@@ -1673,8 +1680,118 @@ ${recentConversation}`;
   };
 }
 
-export async function askAura(userId: string, messages: CoreMessage[]) {
-  const lastUserMsg = lastUserText(messages);
+/**
+ * Guarda como propuesta pendiente la acción que Aura acaba de proponer.
+ *
+ * POR QUÉ EXISTE
+ *
+ * Los creadores (`createTransactionFromAura`, `registerFuelFromAura`) ya devuelven
+ * una acción tipada con su payload estructurado. Antes ese payload se usaba solo
+ * para construir botones y luego se descartaba: al confirmar había que
+ * reconstruirlo parseando el texto del resumen.
+ *
+ * Acá se aprovecha ese payload tal cual, antes de que se pierda. Es el punto que
+ * convierte la propuesta en algo verificable.
+ *
+ * Los nombres de campo se normalizan para que coincidan con los parámetros
+ * declarados en el registro de herramientas, porque los creadores usan ids
+ * (`accountId`) mientras que las herramientas usan nombres (`accountName`),
+ * que es lo que un modelo puede producir de forma confiable.
+ */
+async function persistProposalFromAction(userId: string, action: unknown): Promise<void> {
+  try {
+    const proposal = action as
+      | { type?: string; tool?: string; requiresConfirmation?: boolean; payload?: Record<string, unknown> }
+      | undefined;
+
+    if (
+      !proposal ||
+      proposal.type !== "proposal" ||
+      proposal.requiresConfirmation !== true ||
+      typeof proposal.tool !== "string"
+    ) {
+      return;
+    }
+
+    const payload = proposal.payload ?? {};
+
+    // Se omite si ya hay una propuesta vigente de la misma herramienta: sin esto,
+    // pedir dos veces "registra un gasto" crearía filas duplicadas y el usuario
+    // tendría dos confirmaciones válidas para la misma intención.
+    const existing = await getLatestPendingAction(userId);
+    if (existing && existing.tool === proposal.tool) {
+      return;
+    }
+
+    const args: Record<string, unknown> = {};
+
+    if (proposal.tool === "registrar_transaccion") {
+      args.type = payload.type;
+      args.amount = payload.amount;
+      args.category = payload.category ?? undefined;
+      args.subCategory = payload.subCategory ?? undefined;
+
+      // El creador informa ids; la herramienta resuelve por nombre.
+      if (typeof payload.accountId === "string") {
+        const account = await db.account.findFirst({
+          where: { id: payload.accountId, userId },
+          select: { name: true },
+        });
+        if (account) args.accountName = account.name;
+      }
+      if (typeof payload.subAccountId === "string") {
+        const sub = await db.subAccount.findFirst({
+          where: { id: payload.subAccountId, account: { userId } },
+          select: { name: true, account: { select: { name: true } } },
+        });
+        if (sub) args.accountName = `${sub.account.name} / ${sub.name}`;
+      }
+      if (typeof payload.debtId === "string") {
+        const debt = await db.debt.findFirst({
+          where: { id: payload.debtId, userId },
+          select: { name: true, bank: true },
+        });
+        if (debt) args.debtName = debt.bank ? `${debt.name} ${debt.bank}` : debt.name;
+      }
+    } else if (proposal.tool === "registrar_tanqueo") {
+      args.amount = payload.amount;
+      args.gallons = payload.gallons;
+      args.pricePerGallon = payload.pricePerGallon ?? payload.pricePerGallonCop;
+      args.km = payload.km;
+      args.isFullTank = payload.isFullTank;
+      if (typeof payload.vehicleId === "string") {
+        const vehicle = await db.vehicle.findFirst({
+          where: { id: payload.vehicleId, userId },
+          select: { name: true },
+        });
+        if (vehicle) args.vehicleName = vehicle.name;
+      }
+    } else {
+      // Herramienta sin normalización conocida: se guarda el payload tal cual y
+      // la validación de la herramienta decidirá si sirve.
+      Object.assign(args, payload);
+    }
+
+    // Se descartan las claves sin valor para no guardar `undefined` serializado.
+    for (const key of Object.keys(args)) {
+      if (args[key] === undefined) delete args[key];
+    }
+
+    await createPendingAction({
+      userId,
+      tool: proposal.tool,
+      args,
+      description: `Propuesta de ${proposal.tool}`,
+      source: "telegram",
+    });
+  } catch (error) {
+    // No debe tumbar la respuesta al usuario: si no se pudo persistir, el flujo
+    // de respaldo por texto sigue funcionando.
+    console.error("[Aura] No pude persistir la propuesta:", error);
+  }
+}
+
+export async function askAura(userId: string, messages: CoreMessage[]) {  const lastUserMsg = lastUserText(messages);
   const hasProposal = hasRecentAuraProposal(messages);
   const isCancel = isCancellationText(lastUserMsg) && hasProposal;
   const isConfirm = isConfirmationText(lastUserMsg) && hasProposal;
@@ -1682,6 +1799,12 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
   try {
     // 1. Manejar Cancelación
     if (isCancel) {
+      // Si hay una propuesta persistida, se marca como cancelada: así no queda
+      // una fila "pending" que otra confirmación tardía pudiera ejecutar.
+      const pending = await getLatestPendingAction(userId);
+      if (pending) {
+        await markActionCancelled(pending.id);
+      }
       return {
         text: "Listo, no guardé nada. Dejé esa propuesta descartada.",
         action: "chat",
@@ -1708,6 +1831,45 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
 
           // A. Ejecutar Confirmación
           if (isConfirm) {
+            // CAMINO PRINCIPAL (nuevo): ejecutar la propuesta persistida.
+            //
+            // Antes esto NO existía y la única vía era reparsear el texto del
+            // asistente. Ahora, si hay una fila pendiente, se ejecuta
+            // exactamente el payload que se guardó al proponer: el texto ya no
+            // participa de la ejecución.
+            const pending = await getLatestPendingAction(userId);
+            if (pending) {
+              try {
+                const outcome = await executeConfirmedTool(pending.tool, pending.args, { userId });
+                await markActionConfirmed(pending.id, outcome.data ?? {});
+                return {
+                  text: outcome.text,
+                  action: {
+                    type: "executed" as const,
+                    tool: pending.tool,
+                    payload: outcome.data ?? {},
+                  },
+                  responseMessages: [...messages, { role: "assistant" as const, content: outcome.text }],
+                };
+              } catch (error) {
+                // La propuesta queda pendiente a propósito: si falló por un dato
+                // equivocado (una cuenta que ya no existe), el usuario puede
+                // corregir y reintentar en vez de perder la propuesta.
+                const message =
+                  error instanceof Error ? error.message : "No pude ejecutar la acción.";
+                const text = `No pude guardarlo: ${message}`;
+                console.error("[Aura] Falló la ejecución de la propuesta:", error);
+                return {
+                  text,
+                  action: "chat" as const,
+                  responseMessages: [...messages, { role: "assistant" as const, content: text }],
+                };
+              }
+            }
+
+            // CAMINO DE RESPALDO: propuestas que quedaron del flujo viejo, donde
+            // el estado solo existía en el texto. Se mantiene para no romper
+            // conversaciones ya iniciadas.
             if (isFuel) {
               const vehicles = await db.vehicle.findMany({ where: { userId }, include: { paymentDefault: true } });
               const parsed = parsePreviousFuelProposal(lastAssistantProposalMsg.content);
@@ -1766,6 +1928,14 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
     }
 
     if (directAnswer) {
+      // Persistir la propuesta antes de devolverla.
+      //
+      // Antes, la propuesta quedaba SOLO en el texto de `directAnswer.text` y al
+      // confirmar se volvía a parsear. Ahora se guarda como fila y el texto pasa
+      // a ser únicamente una descripción para el usuario: la ejecución usa la
+      // fila, no el texto.
+      await persistProposalFromAction(userId, directAnswer.action);
+
       return {
         text: directAnswer.text,
         action: directAnswer.action ?? action,
