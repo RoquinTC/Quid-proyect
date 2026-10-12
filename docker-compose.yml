@@ -31,37 +31,36 @@ services:
       args:
         - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
     container_name: quid-app
+    # Todas las variables salen de Quid-App/.env: UNA sola fuente de verdad, para
+    # que el valor de una variable no dependa de en qué archivo se declare.
+    # `required: false` permite que `docker compose config` y los comandos que no
+    # tocan la app (por ejemplo `logs quid-cron`) sigan funcionando si falta.
+    env_file:
+      - path: ./Quid-App/.env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=${DOCKER_DATABASE_URL:-postgresql://quid:quid-local-dev@postgres:5432/quid?schema=public}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change-me-in-production}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      # NOTA sobre precedencia: en Docker, el bloque `environment` PISA a
+      # `env_file` cuando ambos definen la misma variable. Por eso la
+      # configuración de IA y el token de Aura NO están acá: viven una sola vez
+      # en Quid-App/.env, que es el env_file de este servicio.
+      #
+      # Ojo con el orden de merge de compose: si una variable está en el .env de
+      # la RAÍZ, `docker compose` la sustituye acá y también pisa al env_file.
+      # Por eso DATABASE_URL, NEXTAUTH_SECRET y AUTH_COOKIE_SECURE del .env raíz
+      # deben estar en consonancia con Quid-App/.env.
       - NEXTAUTH_TRUSTHOST=true
       - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:quid@app.com}
-      - AURA_API_KEY=${AURA_API_KEY:-AuraSecretKey2026}
-      # ── Backend de IA ──
-      # Se eliminó Ollama: consumía demasiada RAM en el servidor y tumbó la
-      # máquina. Ahora se usa un router OpenAI-compatible (FreeLLMAPI), que corre
-      # fuera de este compose y se alcanza por la red compartida `quid-ai-net`.
-      # El host es el NOMBRE DEL CONTENEDOR: Docker sólo crea el alias corto del
-      # servicio dentro del mismo proyecto compose, así que `freellmapi` a secas
-      # NO resuelve entre proyectos distintos.
-      # Ver Quid-App/src/lib/ai/llm.ts para el cliente que habla con ambos.
-      - AI_BASE_URL=${AI_BASE_URL:-http://freellmapi-freellmapi-1:3001/v1}
-      - AI_MODEL=${AI_MODEL:-auto}
-      - AI_API_KEY=${AI_API_KEY:-}
       - ODYSSEUS_ENABLED=${ODYSSEUS_ENABLED:-false}
       - ODYSSEUS_API_URL=${ODYSSEUS_API_URL:-}
       - ODYSSEUS_API_TOKEN=${ODYSSEUS_API_TOKEN:-}
       - ODYSSEUS_SESSION_ID=${ODYSSEUS_SESSION_ID:-}
-      - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE:-false}
-      - CRON_SECRET=${CRON_SECRET:-local-cron-secret-change-me}
       - MEDICATION_REMINDER_WINDOW_MINUTES=${MEDICATION_REMINDER_WINDOW_MINUTES:-2}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
