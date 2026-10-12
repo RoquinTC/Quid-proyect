@@ -39,6 +39,7 @@ model User {
   medications         Medication[]
   appointments        MedicalAppointment[]
   medicalOrders       MedicalOrder[]
+  medicalAuthorizations MedicalAuthorization[]
   pantryItems         PantryItem[]
   shoppingLists       ShoppingList[]
   healthProfiles      HealthProfile[]
@@ -801,13 +802,54 @@ model MedicalAppointment {
   subAccountId    String?
   debtId          String?
   financeSourceId String?
+  authorizationId       String?   @unique
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders          MedicalOrder[]
+  authorization         MedicalAuthorization? @relation("AppointmentAuthorization", fields: [authorizationId], references: [id], onDelete: SetNull)
+  createdAuthorizations MedicalAuthorization[] @relation("AppointmentOrigin")
 
   @@map("medical_appointments")
+}
+
+// Réplica del modelo homónimo en schema.prisma.
+//
+// POR QUÉ ESTE MODELO DEBE EXISTIR ACÁ:
+// `scripts/migrate-sqlite-to-postgres.mjs` carga dos clientes Prisma generados
+// desde schema.sqlite.prisma y schema.postgres.prisma, y copia filas con
+// `createMany({ data: rows })` SIN transformarlas. Por eso ambos esquemas deben
+// declarar exactamente los mismos campos que el esquema principal.
+//
+// Antes de agregarlo, `modelPlan` no incluía `medicalAuthorization` y este
+// esquema tampoco lo declaraba: las autorizaciones EPS se quedaban en SQLite y
+// nunca llegaban a Postgres. Si se agregaba sólo a `modelPlan`, el script
+// fallaba con "Cannot read properties of undefined (reading 'findMany')".
+model MedicalAuthorization {
+  id                  String    @id @default(cuid())
+  userId              String
+  type                String    @default("specialist") // specialist, control, procedure, other
+  specialty           String
+  status              String    @default("pending_authorization") // pending_authorization, authorized, expired, scheduled, cancelled
+  code                String?
+  authorizationDate   DateTime?
+  daysOfValidity      Int?      @default(30)
+  expirationDate      DateTime?
+  notes               String?
+  supportUrl          String?
+  supportType         String?
+  appointmentId       String?   @unique
+  originAppointmentId String?
+  renewals            Json?     // Array of renewals history [{ fechaAnterior, diasAnteriores, fechaNueva, motivo, updatedAt }]
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointment         MedicalAppointment? @relation("AppointmentAuthorization")
+  originAppointment   MedicalAppointment? @relation("AppointmentOrigin", fields: [originAppointmentId], references: [id], onDelete: SetNull)
+
+  @@map("medical_authorizations")
 }
 
 model MedicalOrder {

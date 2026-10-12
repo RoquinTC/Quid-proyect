@@ -40,14 +40,35 @@ const modelPlan = [
   ["maintenanceItem", "MaintenanceItem"],
   ["vehicleDocument", "VehicleDocument"],
   ["vehiclePaymentDefault", "VehiclePaymentDefault"],
+  // Faltaba: los recordatorios de vehículo (SOAT, tecnomecánica, mantenimiento)
+  // no se migraban entre motores y se perdían en silencio.
+  ["vehicleReminder", "VehicleReminder"],
+  // Faltaba: reglas de mantenimiento periódico por km/tiempo.
+  ["maintenanceServiceRule", "MaintenanceServiceRule"],
   ["medication", "Medication"],
   ["medicalAppointment", "MedicalAppointment"],
+  // Faltaba: autorizaciones EPS. Debe ir ANTES de MedicalOrder porque
+  // MedicalAppointment referencia authorizationId.
+  ["medicalAuthorization", "MedicalAuthorization"],
+  // Faltaba: órdenes médicas y sus ítems — es donde viven las entregas
+  // parciales de farmacia y los pendientes de reclamar.
+  ["medicalOrder", "MedicalOrder"],
+  ["medicalOrderItem", "MedicalOrderItem"],
   ["pantryItem", "PantryItem"],
+  // Faltaba: movimientos de despensa (entradas/salidas) e historial de precios.
+  ["pantryMovement", "PantryMovement"],
+  ["priceHistory", "PriceHistory"],
   ["shoppingList", "ShoppingList"],
   ["shoppingListItem", "ShoppingListItem"],
+  // Faltaba: recetas y sus ingredientes.
+  ["recipe", "Recipe"],
+  ["recipeIngredient", "RecipeIngredient"],
   ["healthProfile", "HealthProfile"],
+  ["healthAiReport", "HealthAiReport"],
   ["fuelPrice", "FuelPrice"],
   ["category", "Category"],
+  // Faltaba: reglas automáticas de categorización.
+  ["categoryRule", "CategoryRule"],
   ["pushSubscription", "PushSubscription"],
   ["userSettings", "UserSettings"],
   ["storedBackup", "StoredBackup"],
