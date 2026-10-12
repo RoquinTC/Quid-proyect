@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { openAuraBot } from "@/lib/aura-bot";
 import { formatCurrency } from "@/lib/api";
 import { useMultiQuery, useLocalQuery } from "@/lib/local/hooks/queries";
 import type { Account, Budget, Debt, Vehicle } from "@/lib/types";
@@ -250,7 +251,7 @@ export function DashboardPage() {
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">IA integrada de Quid. Por ahora puedes vincularla desde ajustes.</p>
                   </div>
                   <div className="flex shrink-0 flex-col gap-1.5">
-                    <Button size="sm" className="h-8 rounded-xl bg-gradient-to-r from-violet-600 to-sky-500 px-3 text-xs text-white" onClick={() => window.open("https://t.me/Aura_RQC_Bot", "_blank", "noopener,noreferrer")}>
+                    <Button size="sm" className="h-8 rounded-xl bg-gradient-to-r from-violet-600 to-sky-500 px-3 text-xs text-white" onClick={() => openAuraBot()}>
                       Abrir Aura
                     </Button>
                     <Button size="sm" variant="ghost" className="h-7 rounded-lg px-2 text-[11px] text-gray-500" onClick={() => setActiveModule("settings")}>

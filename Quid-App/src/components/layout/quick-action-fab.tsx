@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { useAppStore, type ModuleType, type SidebarAction } from "@/lib/store";
+import { openAuraBot } from "@/lib/aura-bot";
 import {
   Drawer,
   DrawerClose,
@@ -221,7 +222,7 @@ export function QuickActionFab() {
           <div className="px-4 pt-2">
             <button
               type="button"
-              onClick={() => window.open("https://t.me/Aura_RQC_Bot", "_blank", "noopener,noreferrer")}
+              onClick={() => openAuraBot()}
               className="flex w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-violet-600 to-sky-500 p-3 text-left text-white shadow-lg shadow-violet-500/20 transition-transform active:scale-[0.99]"
             >
               <div className="flex size-10 items-center justify-center rounded-xl bg-white/20">

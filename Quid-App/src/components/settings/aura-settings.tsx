@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { openAuraBot } from "@/lib/aura-bot";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -123,7 +124,7 @@ export function AuraSettings({
                         <Button
                           type="button"
                           className="w-full bg-[#0088cc] hover:bg-[#0077b5] text-white border-0 rounded-xl py-3.5 h-auto text-xs font-bold gap-2 shadow-sm transition-all"
-                          onClick={() => window.open("https://t.me/Aura_RQC_Bot", "_blank")}
+                          onClick={() => openAuraBot()}
                         >
                           <Send className="size-3.5 text-white" />
                           Abrir Bot y Obtener Código
@@ -189,7 +190,7 @@ export function AuraSettings({
                       <Button
                         variant="outline"
                         className="w-full bg-[#0088cc] hover:bg-[#0077b5] text-white border-0 rounded-xl py-6 shadow-md gap-2"
-                        onClick={() => window.open("https://t.me/Aura_RQC_Bot", "_blank")}
+                        onClick={() => openAuraBot()}
                       >
                         <Send className="size-4 text-white" />
                         Abrir Chat en Telegram

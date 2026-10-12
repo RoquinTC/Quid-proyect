@@ -29,7 +29,12 @@ services:
       context: ./Quid-App
       dockerfile: Dockerfile
       args:
+        # NEXT_PUBLIC_* se incrusta en el bundle del cliente durante el build:
+        # cambiarlos exige reconstruir la imagen, no basta con reiniciar.
         - NEXT_PUBLIC_VAPID_PUBLIC_KEY=${NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+        # Enlace al bot de Aura. En local apunta al bot de pruebas para que las
+        # pruebas no terminen escribiéndole al bot de producción.
+        - NEXT_PUBLIC_AURA_BOT_URL=${NEXT_PUBLIC_AURA_BOT_URL:-https://t.me/Aura_RQC_Bot}
     container_name: quid-app
     depends_on:
       postgres:

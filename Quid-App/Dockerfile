@@ -21,6 +21,12 @@ ENV NEXTAUTH_SECRET=$NEXTAUTH_SECRET
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
 
+# Enlace al bot de Aura en Telegram. Tambien es NEXT_PUBLIC_ porque los enlaces
+# se renderizan en el cliente, asi que el valor queda incrustado en el bundle.
+# Permite apuntar al bot de pruebas en local sin tocar el codigo.
+ARG NEXT_PUBLIC_AURA_BOT_URL=https://t.me/Aura_RQC_Bot
+ENV NEXT_PUBLIC_AURA_BOT_URL=$NEXT_PUBLIC_AURA_BOT_URL
+
 RUN npx prisma generate
 RUN npm run build
 
