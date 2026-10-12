@@ -62,6 +62,7 @@ model User {
   storedBackups       StoredBackup[]
   authCredentials     AuthCredential[]
   achievements        AchievementProgress[]
+  pendingAuraActions  PendingAuraAction[]
   healthAiReport      HealthAiReport?
 }
 
@@ -1204,4 +1205,34 @@ model AchievementProgress {
 
   @@unique([userId, module, feature])
   @@map("achievement_progress")
+}
+
+// ============================================
+// AURA — PROPUESTAS DE ESCRITURA PENDIENTES
+// ============================================
+//
+// Réplica del modelo homónimo en schema.prisma.
+//
+// POR QUÉ ESTÁ ACÁ: `scripts/migrate-sqlite-to-postgres.mjs` copia filas con
+// `createMany({ data: rows })` SIN transformarlas, así que los esquemas de
+// migración deben declarar exactamente los mismos campos que el principal.
+model PendingAuraAction {
+  id          String    @id @default(cuid())
+  userId      String
+  tool        String
+  args        String
+  description String
+  status      String    @default("pending")
+  source      String    @default("telegram")
+  telegramId  String?
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+  expiresAt   DateTime
+  result      String?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expiresAt])
+  @@map("pending_aura_actions")
 }

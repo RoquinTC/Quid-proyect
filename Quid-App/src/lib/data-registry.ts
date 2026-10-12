@@ -200,6 +200,18 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   { model: "Recipe", table: "recipes", scope: "user", strategy: "both", orphanAudit: false, hasUpdatedAt: true },
   { model: "RecipeIngredient", table: "recipe_ingredients", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: false, parentRelation: "recipe" },
 
+  // ── Aura ────────────────────────────────────────────────────────────────
+  {
+    model: "PendingAuraAction",
+    table: "pending_aura_actions",
+    scope: "user",
+    strategy: "excluded",
+    orphanAudit: true,
+    hasUpdatedAt: false,
+    reason:
+      "Es una propuesta de escritura con estado efímero (expira en minutos). Restaurar una propuesta vieja permitiría confirmar una acción que el usuario pidió en otro momento, o ejecutarla dos veces.",
+  },
+
   // ── Notificaciones, logros e infraestructura ────────────────────────────
   {
     model: "PushSubscription",

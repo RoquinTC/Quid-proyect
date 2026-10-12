@@ -74,6 +74,7 @@ const modelPlan = [
   ["storedBackup", "StoredBackup"],
   ["authCredential", "AuthCredential"],
   ["achievementProgress", "AchievementProgress"],
+  ["pendingAuraAction", "PendingAuraAction"],
 ];
 
 function readEnvFile(filePath) {

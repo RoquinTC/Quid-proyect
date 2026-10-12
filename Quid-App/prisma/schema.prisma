@@ -62,6 +62,7 @@ model User {
   storedBackups       StoredBackup[]
   authCredentials     AuthCredential[]
   achievements        AchievementProgress[]
+  pendingAuraActions  PendingAuraAction[]
 }
 
 // ============================================
@@ -182,6 +183,49 @@ model AppNotification {
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("app_notifications")
+}
+
+/// Propuesta de escritura de Aura pendiente de confirmación.
+///
+/// POR QUÉ EXISTE
+///
+/// Antes, la propuesta vivía en el texto que el LLM escribía en Telegram, y al
+/// confirmar se reconstruía parseando ese mensaje con `line.includes("- Cuenta:")`.
+/// Consecuencias reales: si el modelo cambiaba una palabra la ejecución fallaba o
+/// se corrompía; una confirmación podía aplicarse a una propuesta de nueve
+/// mensajes atrás; y no quedaba rastro de quién confirmó qué ni cuándo.
+///
+/// Ahora la propuesta es una FILA. Su `id` es lo que viaja en el `callback_data`
+/// del botón, así que la ejecución no depende de ningún texto generado por el
+/// modelo: se ejecuta exactamente el payload que se guardó, o nada.
+model PendingAuraAction {
+  id          String    @id @default(cuid())
+  userId      String
+  /// Nombre de la herramienta en el registro (registry.ts).
+  tool        String
+  /// Argumentos ya validados, serializados como JSON.
+  args        String
+  /// Resumen legible que se le mostró al usuario al proponer.
+  description String
+  /// pending | confirmed | cancelled | expired
+  status      String    @default("pending")
+  /// Canal por el que se propuso: telegram, app.
+  source      String    @default("telegram")
+  /// Identificador de Telegram del usuario, para validar quién confirma.
+  telegramId  String?
+  createdAt   DateTime  @default(now())
+  /// Momento en que se confirmó o canceló.
+  resolvedAt  DateTime?
+  /// Pasado este instante la propuesta ya no se puede confirmar.
+  expiresAt   DateTime
+  /// Resultado de la ejecución, serializado como JSON (ids creados, errores).
+  result      String?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expiresAt])
+  @@map("pending_aura_actions")
 }
 
 model YieldRecord {
