@@ -213,9 +213,35 @@ function isConfirmationText(text: string) {
   return /^(si|sí|confirmo|confirmar|confirma|guardar|guardalo|guárdalo|registralo|regístralo|ok|dale|listo)\b/.test(normalized);
 }
 
+/**
+ * ¿El usuario quiere descartar la propuesta?
+ *
+ * CUIDADO CON "no": en español, un mensaje que EMPIEZA con "no" casi nunca es un
+ * "descarta esto" seco. Lo habitual es que sea una CORRECCIÓN:
+ *
+ *   "no, fueron 2222"          → quiere cambiar el monto
+ *   "no, mejor desde Bold"     → quiere cambiar la cuenta
+ *   "no"                       → esto sí es descartar
+ *
+ * La versión anterior matcheaba cualquier mensaje que empezara con "no", así que
+ * tratar una corrección como cancelación: se descartaba la propuesta y el usuario
+ * perdía lo que estaba registrando. Ahora, si el mensaje trae un dato nuevo (un
+ * número, o una mención de cuenta/categoría), NO se considera cancelación y sigue
+ * el camino de corrección.
+ */
 function isCancellationText(text: string) {
   const normalized = normalize(text);
-  return /^(no|cancelar|cancela|descartar|descartalo|descártalo|olvidalo|olvídalo)\b/.test(normalized);
+
+  const startsWithCancelWord =
+    /^(no|cancelar|cancela|descartar|descartalo|descártalo|olvidalo|olvídalo)\b/.test(normalized);
+  if (!startsWithCancelWord) return false;
+
+  // Un mensaje que sólo descarta no aporta datos nuevos.
+  const hasNumber = /\d/.test(normalized);
+  const mentionsTarget =
+    /\b(cuenta|bolsillo|tarjeta|deuda|banco|efectivo|categoria|categoría|desde|con)\b/.test(normalized);
+
+  return !hasNumber && !mentionsTarget;
 }
 
 function hasRecentAuraProposal(messages: CoreMessage[]) {
@@ -1682,6 +1708,61 @@ ${recentConversation}`;
 }
 
 /**
+ * Compara los argumentos de una propuesta guardada contra el payload nuevo.
+ *
+ * Se comparan sólo los campos que definen QUÉ se va a escribir: el monto, el
+ * tipo, la categoría y el destino. No se comparan los ids internos, porque la
+ * propuesta guardada ya los tradujo a nombres (`accountName`) mientras que el
+ * payload nuevo todavía trae ids (`accountId`).
+ *
+ * Ante la duda se considera DISTINTA: crear una propuesta de más es inofensivo
+ * (el usuario ve la nueva y confirma), mientras que reutilizar una vieja con
+ * datos obsoletos registra un monto equivocado.
+ */
+function sameProposalArgs(
+  stored: Record<string, unknown>,
+  payload: Record<string, unknown>
+): boolean {
+  const asText = (value: unknown) =>
+    value === null || value === undefined ? null : String(value).trim();
+  const asNumber = (value: unknown) => {
+    const parsed = typeof value === "number" ? value : Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  // Campos donde el nombre puede variar entre el payload y lo guardado.
+  const equivalent = (candidates: unknown[], storedValue: unknown) => {
+    const storedText = asText(storedValue);
+    if (storedText === null) return true; // no había nada que comparar
+    return candidates.some((candidate) => {
+      const text = asText(candidate);
+      return text !== null && text === storedText;
+    });
+  };
+
+  if (asNumber(stored.amount) !== asNumber(payload.amount)) return false;
+  if (!equivalent([payload.type, payload.transactionType], stored.type)) return false;
+  if (!equivalent([payload.category], stored.category)) return false;
+  if (!equivalent([payload.subCategory], stored.subCategory)) return false;
+
+  // Destino: puede venir como id (nuevo) o como nombre (guardado). Si el payload
+  // trae destino y lo guardado también, deben referirse al mismo: se comparan
+  // ambos candidatos contra ambos campos guardados.
+  const payloadHasDestination =
+    payload.accountId !== undefined || payload.debtId !== undefined;
+  const storedHasDestination =
+    stored.accountName !== undefined || stored.debtName !== undefined;
+
+  if (payloadHasDestination && storedHasDestination) {
+    const matchesAccount = equivalent([payload.accountId, payload.accountName], stored.accountName);
+    const matchesDebt = equivalent([payload.debtId, payload.debtName], stored.debtName);
+    if (!matchesAccount || !matchesDebt) return false;
+  }
+
+  return true;
+}
+
+/**
  * Busca el id de propuesta que un mensaje del asistente haya referenciado.
  *
  * El bot de Telegram recibe `payload.proposalId` del engine y lo guarda en su
@@ -1697,6 +1778,22 @@ function extractProposalIdFromMessages(messages: CoreMessage[]): string | null {
     if (match) return match[1];
   }
   return null;
+}
+
+/**
+ * Agrega el id de la propuesta al payload de una acción.
+ *
+ * Se expone en la respuesta para que el bot arme un botón que confirme ESA
+ * propuesta y no "la última pendiente". Es la diferencia entre apuntar a un
+ * registro concreto y depender de un orden implícito.
+ */
+function withProposalId(action: unknown, proposalId: string | null): unknown {
+  if (!proposalId || !action || typeof action !== "object") return action;
+  const typed = action as { payload?: Record<string, unknown> };
+  return {
+    ...typed,
+    payload: { ...(typed.payload ?? {}), proposalId },
+  };
 }
 
 /**
@@ -1734,13 +1831,22 @@ async function persistProposalFromAction(userId: string, action: unknown): Promi
 
     const payload = proposal.payload ?? {};
 
-    // Se omite si ya hay una propuesta vigente de la misma herramienta: sin esto,
-    // pedir dos veces "registra un gasto" crearía filas duplicadas y el usuario
-    // tendría dos confirmaciones válidas para la misma intención. Se devuelve el
-    // id de la existente para que el botón siga apuntando a algo válido.
+    // Reutilizar la propuesta vigente SOLO si es idéntica.
+    //
+    // El error que esto evita: al reutilizar cualquier propuesta pendiente de la
+    // misma herramienta, los argumentos nuevos se DESCARTABAN. Si el usuario
+    // decía "gasté 1111" y después corregía "no, fueron 2222", la propuesta
+    // guardada seguía siendo la de 1111 y la corrección se perdía en silencio:
+    // confirmaba un monto equivocado.
+    //
+    // Por eso, si los argumentos son distintos, se cancela la anterior y se crea
+    // una nueva. La regla es simple: manda lo último que el usuario dijo.
     const existing = await getLatestPendingAction(userId);
     if (existing && existing.tool === proposal.tool) {
-      return existing.id;
+      if (sameProposalArgs(existing.args, payload)) {
+        return existing.id;
+      }
+      await markActionCancelled(existing.id);
     }
 
     const args: Record<string, unknown> = {};
@@ -1751,14 +1857,23 @@ async function persistProposalFromAction(userId: string, action: unknown): Promi
       args.category = payload.category ?? undefined;
       args.subCategory = payload.subCategory ?? undefined;
 
-      // El creador informa ids; la herramienta resuelve por nombre.
-      if (typeof payload.accountId === "string") {
+      // El destino puede venir de dos formas según el origen:
+      //  - los CREADORES mandan ids (`accountId`, `debtId`)
+      //  - las CORRECCIONES mandan nombres (`accountName`, `debtName`)
+      // Hay que aceptar ambas. Mirar solo los ids dejaba la propuesta corregida
+      // sin cuenta, y al confirmar fallaba con "falta indicar desde qué cuenta".
+      if (typeof payload.accountName === "string" && payload.accountName.trim()) {
+        args.accountName = payload.accountName.trim();
+      } else if (typeof payload.accountId === "string") {
         const account = await db.account.findFirst({
           where: { id: payload.accountId, userId },
           select: { name: true },
         });
         if (account) args.accountName = account.name;
       }
+
+      // El bolsillo se resuelve DESPUÉS de la cuenta: su nombre compuesto
+      // ("Cuenta / Bolsillo") tiene prioridad sobre el de la cuenta padre.
       if (typeof payload.subAccountId === "string") {
         const sub = await db.subAccount.findFirst({
           where: { id: payload.subAccountId, account: { userId } },
@@ -1766,7 +1881,10 @@ async function persistProposalFromAction(userId: string, action: unknown): Promi
         });
         if (sub) args.accountName = `${sub.account.name} / ${sub.name}`;
       }
-      if (typeof payload.debtId === "string") {
+
+      if (typeof payload.debtName === "string" && payload.debtName.trim()) {
+        args.debtName = payload.debtName.trim();
+      } else if (typeof payload.debtId === "string") {
         const debt = await db.debt.findFirst({
           where: { id: payload.debtId, userId },
           select: { name: true, bank: true },
@@ -1779,7 +1897,9 @@ async function persistProposalFromAction(userId: string, action: unknown): Promi
       args.pricePerGallon = payload.pricePerGallon ?? payload.pricePerGallonCop;
       args.km = payload.km;
       args.isFullTank = payload.isFullTank;
-      if (typeof payload.vehicleId === "string") {
+      if (typeof payload.vehicleName === "string" && payload.vehicleName.trim()) {
+        args.vehicleName = payload.vehicleName.trim();
+      } else if (typeof payload.vehicleId === "string") {
         const vehicle = await db.vehicle.findFirst({
           where: { id: payload.vehicleId, userId },
           select: { name: true },
@@ -1937,21 +2057,29 @@ export async function askAura(userId: string, messages: CoreMessage[]) {  const 
           }
 
           // B. Procesar Corrección / Override en Caliente
+          //
+          // La corrección también debe PERSISTIRSE. Antes no se hacía, así que la
+          // fila pendiente seguía con los valores viejos: el usuario corregía el
+          // monto, veía el resumen actualizado, y al confirmar se guardaba el
+          // valor ANTERIOR. Persistir acá cierra ese desfase entre lo que el
+          // usuario ve y lo que se ejecuta.
           if (isFuel) {
             const vehicles = await db.vehicle.findMany({ where: { userId }, include: { paymentDefault: true } });
             const parsed = parsePreviousFuelProposal(lastAssistantProposalMsg.content);
             const result = await updateFuelProposal(userId, parsed, lastUserMsg, vehicles, accounts, debts);
+            const proposalId = await persistProposalFromAction(userId, result.action);
             return {
               text: result.text,
-              action: result.action,
+              action: withProposalId(result.action, proposalId),
               responseMessages: [...messages, { role: "assistant" as const, content: result.text }],
             };
           } else {
             const parsed = parsePreviousProposal(lastAssistantProposalMsg.content);
             const result = await updateTransactionProposal(userId, parsed, lastUserMsg, accounts, debts);
+            const proposalId = await persistProposalFromAction(userId, result.action);
             return {
               text: result.text,
-              action: result.action,
+              action: withProposalId(result.action, proposalId),
               responseMessages: [...messages, { role: "assistant" as const, content: result.text }],
             };
           }
@@ -1982,24 +2110,9 @@ export async function askAura(userId: string, messages: CoreMessage[]) {  const 
       // fila, no el texto.
       const pendingId = await persistProposalFromAction(userId, directAnswer.action);
 
-      // Si se persistió una propuesta, se expone su id en la respuesta para que
-      // el bot pueda armar un botón que confirme ESA propuesta y no "la última
-      // pendiente". Es la diferencia entre apuntar a un registro concreto y
-      // depender de un orden implícito.
-      const action =
-        pendingId && directAnswer.action && typeof directAnswer.action === "object"
-          ? {
-              ...(directAnswer.action as Record<string, unknown>),
-              payload: {
-                ...((directAnswer.action as { payload?: Record<string, unknown> }).payload ?? {}),
-                proposalId: pendingId,
-              },
-            }
-          : directAnswer.action;
-
       return {
         text: directAnswer.text,
-        action: action ?? action,
+        action: withProposalId(directAnswer.action, pendingId) ?? action,
         responseMessages: [...messages, { role: "assistant" as const, content: directAnswer.text }],
       };
     }
