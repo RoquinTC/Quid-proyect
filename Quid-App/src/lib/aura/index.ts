@@ -4,6 +4,7 @@ import { requestAiCompletion } from "@/lib/ai/llm";
 import {
   createPendingAction,
   getLatestPendingAction,
+  getPendingActionForUser,
   markActionCancelled,
   markActionConfirmed,
 } from "@/lib/aura/pending-actions";
@@ -1681,6 +1682,24 @@ ${recentConversation}`;
 }
 
 /**
+ * Busca el id de propuesta que un mensaje del asistente haya referenciado.
+ *
+ * El bot de Telegram recibe `payload.proposalId` del engine y lo guarda en su
+ * historial, así que al confirmar se puede apuntar a ESA propuesta en vez de a
+ * "la más reciente". Se recorre desde el final porque interesa la referencia más
+ * nueva que siga en la conversación.
+ */
+function extractProposalIdFromMessages(messages: CoreMessage[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || typeof message.content !== "string") continue;
+    const match = message.content.match(/"proposalId"\s*:\s*"([A-Za-z0-9_-]{10,})"/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
  * Guarda como propuesta pendiente la acción que Aura acaba de proponer.
  *
  * POR QUÉ EXISTE
@@ -1698,7 +1717,7 @@ ${recentConversation}`;
  * (`accountId`) mientras que las herramientas usan nombres (`accountName`),
  * que es lo que un modelo puede producir de forma confiable.
  */
-async function persistProposalFromAction(userId: string, action: unknown): Promise<void> {
+async function persistProposalFromAction(userId: string, action: unknown): Promise<string | null> {
   try {
     const proposal = action as
       | { type?: string; tool?: string; requiresConfirmation?: boolean; payload?: Record<string, unknown> }
@@ -1710,17 +1729,18 @@ async function persistProposalFromAction(userId: string, action: unknown): Promi
       proposal.requiresConfirmation !== true ||
       typeof proposal.tool !== "string"
     ) {
-      return;
+      return null;
     }
 
     const payload = proposal.payload ?? {};
 
     // Se omite si ya hay una propuesta vigente de la misma herramienta: sin esto,
     // pedir dos veces "registra un gasto" crearía filas duplicadas y el usuario
-    // tendría dos confirmaciones válidas para la misma intención.
+    // tendría dos confirmaciones válidas para la misma intención. Se devuelve el
+    // id de la existente para que el botón siga apuntando a algo válido.
     const existing = await getLatestPendingAction(userId);
     if (existing && existing.tool === proposal.tool) {
-      return;
+      return existing.id;
     }
 
     const args: Record<string, unknown> = {};
@@ -1784,10 +1804,13 @@ async function persistProposalFromAction(userId: string, action: unknown): Promi
       description: `Propuesta de ${proposal.tool}`,
       source: "telegram",
     });
+
+    return (await getLatestPendingAction(userId))?.id ?? null;
   } catch (error) {
     // No debe tumbar la respuesta al usuario: si no se pudo persistir, el flujo
     // de respaldo por texto sigue funcionando.
     console.error("[Aura] No pude persistir la propuesta:", error);
+    return null;
   }
 }
 
@@ -1837,7 +1860,30 @@ export async function askAura(userId: string, messages: CoreMessage[]) {  const 
             // asistente. Ahora, si hay una fila pendiente, se ejecuta
             // exactamente el payload que se guardó al proponer: el texto ya no
             // participa de la ejecución.
-            const pending = await getLatestPendingAction(userId);
+            //
+            // Se prefiere la propuesta REFERENCIADA por el mensaje del asistente
+            // (el bot mete `proposalId` en su payload) antes que "la más
+            // reciente": apuntar a un registro concreto evita que una
+            // confirmación tardía ejecute una propuesta distinta de la que el
+            // usuario está viendo.
+            const referencedId = extractProposalIdFromMessages(messages);
+            let pending: Awaited<ReturnType<typeof getLatestPendingAction>> = null;
+            if (referencedId) {
+              try {
+                pending = await getPendingActionForUser(referencedId, userId);
+              } catch (error) {
+                // Si la referenciada ya se resolvió o venció, se cae a la más
+                // reciente en vez de fallar: el usuario igual quiso confirmar algo.
+                console.warn(
+                  `[Aura] La propuesta referenciada no está disponible (${referencedId}):`,
+                  error instanceof Error ? error.message : error
+                );
+              }
+            }
+            if (!pending) {
+              pending = await getLatestPendingAction(userId);
+            }
+
             if (pending) {
               try {
                 const outcome = await executeConfirmedTool(pending.tool, pending.args, { userId });
@@ -1934,11 +1980,26 @@ export async function askAura(userId: string, messages: CoreMessage[]) {  const 
       // confirmar se volvía a parsear. Ahora se guarda como fila y el texto pasa
       // a ser únicamente una descripción para el usuario: la ejecución usa la
       // fila, no el texto.
-      await persistProposalFromAction(userId, directAnswer.action);
+      const pendingId = await persistProposalFromAction(userId, directAnswer.action);
+
+      // Si se persistió una propuesta, se expone su id en la respuesta para que
+      // el bot pueda armar un botón que confirme ESA propuesta y no "la última
+      // pendiente". Es la diferencia entre apuntar a un registro concreto y
+      // depender de un orden implícito.
+      const action =
+        pendingId && directAnswer.action && typeof directAnswer.action === "object"
+          ? {
+              ...(directAnswer.action as Record<string, unknown>),
+              payload: {
+                ...((directAnswer.action as { payload?: Record<string, unknown> }).payload ?? {}),
+                proposalId: pendingId,
+              },
+            }
+          : directAnswer.action;
 
       return {
         text: directAnswer.text,
-        action: directAnswer.action ?? action,
+        action: action ?? action,
         responseMessages: [...messages, { role: "assistant" as const, content: directAnswer.text }],
       };
     }
