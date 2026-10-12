@@ -49,8 +49,11 @@ services:
       # Se eliminó Ollama: consumía demasiada RAM en el servidor y tumbó la
       # máquina. Ahora se usa un router OpenAI-compatible (FreeLLMAPI), que corre
       # fuera de este compose y se alcanza por la red compartida `quid-ai-net`.
+      # El host es el NOMBRE DEL CONTENEDOR: Docker sólo crea el alias corto del
+      # servicio dentro del mismo proyecto compose, así que `freellmapi` a secas
+      # NO resuelve entre proyectos distintos.
       # Ver Quid-App/src/lib/ai/llm.ts para el cliente que habla con ambos.
-      - AI_BASE_URL=${AI_BASE_URL:-http://freellmapi:3001/v1}
+      - AI_BASE_URL=${AI_BASE_URL:-http://freellmapi-freellmapi-1:3001/v1}
       - AI_MODEL=${AI_MODEL:-auto}
       - AI_API_KEY=${AI_API_KEY:-}
       - ODYSSEUS_ENABLED=${ODYSSEUS_ENABLED:-false}
