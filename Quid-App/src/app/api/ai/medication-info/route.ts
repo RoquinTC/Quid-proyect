@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-
-const AURA_MODEL = process.env.AURA_MODEL || "hermes3:8b";
-const OLLAMA_API_BASE = process.env.OLLAMA_URL || "http://localhost:11434/api";
+import { extractJsonFromAiText, requestAiCompletion } from "@/lib/ai/llm";
 const ODYSSEUS_ENABLED = (process.env.ODYSSEUS_ENABLED || "false").toLowerCase() === "true";
 const ODYSSEUS_API_URL = process.env.ODYSSEUS_API_URL || "";
 const ODYSSEUS_API_TOKEN = process.env.ODYSSEUS_API_TOKEN || "";
@@ -277,7 +275,7 @@ export async function POST(req: NextRequest) {
       console.error("Error llamando a Odysseus para medicamento:", odysseusErr);
     }
 
-    // 3. Intentar llamar a Ollama como respaldo local si Odysseus no está disponible
+    // 3. Respaldo con el backend de IA configurado si Odysseus no está disponible
     try {
       const systemPrompt = `Eres un asistente de salud inteligente. Analiza el medicamento "${medicationName}" y responde estrictamente con un objeto JSON en español con la estructura detallada abajo.
 REGLA CRÍTICA: Debes responder únicamente con el bloque JSON. No incluyas explicaciones, saludos ni bloques de código de markdown. Solo el texto JSON limpio.
@@ -290,30 +288,17 @@ Estructura requerida:
   "sideEffects": ["efecto secundario 1", "efecto secundario 2"]
 }`;
 
-      const response = await fetch(`${OLLAMA_API_BASE.replace(/\/$/, "")}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: AURA_MODEL,
-          stream: false,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: `Analiza el medicamento: ${medicationName}` }
-          ],
-        }),
+      const completion = await requestAiCompletion({
+        system: systemPrompt,
+        user: `Analiza el medicamento: ${medicationName}`,
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        const content = result.message?.content?.trim() || "";
-
-        const parsed = normalizeMedicationInfo(JSON.parse(cleanJsonResponse(content)));
-        if (parsed) {
-          return NextResponse.json(parsed);
-        }
+      const parsed = normalizeMedicationInfo(extractJsonFromAiText(completion.text));
+      if (parsed) {
+        return NextResponse.json(parsed);
       }
-    } catch (ollamaErr) {
-      console.error("Error llamando a Ollama para medicamento:", ollamaErr);
+    } catch (aiErr) {
+      console.error("Error consultando la IA para medicamento:", aiErr);
     }
 
     // 4. Fallback genérico si ningún motor responde con el formato adecuado

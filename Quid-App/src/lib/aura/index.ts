@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
+import { requestAiCompletion } from "@/lib/ai/llm";
 import { createFinanceEntry, getTransportDescription } from "@/lib/transport-finance";
 import { applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { getCreditCardNextPaymentDate } from "@/lib/credit-card-cycle";
@@ -17,8 +18,11 @@ import {
 
 export type CoreMessage = { role: "user" | "assistant" | "system" | "data"; content: string };
 
+/**
+ * Modelo de Aura. Se mantiene exportado por compatibilidad con quien lo
+ * consuma; el valor real lo resuelve `getAiModel()` en `@/lib/ai/llm`.
+ */
 export const AURA_MODEL = process.env.AURA_MODEL || "hermes3:8b";
-const OLLAMA_API_BASE = process.env.OLLAMA_URL || "http://localhost:11434/api";
 const ODYSSEUS_API_URL = process.env.ODYSSEUS_API_URL || "";
 const ODYSSEUS_API_TOKEN = process.env.ODYSSEUS_API_TOKEN || "";
 const ODYSSEUS_SESSION_ID = process.env.ODYSSEUS_SESSION_ID || "";
@@ -1595,45 +1599,30 @@ async function answerWithQuidData(userId: string, action: AuraAction, text: stri
   return null;
 }
 
-async function askOllama(messages: CoreMessage[], context: unknown) {
+async function askAiBackend(messages: CoreMessage[], context: unknown) {
   const systemPrompt = `Eres Aura, la IA integrada de Quid. Responde en español, natural y claro.
 Tienes una visual resumida de la app cuando aparece "Contexto interno de Quid".
 No inventes datos financieros. Si falta información para guardar algo, pide solo lo que falta.
 No menciones herramientas internas ni detalles técnicos.`;
 
-  const ollamaMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: systemPrompt },
-    { role: "system", content: `Contexto interno de Quid: ${JSON.stringify(context)}` },
-  ];
+  // El backend puede ser Ollama nativo o un router OpenAI-compatible; el helper
+  // normaliza ambos. Ver @/lib/ai/llm.
+  const conversation = messages
+    .filter((message) => message.role !== "data")
+    .map((message) => `${message.role === "user" ? "Usuario" : message.role === "assistant" ? "Aura" : "Sistema"}: ${message.content}`)
+    .join("\n\n");
 
-  for (const message of messages) {
-    if (message.role === "user" || message.role === "assistant" || message.role === "system") {
-      ollamaMessages.push({ role: message.role, content: message.content });
-    }
-  }
-
-  const response = await fetch(`${OLLAMA_API_BASE.replace(/\/$/, "")}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(10000),
-    body: JSON.stringify({ model: AURA_MODEL, stream: false, keep_alive: -1, messages: ollamaMessages }),
+  const completion = await requestAiCompletion({
+    system: `${systemPrompt}\n\nContexto interno de Quid: ${JSON.stringify(context)}`,
+    user: conversation,
+    timeoutMs: 10_000,
   });
 
-  if (!response.ok) {
-    throw new Error(`Ollama respondió con estado ${response.status}: ${await response.text()}`);
-  }
-
-  const result = (await response.json()) as {
-    message?: { content?: string };
-    eval_count?: number;
-    prompt_eval_count?: number;
-  };
-
   return {
-    text: result.message?.content?.trim() || "No pude generar una respuesta clara.",
+    text: completion.text || "No pude generar una respuesta clara.",
     usage: {
-      completionTokens: result.eval_count,
-      promptTokens: result.prompt_eval_count,
+      completionTokens: completion.usage.completionTokens,
+      promptTokens: completion.usage.promptTokens,
     },
   };
 }
@@ -1815,7 +1804,7 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
       };
     }
 
-    const llm = await askOllama(messages, quidContext);
+    const llm = await askAiBackend(messages, quidContext);
 
     return {
       ...llm,
@@ -1826,8 +1815,8 @@ export async function askAura(userId: string, messages: CoreMessage[]) {
     console.error("Error en Aura Engine:", error);
     const text =
       error instanceof Error && (error.message.toLowerCase().includes("fetch") || error.name === "TimeoutError")
-        ? "No pude contactar a Ollama. Verifica que Ollama esté abierto y que el modelo de Aura esté disponible."
-        : "Tuve un problema procesando eso. Intenta de nuevo o revisa si Quid y Ollama están activos.";
+        ? "No pude contactar al servicio de IA. Revisa que el backend de Aura esté disponible y configurado."
+        : "Tuve un problema procesando eso. Intenta de nuevo o revisa la configuración de IA de Quid.";
     return { text, action: "chat" as const, error: error instanceof Error ? error.message : String(error) };
   }
 }

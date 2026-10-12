@@ -45,8 +45,14 @@ services:
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:quid@app.com}
       - AURA_API_KEY=${AURA_API_KEY:-AuraSecretKey2026}
-      - OLLAMA_URL=${OLLAMA_URL:-http://quid-ollama:11434/api}
-      - AURA_MODEL=${AURA_MODEL:-hermes3:8b}
+      # ── Backend de IA ──
+      # Se eliminó Ollama: consumía demasiada RAM en el servidor y tumbó la
+      # máquina. Ahora se usa un router OpenAI-compatible (FreeLLMAPI), que corre
+      # fuera de este compose y se alcanza por la red compartida `quid-ai-net`.
+      # Ver Quid-App/src/lib/ai/llm.ts para el cliente que habla con ambos.
+      - AI_BASE_URL=${AI_BASE_URL:-http://freellmapi:3001/v1}
+      - AI_MODEL=${AI_MODEL:-auto}
+      - AI_API_KEY=${AI_API_KEY:-}
       - ODYSSEUS_ENABLED=${ODYSSEUS_ENABLED:-false}
       - ODYSSEUS_API_URL=${ODYSSEUS_API_URL:-}
       - ODYSSEUS_API_TOKEN=${ODYSSEUS_API_TOKEN:-}
@@ -59,37 +65,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
-
-  quid-ollama:
-    image: ollama/ollama:latest
-    container_name: quid-ollama
-    environment:
-      - OLLAMA_KEEP_ALIVE=-1
-    volumes:
-      - quid-ollama-data:/root/.ollama
-    ports:
-      - "${OLLAMA_PORT:-11435}:11434"
-    restart: unless-stopped
-
-  quid-ollama-warmup:
-    image: curlimages/curl:8.11.1
-    container_name: quid-ollama-warmup
-    depends_on:
-      quid-ollama:
-        condition: service_started
-    environment:
-      - AURA_MODEL=${AURA_MODEL:-hermes3:8b}
-    command:
-      - sh
-      - -c
-      - |
-        until curl -fsS "http://quid-ollama:11434/api/tags" >/dev/null; do
-          sleep 2
-        done
-        curl -fsS "http://quid-ollama:11434/api/generate" \
-          -H "Content-Type: application/json" \
-          -d "{\"model\":\"$${AURA_MODEL}\",\"prompt\":\"Responde listo.\",\"stream\":false,\"keep_alive\":-1,\"options\":{\"num_predict\":1}}" || true
-    restart: "no"
+    networks:
+      - default
+      - quid-ai-net
 
   quid-cron:
     image: curlimages/curl:8.11.1
@@ -117,7 +95,18 @@ services:
           sleep "$${CRON_INTERVAL_SECONDS}"
         done
     restart: unless-stopped
+    networks:
+      - default
+      - quid-ai-net
 
 volumes:
   quid-postgres-data:
-  quid-ollama-data:
+
+# Red compartida con el router de IA (FreeLLMAPI), que vive en su propio
+# compose. Se declara externa para no acoplar los dos despliegues: el router
+# puede recrearse sin tocar Quid. Crearla una vez con:
+#   docker network create quid-ai-net
+networks:
+  quid-ai-net:
+    name: quid-ai-net
+    external: true

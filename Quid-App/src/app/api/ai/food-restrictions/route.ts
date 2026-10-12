@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-
-const AURA_MODEL = process.env.AURA_MODEL || "hermes3:8b";
-const OLLAMA_API_BASE = process.env.OLLAMA_URL || "http://localhost:11434/api";
+import { extractJsonFromAiText, requestAiCompletion } from "@/lib/ai/llm";
 
 interface FoodRestriction {
   food: string;
@@ -146,7 +144,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. Intentar llamar a Ollama
+    // 2. Consultar al backend de IA configurado (Ollama o router OpenAI-compatible)
     try {
       const systemPrompt = `Eres un nutricionista y médico experto. Analiza la lista de condiciones de salud del usuario: "${diseases.join(", ")}" y responde con un objeto JSON en español con la estructura detallada abajo.
 REGLA CRÍTICA: Responde exclusivamente con el bloque JSON. Sin preámbulos ni código markdown.
@@ -164,42 +162,17 @@ Estructura requerida:
   "summary": "Breve resumen nutricional aconsejando al usuario"
 }`;
 
-      const response = await fetch(`${OLLAMA_API_BASE.replace(/\/$/, "")}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: AURA_MODEL,
-          stream: false,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: `Analiza las enfermedades: ${diseases.join(", ")}` }
-          ],
-        }),
+      const completion = await requestAiCompletion({
+        system: systemPrompt,
+        user: `Analiza las enfermedades: ${diseases.join(", ")}`,
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        const content = result.message?.content?.trim() || "";
-
-        let cleanJson = content;
-        if (cleanJson.startsWith("```json")) {
-          cleanJson = cleanJson.substring(7);
-        }
-        if (cleanJson.startsWith("```")) {
-          cleanJson = cleanJson.substring(3);
-        }
-        if (cleanJson.endsWith("```")) {
-          cleanJson = cleanJson.substring(0, cleanJson.length - 3);
-        }
-        cleanJson = cleanJson.trim();
-
-        const parsed = JSON.parse(cleanJson);
-        if (Array.isArray(parsed.restrictions)) {
-          return NextResponse.json(parsed);
-        }
+      const parsed = extractJsonFromAiText<{ restrictions?: FoodRestriction[] }>(completion.text);
+      if (parsed && Array.isArray(parsed.restrictions)) {
+        return NextResponse.json(parsed);
       }
-    } catch (ollamaErr) {
-      console.error("Error llamando a Ollama para restricciones alimenticias:", ollamaErr);
+    } catch (aiErr) {
+      console.error("Error consultando la IA para restricciones alimenticias:", aiErr);
     }
 
     // 3. Fallback genérico final si no se encontró nada

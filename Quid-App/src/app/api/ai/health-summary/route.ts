@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-
-const AURA_MODEL = process.env.AURA_MODEL || "hermes3:8b";
-const OLLAMA_API_BASE = process.env.OLLAMA_URL || "http://localhost:11434/api";
+import { requestAiCompletion } from "@/lib/ai/llm";
 
 export async function GET() {
   try {
@@ -237,46 +235,37 @@ Por favor estructura tu respuesta en los siguientes puntos en español:
 
 Sé conciso, empático y estructurado. No utilices jerga excesivamente técnica. Deja claro al final que es una sugerencia informativa y debe validarse con su médico de cabecera.`;
 
-      const response = await fetch(`${OLLAMA_API_BASE.replace(/\/$/, "")}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(90000),
-        body: JSON.stringify({
-          model: AURA_MODEL,
-          stream: false,
-          keep_alive: -1,
-          messages: [{ role: "user", content: systemPrompt }],
-        }),
+      const completion = await requestAiCompletion({
+        system: "Eres un asistente clínico que redacta resúmenes de tratamiento claros y empáticos en español.",
+        user: systemPrompt,
+        timeoutMs: 90_000,
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        const content = result.message?.content?.trim() || "";
-        if (content && content.length > 100) {
-          const report = await db.healthAiReport.upsert({
-            where: { userId: session.user.id },
-            update: {
-              summary: content,
-              model: AURA_MODEL,
-              generatedAt: new Date(),
-            },
-            create: {
-              userId: session.user.id,
-              summary: content,
-              model: AURA_MODEL,
-            },
-          });
-          return NextResponse.json({
+      const content = completion.text;
+      if (content && content.length > 100) {
+        const report = await db.healthAiReport.upsert({
+          where: { userId: session.user.id },
+          update: {
             summary: content,
-            source: "ollama",
-            model: AURA_MODEL,
-            generatedAt: report.generatedAt.toISOString(),
-            cached: false,
-          });
-        }
+            model: completion.model,
+            generatedAt: new Date(),
+          },
+          create: {
+            userId: session.user.id,
+            summary: content,
+            model: completion.model,
+          },
+        });
+        return NextResponse.json({
+          summary: content,
+          source: completion.protocol === "ollama" ? "ollama" : "router",
+          model: completion.model,
+          generatedAt: report.generatedAt.toISOString(),
+          cached: false,
+        });
       }
     } catch (err) {
-      console.error("Error llamando a Ollama para reporte clínico:", err);
+      console.error("Error consultando la IA para reporte clínico:", err);
     }
 
     // 3. Fallback en caso de que falle el LLM
