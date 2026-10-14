@@ -3,6 +3,7 @@
 // to compute the current fuel level for a vehicle based on its fuel logs.
 
 import { getVehicleDefaultEfficiency } from "@/lib/constants/vehicle-catalog";
+import { summarizeEfficiency } from "@/lib/fuel-efficiency";
 
 interface FuelLogInput {
   id: string;
@@ -39,6 +40,28 @@ export interface FuelLevelResult {
   isLowFuel: boolean;             // true if fuel level <= 20%
   isLearning: boolean;            // true if using default efficiency (not enough real data yet)
   lastPricePerGallon: number;     // price per gallon from the most recent fuel log
+
+  // ── Explanatory breakdown ──
+  // The level is an *estimate* driven by four inputs the user controls: the tank
+  // capacity, the "full tank" flag, the odometer, and the efficiency. These
+  // fields expose those inputs so a wrong reading can be explained instead of
+  // just distrusted.
+  /** Which path produced the number. */
+  model: "full-tank" | "rough" | "none";
+  /** Tank capacity the arithmetic assumed. */
+  assumedTankCapacity: number;
+  /** Kilometres travelled since the baseline full tank. */
+  kmSinceFullTank: number;
+  /** Gallons the model believes were burned since that baseline. */
+  consumedSinceFullTank: number;
+  /** Partial fills added back on top of the baseline. */
+  partialsAddedSinceFullTank: number;
+  /** Days since the most recent fuel log; null when there are none. */
+  daysSinceLastLog: number | null;
+  /** How much the level can be trusted. */
+  confidence: "high" | "medium" | "low";
+  /** Plain-language reasons behind `confidence`. */
+  confidenceReasons: string[];
 }
 
 const DEFAULT_FUEL_LEVEL: FuelLevelResult = {
@@ -59,6 +82,14 @@ const DEFAULT_FUEL_LEVEL: FuelLevelResult = {
   isLowFuel: false,
   isLearning: true,
   lastPricePerGallon: 0,
+  model: "none",
+  assumedTankCapacity: 0,
+  kmSinceFullTank: 0,
+  consumedSinceFullTank: 0,
+  partialsAddedSinceFullTank: 0,
+  daysSinceLastLog: null,
+  confidence: "low",
+  confidenceReasons: ["Sin datos suficientes"],
 };
 
 /**
@@ -74,7 +105,8 @@ const DEFAULT_FUEL_LEVEL: FuelLevelResult = {
  */
 export function calculateFuelLevel(
   vehicle: VehicleInput,
-  fuelLogs: FuelLogInput[]
+  fuelLogs: FuelLogInput[],
+  now: Date = new Date()
 ): FuelLevelResult {
   // No tank capacity configured
   if (!vehicle.tankCapacity || vehicle.tankCapacity <= 0) {
@@ -87,61 +119,50 @@ export function calculateFuelLevel(
       ...DEFAULT_FUEL_LEVEL,
       lastFullTankKm: vehicle.currentKm,
       gallonsToRefuel: vehicle.tankCapacity,
+      assumedTankCapacity: vehicle.tankCapacity,
+      confidenceReasons: ["Todavía no hay tanqueos registrados"],
     };
   }
 
   const tankCapacity = vehicle.tankCapacity;
 
   // ── Step 1: Calculate average km/gallon ──
-  let avgKmPerGallon = 0;
-  let isLearning = true; // Start as true, set to false only when we have real data
-
-  // Prefer full-tank-to-full-tank calculations (most accurate)
-  const fullTankLogs = fuelLogs
-    .filter(log => log.isFullTank)
-    .sort((a, b) => a.km - b.km);
-
-  if (fullTankLogs.length >= 2) {
-    const firstLog = fullTankLogs[0];
-    const lastLog = fullTankLogs[fullTankLogs.length - 1];
-    const totalKm = lastLog.km - firstLog.km;
-    // The gallons filled at each full tank represent what was consumed since the previous fill
-    const totalGallons = fullTankLogs.slice(1).reduce((sum, log) => sum + log.gallons, 0);
-
-    if (totalGallons > 0 && totalKm > 0) {
-      avgKmPerGallon = totalKm / totalGallons;
-      isLearning = false;
-    }
-  }
-
-  // Fallback: use all logs if not enough full-tank data
-  if (avgKmPerGallon === 0 && fuelLogs.length >= 2) {
+  //
+  // Tank-to-tank cycles are the single source of truth (see `fuel-efficiency`).
+  // They include partial fills, which the previous inline arithmetic ignored:
+  // summing only full-tank gallons under-counted volume and therefore OVERSTATED
+  // efficiency whenever the driver topped up partially.
+  const roughEstimate = (() => {
+    if (fuelLogs.length < 2) return 0;
     const sortedLogs = [...fuelLogs].sort((a, b) => a.km - b.km);
     const totalKm = sortedLogs[sortedLogs.length - 1].km - sortedLogs[0].km;
     const totalGallons = sortedLogs.slice(1).reduce((sum, log) => sum + log.gallons, 0);
+    return totalKm > 0 && totalGallons > 0 ? totalKm / totalGallons : 0;
+  })();
 
-    if (totalGallons > 0 && totalKm > 0) {
-      avgKmPerGallon = totalKm / totalGallons;
-      // This is still learning because it's not full-tank-to-full-tank
-      // but it's better than default, so we mark it as semi-learning
-      isLearning = true;
-    }
-  }
-
-  // Default efficiency if no data (conservative estimates by vehicle type)
-  if (avgKmPerGallon === 0) {
-    avgKmPerGallon = getVehicleDefaultEfficiency(vehicle.type);
-    isLearning = true;
-  }
+  const efficiency = summarizeEfficiency(fuelLogs, {
+    // Keep the previous rough estimate as the learning-state fallback so the
+    // autonomy gauge does not regress for vehicles with little history.
+    fallbackAverage: roughEstimate || getVehicleDefaultEfficiency(vehicle.type),
+  });
+  const avgKmPerGallon = efficiency.average;
+  const isLearning = efficiency.isLearning;
 
   // ── Step 2: Find the last full tank as baseline ──
-  // Logs are sorted by date DESC, so find() gets the most recent full tank
-  const lastFullTankLog = fuelLogs.find(log => log.isFullTank);
+  //
+  // Order defensively. The anchor MUST be the most recent full tank, but relying
+  // on the caller to sort by date descending is a silent trap: an ascending array
+  // anchors on the oldest full tank and destroys the estimate.
+  const logsByDateDesc = [...fuelLogs].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const lastFullTankLog = logsByDateDesc.find(log => log.isFullTank);
 
   let currentFuel = 0;
   let lastFullTankDate: string | null = null;
   let lastFullTankKm = vehicle.currentKm;
   let totalConsumed = 0;
+  let kmSinceFullTank = 0;
+  let partialsAddedSinceFullTank = 0;
+  let model: FuelLevelResult["model"] = "rough";
 
   if (lastFullTankLog) {
     // Start from full tank
@@ -167,13 +188,14 @@ export function calculateFuelLevel(
       totalConsumed = kmTraveled / avgKmPerGallon;
       currentFuel = Math.max(0, tankCapacity - totalConsumed);
     }
+    kmSinceFullTank = Math.max(0, kmTraveled);
+    model = "full-tank";
 
     // Add partial refuels back (they add fuel to the tank)
     if (logsAfterFullTank.length > 0) {
       const partialRefuels = logsAfterFullTank.filter(log => !log.isFullTank);
-      partialRefuels.forEach(log => {
-        currentFuel += log.gallons;
-      });
+      partialsAddedSinceFullTank = partialRefuels.reduce((sum, log) => sum + log.gallons, 0);
+      currentFuel += partialsAddedSinceFullTank;
     }
   } else {
     // No full tank recorded - estimate from most recent logs using vehicle.currentKm
@@ -230,7 +252,7 @@ export function calculateFuelLevel(
         daysUntilRefuel = Math.floor(estimatedRange / avgKmPerDay);
 
         // Calculate the date
-        const refuelDate = new Date();
+        const refuelDate = new Date(now);
         refuelDate.setDate(refuelDate.getDate() + daysUntilRefuel);
         refuelByDate = refuelDate.toISOString();
       }
@@ -266,6 +288,50 @@ export function calculateFuelLevel(
     ? [...fuelLogs].sort((a, b) => b.date.getTime() - a.date.getTime())[0]?.pricePerGallon || 0
     : 0;
 
+  // ── Step 7: How far can this estimate be trusted? ──
+  //
+  // The level is derived, not measured: it starts from a tank the user declared
+  // full and subtracts estimated burn. Every input it depends on is a place
+  // where reality can diverge, so the result says which ones are shaky.
+  const mostRecentLog = [...fuelLogs].sort((a, b) => b.date.getTime() - a.date.getTime())[0] ?? null;
+  const daysSinceLastLog = mostRecentLog
+    ? Math.max(0, Math.floor((now.getTime() - mostRecentLog.date.getTime()) / (1000 * 60 * 60 * 24)))
+    : null;
+
+  const confidenceReasons: string[] = [];
+  const CONFIDENCE_RANK = { low: 0, medium: 1, high: 2 } as const;
+  let confidence: FuelLevelResult["confidence"] = "high";
+  const degrade = (level: "medium" | "low", reason: string) => {
+    confidenceReasons.push(reason);
+    if (CONFIDENCE_RANK[level] < CONFIDENCE_RANK[confidence]) confidence = level;
+  };
+
+  if (isLearning) {
+    degrade("low", "El rendimiento todavía no se midió: se usa un valor típico del tipo de vehículo.");
+  }
+  if (daysSinceLastLog != null && daysSinceLastLog > 30) {
+    degrade("low", `El último registro tiene ${daysSinceLastLog} días: no se sabe cuánto se manejó desde entonces.`);
+  } else if (daysSinceLastLog != null && daysSinceLastLog > 7) {
+    degrade("medium", `El último registro tiene ${daysSinceLastLog} días. Actualizá el kilometraje para afinar el nivel.`);
+  }
+  // The whole model hangs on the baseline tank being genuinely full. A fill far
+  // smaller than the tank is the classic way this silently overestimates.
+  if (lastFullTankLog && lastFullTankLog.gallons > 0 && lastFullTankLog.gallons < tankCapacity * 0.4) {
+    degrade(
+      "low",
+      `El último "tanque lleno" cargó ${lastFullTankLog.gallons.toFixed(1)} de ${tankCapacity} gal. Si el tanque no quedó lleno, el nivel está sobreestimado.`
+    );
+  }
+  if (!lastFullTankLog) {
+    degrade("low", "No hay ningún tanqueo marcado como lleno: el nivel es una aproximación gruesa.");
+  }
+  if (fuelLogs.length < 3) {
+    degrade("medium", "Hay pocos registros: la estimación mejora con más historial.");
+  }
+  if (confidenceReasons.length === 0) {
+    confidenceReasons.push("Se apoya en un tanque lleno reciente y un rendimiento medido.");
+  }
+
   return {
     fuelLevel: Math.round(fuelLevel * 100) / 100,
     currentFuel: Math.round(currentFuel * 100) / 100,
@@ -284,5 +350,13 @@ export function calculateFuelLevel(
     isLowFuel,
     isLearning,
     lastPricePerGallon: Math.round(lastPricePerGallon * 100) / 100,
+    model,
+    assumedTankCapacity: tankCapacity,
+    kmSinceFullTank: Math.round(kmSinceFullTank * 10) / 10,
+    consumedSinceFullTank: Math.round(totalConsumed * 100) / 100,
+    partialsAddedSinceFullTank: Math.round(partialsAddedSinceFullTank * 100) / 100,
+    daysSinceLastLog,
+    confidence,
+    confidenceReasons,
   };
 }

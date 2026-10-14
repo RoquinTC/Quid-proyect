@@ -7,6 +7,23 @@ export type VehicleTypeOption = {
   defaultKmPerGallon: number;
 };
 
+/**
+ * Default efficiency per vehicle type.
+ *
+ * These were previously stored as bare numbers taken from published per-LITRE
+ * figures, but they are consumed as kilometres per GALLON. A bus reading
+ * "10 km/gallon" is 2.6 km/L — physically impossible — which is what gave the
+ * mix-up away. The per-litre value is now the input and the conversion is
+ * explicit, because reading the old numbers as km/gal understated every initial
+ * range estimate by a factor of 3.785.
+ */
+const LITERS_PER_GALLON = 3.785411784;
+
+/** Convert a published km-per-litre figure into the km-per-gallon the app uses. */
+export function kmPerGallonFromKmPerLiter(kmPerLiter: number) {
+  return Math.round(kmPerLiter * LITERS_PER_GALLON);
+}
+
 export const VEHICLE_TYPE_OPTIONS: VehicleTypeOption[] = [
   {
     value: "motorcycle",
@@ -14,7 +31,7 @@ export const VEHICLE_TYPE_OPTIONS: VehicleTypeOption[] = [
     shortLabel: "Moto",
     defaultIcon: "motorcycle",
     gradient: "from-cyan-500 to-blue-600",
-    defaultKmPerGallon: 35,
+    defaultKmPerGallon: kmPerGallonFromKmPerLiter(35), // ~132 km/gal
   },
   {
     value: "electric_motorcycle",
@@ -30,7 +47,7 @@ export const VEHICLE_TYPE_OPTIONS: VehicleTypeOption[] = [
     shortLabel: "Scooter",
     defaultIcon: "scooter",
     gradient: "from-violet-500 to-cyan-500",
-    defaultKmPerGallon: 45,
+    defaultKmPerGallon: kmPerGallonFromKmPerLiter(45), // ~170 km/gal
   },
   {
     value: "electric_scooter",
@@ -62,7 +79,7 @@ export const VEHICLE_TYPE_OPTIONS: VehicleTypeOption[] = [
     shortLabel: "Carro",
     defaultIcon: "car-front",
     gradient: "from-blue-500 to-indigo-600",
-    defaultKmPerGallon: 25,
+    defaultKmPerGallon: kmPerGallonFromKmPerLiter(25), // ~95 km/gal
   },
   {
     value: "electric_car",
@@ -78,7 +95,7 @@ export const VEHICLE_TYPE_OPTIONS: VehicleTypeOption[] = [
     shortLabel: "Taxi",
     defaultIcon: "taxi",
     gradient: "from-yellow-400 to-orange-500",
-    defaultKmPerGallon: 24,
+    defaultKmPerGallon: kmPerGallonFromKmPerLiter(24), // ~91 km/gal
   },
   {
     value: "truck",
@@ -86,7 +103,7 @@ export const VEHICLE_TYPE_OPTIONS: VehicleTypeOption[] = [
     shortLabel: "Camión",
     defaultIcon: "truck",
     gradient: "from-indigo-500 to-purple-600",
-    defaultKmPerGallon: 15,
+    defaultKmPerGallon: kmPerGallonFromKmPerLiter(15), // ~57 km/gal
   },
   {
     value: "electric_truck",
@@ -102,7 +119,7 @@ export const VEHICLE_TYPE_OPTIONS: VehicleTypeOption[] = [
     shortLabel: "Bus",
     defaultIcon: "bus",
     gradient: "from-orange-500 to-rose-500",
-    defaultKmPerGallon: 10,
+    defaultKmPerGallon: kmPerGallonFromKmPerLiter(10), // ~38 km/gal
   },
   {
     value: "other",
@@ -110,7 +127,7 @@ export const VEHICLE_TYPE_OPTIONS: VehicleTypeOption[] = [
     shortLabel: "Otro",
     defaultIcon: "route",
     gradient: "from-slate-500 to-gray-600",
-    defaultKmPerGallon: 18,
+    defaultKmPerGallon: kmPerGallonFromKmPerLiter(18), // ~68 km/gal
   },
 ];
 
@@ -167,6 +184,7 @@ export function getVehicleIconKeys(type?: string | null) {
 }
 
 export function getVehicleDefaultEfficiency(type?: string | null) {
-  return VEHICLE_TYPE_OPTIONS.find((option) => option.value === type)?.defaultKmPerGallon ?? 18;
+  return VEHICLE_TYPE_OPTIONS.find((option) => option.value === type)?.defaultKmPerGallon
+    ?? kmPerGallonFromKmPerLiter(18);
 }
 

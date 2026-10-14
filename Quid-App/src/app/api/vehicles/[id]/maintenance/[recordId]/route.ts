@@ -11,12 +11,9 @@ import {
   reverseFinanceEntry,
   reverseUnpaidCreditInstallmentByAmount,
 } from "@/lib/transport-finance";
-import { MAINTENANCE_TYPES } from "@/lib/types/transport";
-
-function maintenanceReminderTitle(type: string) {
-  const config = MAINTENANCE_TYPES.find((item) => item.value === type);
-  return config?.label || "Mantenimiento";
-}
+import {
+  resolveMaintenanceDisplayName,
+} from "@/lib/transport-maintenance-rules";
 
 async function syncMaintenanceReminder({
   userId,
@@ -39,7 +36,11 @@ async function syncMaintenanceReminder({
   repeatIntervalKm: number | null;
   enabled: boolean;
 }) {
-  const title = maintenanceReminderTitle(type);
+  // Resolve the title exactly the way the create path does. Reminders are
+  // deactivated by matching their title, so any disagreement would leave the
+  // previous reminder active and add a duplicate instead of replacing it.
+  const userRules = await db.maintenanceServiceRule.findMany({ where: { userId } });
+  const title = resolveMaintenanceDisplayName(type, userRules);
 
   await db.vehicleReminder.updateMany({
     where: { userId, vehicleId, category: "maintenance", title, isActive: true },

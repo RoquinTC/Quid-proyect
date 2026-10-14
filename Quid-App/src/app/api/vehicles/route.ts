@@ -94,6 +94,7 @@ export async function GET() {
           pricePerGallon: toNumber(log.pricePerGallon),
           gallons: log.gallons,
           isFullTank: log.isFullTank,
+          station: log.station,
         }))
       );
 
@@ -119,6 +120,15 @@ export async function GET() {
         isLowFuel: fuelLevelData.isLowFuel,
         isLearning: fuelLevelData.isLearning,
         lastPricePerGallon: fuelLevelData.lastPricePerGallon,
+        // Why the level says what it says (inputs + trust level)
+        fuelModel: fuelLevelData.model,
+        assumedTankCapacity: fuelLevelData.assumedTankCapacity,
+        kmSinceFullTank: fuelLevelData.kmSinceFullTank,
+        consumedSinceFullTank: fuelLevelData.consumedSinceFullTank,
+        partialsAddedSinceFullTank: fuelLevelData.partialsAddedSinceFullTank,
+        daysSinceLastLog: fuelLevelData.daysSinceLastLog,
+        fuelConfidence: fuelLevelData.confidence,
+        fuelConfidenceReasons: fuelLevelData.confidenceReasons,
       };
     });
 

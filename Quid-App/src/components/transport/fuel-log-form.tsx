@@ -25,6 +25,15 @@ import type { Vehicle, FuelLog, PaymentMethodType } from "@/lib/types/transport"
 import { PaymentMethodSelector } from "@/components/transport/payment-method-selector";
 import { Loader2, Calculator, Fuel, Gauge, TrendingUp, AlertTriangle, MapPin } from "lucide-react";
 import { toast } from "sonner";
+import { validateOdometer } from "@/lib/odometer-validation";
+import { getVehicleDefaultEfficiency } from "@/lib/constants/vehicle-catalog";
+import { detectSuspiciousFullTank } from "@/lib/fuel-efficiency";
+
+/** `/api/vehicles` ships the recent fuel logs alongside the vehicle. */
+type VehicleWithHistory = Vehicle & {
+  fuelLogs?: Array<{ id: string; km: number; date: string; isFullTank?: boolean }>;
+  avgKmPerGallon?: number;
+};
 
 interface FuelLogFormProps {
   open: boolean;
@@ -52,7 +61,7 @@ export function FuelLogForm({
   onSuccess,
 }: FuelLogFormProps) {
   const [loading, setLoading] = useState(false);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleWithHistory[]>([]);
   const [vehicleId, setVehicleId] = useState(preselectedVehicleId || "");
   const [date, setDate] = useState(getColombiaTodayString());
   const [km, setKm] = useState("");
@@ -81,7 +90,7 @@ export function FuelLogForm({
 
   const fetchVehicles = useCallback(async () => {
     try {
-      const data = await apiFetch<Vehicle[]>("/api/vehicles");
+      const data = await apiFetch<VehicleWithHistory[]>("/api/vehicles");
       setVehicles(data);
     } catch (error) {
       console.error("Error fetching vehicles:", error);
@@ -167,6 +176,50 @@ export function FuelLogForm({
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
   const vehicleTankCapacity = selectedVehicle?.tankCapacity ?? tankCapacity ?? 0;
 
+  // Odometer check: a mistyped reading corrupts the tank-to-tank cycles, so the
+  // form refuses to save an impossible one. KM is optional here, so an empty
+  // field is left alone rather than silently treated as zero.
+  const kmCheck = useMemo(() => {
+    if (km.trim() === "") return null;
+    return validateOdometer({
+      km,
+      date,
+      currentKm: selectedVehicle?.currentKm ?? 0,
+      history: selectedVehicle?.fuelLogs ?? [],
+      editingId: fuelLog?.id ?? null,
+      mode: isEditing ? "edit" : "create",
+    });
+  }, [km, date, selectedVehicle, fuelLog, isEditing]);
+
+  /**
+   * Warn only when marking this fill as "full" would produce an IMPOSSIBLE
+   * efficiency.
+   *
+   * A full tank is what closes a cycle, so the app divides the whole distance
+   * since the previous full tank by the gallons loaded now. A small fill is not
+   * suspicious by itself — topping off a nearly full tank is a perfectly good
+   * full tank, and it is the most precise kind. Warning about size alone would
+   * push the driver to stop marking full tanks at all, and without them the app
+   * never learns anything.
+   *
+   * The real defect is a SMALL fill after a LONG distance: that is what inflates
+   * the average, which is what made the gauge read half a tank on an empty one.
+   */
+  const fullTankSuspicion = useMemo(
+    () =>
+      detectSuspiciousFullTank({
+        km: Number(km),
+        gallons,
+        isFullTank,
+        history: selectedVehicle?.fuelLogs ?? [],
+        referenceEfficiency:
+          selectedVehicle?.avgKmPerGallon && selectedVehicle.avgKmPerGallon > 0
+            ? selectedVehicle.avgKmPerGallon
+            : getVehicleDefaultEfficiency(selectedVehicle?.type),
+      }),
+    [isFullTank, gallons, km, selectedVehicle]
+  );
+
   // ─── Fuel level projection ──────────────────────────────────────
   const fuelProjection = useMemo(() => {
     if (isEditing) return null;
@@ -209,6 +262,10 @@ export function FuelLogForm({
 
   const handleSubmit = async () => {
     if (!vehicleId || !amount || !pricePerGallon) return;
+    if (kmCheck?.blocking) {
+      toast.error(kmCheck.message);
+      return;
+    }
     setLoading(true);
     try {
       const payload: Record<string, unknown> = {
@@ -385,6 +442,16 @@ export function FuelLogForm({
               onChange={(e) => setKm(e.target.value)}
               className="rounded-xl"
             />
+            {kmCheck && kmCheck.status !== "ok" && (
+              <p
+                className={`flex items-start gap-1.5 text-[11px] ${
+                  kmCheck.blocking ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
+                }`}
+              >
+                <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                {kmCheck.message}
+              </p>
+            )}
           </div>
 
           {/* Amount & Price per gallon */}
@@ -503,15 +570,35 @@ export function FuelLogForm({
             </div>
           )}
 
-          {/* Full Tank Switch */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-            <div>
-              <Label className="text-sm">Tanque lleno</Label>
-              <p className="text-xs text-gray-400">
-                Marca si llenaste el tanque completo
-              </p>
+          {/* Full Tank Switch — the single input the whole fuel level depends on */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
+              <div className="pr-3">
+                <Label className="text-sm">Tanque lleno</Label>
+                <p className="text-xs text-gray-400">
+                  Marcalo si el tanque quedó lleno de verdad (la manguera cortó sola), sin importar
+                  cuánto cargaste. El nivel de combustible y la autonomía se calculan desde acá.
+                </p>
+              </div>
+              <Switch checked={isFullTank} onCheckedChange={setIsFullTank} />
             </div>
-            <Switch checked={isFullTank} onCheckedChange={setIsFullTank} />
+
+            {fullTankSuspicion && (
+              <div className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 dark:bg-amber-950/30">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-500" />
+                <div className="text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                  <p className="font-semibold">
+                    Con {gallons.toFixed(1)} gal y {fullTankSuspicion.distance.toLocaleString("es-CO")} km desde
+                    el último tanque lleno, el rendimiento daría {Math.round(fullTankSuspicion.impliedEfficiency)} km/gal
+                    (tu promedio es {Math.round(fullTankSuspicion.reference)}).
+                  </p>
+                  <p className="mt-0.5">
+                    Si el tanque no quedó lleno, desactivá esta opción: el medidor asumirá el tanque
+                    completo y te mostrará más combustible del que tenés.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Gas Station */}
@@ -556,7 +643,7 @@ export function FuelLogForm({
           <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white px-4 pb-1 pt-2 dark:border-gray-700 dark:bg-gray-900 sm:-mx-6 sm:px-6">
             <Button
               onClick={handleSubmit}
-              disabled={loading || !vehicleId || !amount || !pricePerGallon}
+              disabled={loading || !vehicleId || !amount || !pricePerGallon || Boolean(kmCheck?.blocking)}
               className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
             >
               {loading ? (

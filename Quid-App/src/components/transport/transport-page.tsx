@@ -21,6 +21,9 @@ import { MaintenanceRulesDialog } from "./maintenance-rules-dialog";
 import { FuelPriceWidget } from "./fuel-price-widget";
 import { QuickKmUpdate } from "./quick-km-update";
 import { AuraQuickLog } from "./aura-quick-log";
+import { TransportDashboard } from "./transport-dashboard";
+import { buildUpcoming, describeRelativeDay, describeProjection, estimateKmDueDate } from "@/lib/transport-prediction";
+import { summarizeEfficiency } from "@/lib/fuel-efficiency";
 import { VehicleIcon } from "./vehicle-icon";
 import {
   getVehicleGradient,
@@ -117,7 +120,7 @@ const docTypeIcons: Record<string, typeof Shield> = {
 };
 
 type VehicleWithDetails = Vehicle & {
-  fuelLogs: Array<{ id: string; date: string; km: number; amount: number; pricePerGallon: number; gallons: number; isFullTank?: boolean; notes?: string | null }>;
+  fuelLogs: Array<{ id: string; date: string; km: number; amount: number; pricePerGallon: number; gallons: number; isFullTank?: boolean; station?: string | null; notes?: string | null }>;
   maintenanceRecords: Array<{ id: string; type: string; description: string; km: number; cost: number; date: string; nextDueKm?: number | null; nextDueDate?: string | null; reminderEnabled?: boolean; items?: Array<{ id: string; name: string; quantity: number; unitPrice: number; totalPrice: number }> }>;
   documents?: Array<{ id: string; vehicleId: string; type: string; documentNumber?: string | null; issueDate: string; expiryDate: string; cost: number; reminderDays: number; reminderEnabled: boolean; notes?: string | null }>;
   reminders?: VehicleReminder[];
@@ -135,6 +138,15 @@ type VehicleWithDetails = Vehicle & {
   isLearning?: boolean;
   lastPricePerGallon?: number;
   photoUrl?: string | null;
+  // Fuel-level diagnostics (why the gauge says what it says)
+  fuelModel?: "full-tank" | "rough" | "none";
+  assumedTankCapacity?: number;
+  kmSinceFullTank?: number;
+  consumedSinceFullTank?: number;
+  partialsAddedSinceFullTank?: number;
+  daysSinceLastLog?: number | null;
+  fuelConfidence?: "high" | "medium" | "low";
+  fuelConfidenceReasons?: string[];
 };
 
 type TimelineEntry = {
@@ -373,13 +385,13 @@ export function TransportPage() {
   const currentMonthStart = new Date();
   currentMonthStart.setDate(1);
   currentMonthStart.setHours(0, 0, 0, 0);
-  const selectedMonthlyTransportCost =
-    (selectedVehicle?.fuelLogs ?? [])
-      .filter((log) => new Date(log.date) >= currentMonthStart)
-      .reduce((sum, log) => sum + log.amount, 0) +
-    (selectedVehicle?.maintenanceRecords ?? [])
-      .filter((record) => new Date(record.date) >= currentMonthStart)
-      .reduce((sum, record) => sum + record.cost, 0);
+  const selectedMonthlyFuelCost = (selectedVehicle?.fuelLogs ?? [])
+    .filter((log) => new Date(log.date) >= currentMonthStart)
+    .reduce((sum, log) => sum + log.amount, 0);
+  const selectedMonthlyMaintenanceCost = (selectedVehicle?.maintenanceRecords ?? [])
+    .filter((record) => new Date(record.date) >= currentMonthStart)
+    .reduce((sum, record) => sum + record.cost, 0);
+  const selectedMonthlyTransportCost = selectedMonthlyFuelCost + selectedMonthlyMaintenanceCost;
   const latestFuelLog = useMemo(() => {
     return [...(selectedVehicle?.fuelLogs ?? [])]
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] ?? null;
@@ -462,6 +474,35 @@ export function TransportPage() {
     }
 
     return alerts.sort((a, b) => a.dueScore - b.dueScore).slice(0, 4);
+  }, [selectedVehicle]);
+
+  // Unified forecast for the dashboard: maintenance, reminders and documents,
+  // with km-only targets projected onto the calendar by the prediction engine.
+  const dashboardUpcoming = useMemo(() => {
+    if (!selectedVehicle) return [];
+    return buildUpcoming({
+      currentKm: selectedVehicle.currentKm ?? 0,
+      avgKmPerDay: selectedVehicle.avgKmPerDay ?? 0,
+      isLearning: selectedVehicle.isLearning ?? true,
+      reminders: selectedVehicle.reminders ?? [],
+      maintenanceRecords: selectedVehicle.maintenanceRecords ?? [],
+      documents: selectedVehicle.documents ?? [],
+      maintenanceLabel: (record) =>
+        MAINTENANCE_TYPES.find((type) => type.value === record.type)?.label ?? "Mantenimiento",
+      documentLabel: (doc) => docTypeLabels[doc.type] ?? "Documento",
+    });
+  }, [selectedVehicle]);
+
+  // Tank-to-tank efficiency detail for the dashboard's headline metric.
+  //
+  // Scope note: `/api/vehicles` sends only the 10 most recent fuel logs, so the
+  // best/worst here describe the recent window. The headline average comes from
+  // `vehicle.avgKmPerGallon`, which the server computes over the full history.
+  const dashboardEfficiency = useMemo(() => {
+    if (!selectedVehicle) return null;
+    return summarizeEfficiency(selectedVehicle.fuelLogs ?? [], {
+      fallbackAverage: selectedVehicle.avgKmPerGallon ?? 0,
+    });
   }, [selectedVehicle]);
 
   // Format the refuel date nicely
@@ -1462,6 +1503,26 @@ export function TransportPage() {
 
         {transportTab === "summary" ? (
           <div className="p-4 space-y-3 pb-safe">
+            {selectedVehicle && (
+              <TransportDashboard
+                vehicle={selectedVehicle}
+                costPerKm={selectedCostPerKm}
+                monthlyCost={selectedMonthlyTransportCost}
+                monthlyFuelCost={selectedMonthlyFuelCost}
+                monthlyMaintenanceCost={selectedMonthlyMaintenanceCost}
+                totalSpent={selectedTotalFuelSpent + selectedTotalMaintenanceSpent}
+                trackedKm={selectedTrackedKm}
+                upcoming={dashboardUpcoming}
+                efficiency={dashboardEfficiency}
+                onLogFuel={() => { setEditFuelLog(null); setShowFuelLogForm(true); }}
+                onLogMaintenance={() => { setEditMaintenance(null); setShowMaintenanceForm(true); }}
+                onRegisterDocument={() => { setEditDocument(null); setShowDocumentForm(true); }}
+                onCreateReminder={() => { setEditReminder(null); setShowReminderForm(true); }}
+                onUpdateKm={() => setShowKmUpdate(true)}
+                onOpenFuelDetails={() => setShowFuelDetails(true)}
+                onOpenUpcoming={() => { setTransportTab("reminders"); setShowReminderDetails(true); }}
+              />
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Card className="border-0 shadow-sm rounded-2xl">
                 <CardContent className="p-3">
@@ -1534,8 +1595,8 @@ export function TransportPage() {
                       <Bell className="size-4" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-gray-900 dark:text-white">Próximos 7 días</p>
-                      <p className="text-[11px] text-gray-400">Vencimientos y límites cercanos</p>
+                      <p className="text-sm font-bold text-gray-900 dark:text-white">Atención esta semana</p>
+                      <p className="text-[11px] text-gray-400">Solo lo que vence en los próximos 7 días</p>
                     </div>
                   </div>
                   <Button
@@ -1597,28 +1658,6 @@ export function TransportPage() {
               </CardContent>
             </Card>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Card className="border-0 shadow-sm rounded-2xl">
-                <CardContent className="p-3">
-                  <p className="text-[11px] text-gray-400">Gasto del mes</p>
-                  <p className="text-lg font-black text-gray-900 dark:text-white">
-                    {formatCurrency(selectedMonthlyTransportCost)}
-                  </p>
-                  <p className="text-[11px] text-gray-500">Combustible + mantenimiento</p>
-                </CardContent>
-              </Card>
-              <Card className="border-0 shadow-sm rounded-2xl">
-                <CardContent className="p-3">
-                  <p className="text-[11px] text-gray-400">Costo por km</p>
-                  <p className="text-lg font-black text-gray-900 dark:text-white">
-                    {selectedCostPerKm != null ? formatCurrency(selectedCostPerKm) : "—"}
-                  </p>
-                  <p className="text-[11px] text-gray-500">
-                    {selectedTrackedKm > 0 ? `${selectedTrackedKm.toLocaleString("es-CO")} km medidos` : "Faltan datos"}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
           </div>
         ) : transportTab === "reminders" ? (
           <ReminderBoard
@@ -1656,19 +1695,31 @@ export function TransportPage() {
             </p>
           </div>
         ) : (
-          <div className="p-4 space-y-4 pb-safe">
+          <div className="p-4 pb-safe">
+            {/* Drivvo's "start of the road" marker: everything below is history */}
+            <div className="relative mb-3 pl-14">
+              <span className="absolute left-[1.35rem] top-1 bottom-[-0.75rem] w-[10px] rounded-full bg-gray-100 dark:bg-gray-800/70" />
+              <span className="absolute left-[1.2rem] top-1.5 size-3.5 rounded-full bg-white ring-2 ring-gray-300 dark:bg-gray-900 dark:ring-gray-600" />
+              <p className="pl-1 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-700 dark:text-cyan-300">
+                Inicio del historial
+              </p>
+            </div>
+
             {groupedTimeline().map((group) => (
-              <div key={group.month}>
-                {/* Month header */}
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">
-                  {group.month}
-                </p>
+              <div key={group.month} className="relative space-y-4">
+                {/* One continuous rail for the whole month block */}
+                <span className="pointer-events-none absolute left-[1.35rem] top-0 bottom-0 w-[10px] rounded-full bg-gray-100 dark:bg-gray-800/70" />
 
-                {/* Timeline entries */}
-                <div className="relative pl-7">
-                  {/* Vertical line */}
-                  <div className="absolute left-3 top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-700" />
+                {/* Month header anchored on the rail */}
+                <div className="relative flex items-center gap-2 pl-14">
+                  <span className="absolute left-[1.2rem] top-1/2 size-3.5 -translate-y-1/2 rounded-full bg-cyan-500 ring-2 ring-white dark:ring-gray-900" />
+                  <p className="relative text-[10.5px] font-bold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500">
+                    {group.month}
+                  </p>
+                  <span className="h-px flex-1 bg-gray-200/80 dark:bg-gray-800" />
+                </div>
 
+                <div className="relative pl-14">
                   <div className="space-y-2">
                     {group.entries.map((entry) => (
                       <TimelineCard
@@ -1951,8 +2002,25 @@ function ReminderBoard({
     );
   }
 
-  const customItems: ReminderBoardItem[] = (vehicle.reminders || []).map((reminder) => {
-    const daysUntilDue = reminder.dueDate
+  // A distance target carries no date of its own. Project one from the learned
+  // rate so a km-based reminder also reads as a calendar estimate — the same
+  // engine the dashboard uses, so both surfaces tell the same story.
+  const avgKmPerDay = vehicle.avgKmPerDay ?? 0;
+  const isLearning = vehicle.isLearning ?? true;
+
+  const projectKm = (dueKm: number | null | undefined, kmRemaining: number | null): string | null => {
+    if (dueKm == null || kmRemaining == null || kmRemaining <= 0) return null;
+    const projection = estimateKmDueDate({
+      currentKm: vehicle.currentKm,
+      dueKm,
+      avgKmPerDay,
+      isLearning,
+      today: now,
+    });
+    return describeProjection(projection.daysRemaining, projection.confidence);
+  };
+
+  const customItems: ReminderBoardItem[] = (vehicle.reminders || []).map((reminder) => {    const daysUntilDue = reminder.dueDate
       ? Math.ceil((new Date(reminder.dueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : null;
     const kmRemaining = reminder.dueKm != null ? reminder.dueKm - vehicle.currentKm : null;
@@ -1973,6 +2041,8 @@ function ReminderBoard({
           ? "Km cumplido"
           : `${Math.round(kmRemaining).toLocaleString("es-CO")} km restantes`
         : null,
+      // Only when the reminder has no date of its own.
+      daysUntilDue === null ? projectKm(reminder.dueKm, kmRemaining) : null,
     ].filter(Boolean);
 
     return {
@@ -2006,6 +2076,7 @@ function ReminderBoard({
             ? "Fecha cumplida"
             : `${daysUntil} días`
           : null,
+        daysUntil === null ? projectKm(record.nextDueKm, kmRemaining) : null,
       ].filter(Boolean);
 
       return {
@@ -2252,7 +2323,7 @@ function TimelineCard({
   return (
     <motion.div layout layoutId={`timeline-card-${entry.id}`} className="relative">
       {/* Timeline dot */}
-      <div className={`absolute -left-7 top-3 size-5 rounded-full flex items-center justify-center ${
+      <div className={`absolute -left-[2.6rem] top-3 size-6 rounded-full ring-2 ring-white flex items-center justify-center dark:ring-gray-900 ${
         isFuel
           ? "bg-orange-100 dark:bg-orange-900/30"
           : isDoc
@@ -2321,42 +2392,34 @@ function TimelineCard({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-gray-500 flex-wrap">
-          {showVehicleName && (
-            <>
+        <div className="mt-1 flex items-end justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+            {showVehicleName && (
               <span className="font-medium text-gray-600 dark:text-gray-400">{entry.vehicleName}</span>
-              <span>•</span>
-            </>
-          )}
-          <span>{formatShortDate(entry.date)}</span>
-          {!isDoc && <span>{(entry.km ?? 0).toLocaleString("es-CO")} km</span>}
-          {isFuel && entry.gallons && (
-            <>
-              <span>•</span>
-              <span>{entry.gallons.toFixed(2)} gal</span>
-            </>
-          )}
-          {!isFuel && !isDoc && entry.nextDueKm && (
-            <>
-              <span>•</span>
+            )}
+            {!isDoc && (
+              <span className="flex items-center gap-1">
+                <Gauge className="size-3 text-gray-400" />
+                {(entry.km ?? 0).toLocaleString("es-CO")} km
+              </span>
+            )}
+            {isFuel && entry.gallons ? <span>{entry.gallons.toFixed(2)} gal</span> : null}
+            {!isFuel && !isDoc && entry.nextDueKm ? (
               <Badge variant="secondary" className="text-[11px] h-3.5 px-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                 Próx: {entry.nextDueKm.toLocaleString("es-CO")} km
                 {kmInterval > 0 && <span className="font-normal"> · Cada {kmInterval.toLocaleString()} km</span>}
               </Badge>
-            </>
-          )}
-          {isDoc && entry.documentNumber && (
-            <>
-              <span>•</span>
-              <span className="text-gray-400">#{entry.documentNumber}</span>
-            </>
-          )}
-          {isDoc && entry.expiryDate && (
-            <>
-              <span>•</span>
-              <span>Vence: {formatShortDate(entry.expiryDate)}</span>
-            </>
-          )}
+            ) : null}
+            {isDoc && entry.documentNumber ? <span className="text-gray-400">#{entry.documentNumber}</span> : null}
+            {isDoc && entry.expiryDate ? <span>Vence: {formatShortDate(entry.expiryDate)}</span> : null}
+          </div>
+          <span
+            className="flex shrink-0 items-center gap-1 text-[11px] text-gray-400"
+            title={formatShortDate(entry.date)}
+          >
+            <Clock className="size-3" />
+            {describeRelativeDay(entry.date)}
+          </span>
         </div>
 
         {hasExpandableDetails && (
@@ -2965,9 +3028,9 @@ function VehicleDetailView({
           </div>
         ) : (
           <div className="p-4 space-y-4 pb-4">
-            {/* Timeline entries */}
-            <div className="relative pl-7">
-              <div className="absolute left-3 top-2 bottom-2 w-px bg-gray-200 dark:bg-gray-700" />
+            {/* Timeline entries — same rail treatment as the module timeline */}
+            <div className="relative pl-14">
+              <span className="pointer-events-none absolute left-[1.35rem] top-1 bottom-1 w-[10px] rounded-full bg-gray-100 dark:bg-gray-800/70" />
               <div className="space-y-2">
                 {timeline.slice(0, visibleCount).map((entry) => (
                   <TimelineCard

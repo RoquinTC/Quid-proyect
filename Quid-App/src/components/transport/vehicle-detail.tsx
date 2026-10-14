@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency, formatDate, formatShortDate } from "@/lib/api";
+import { summarizeEfficiency } from "@/lib/fuel-efficiency";
 import { FuelLogForm } from "./fuel-log-form";
 import { MaintenanceForm } from "./maintenance-form";
 import { VehicleForm } from "./vehicle-form";
@@ -272,16 +273,10 @@ export function VehicleDetail({ vehicleId, onBack }: VehicleDetailProps) {
   const totalFuelSpent = fuelLogs.reduce((s, l) => s + l.amount, 0);
   const totalMaintenanceSpent = maintenanceRecords.reduce((s, r) => s + r.cost, 0);
 
-  // Average km/gallon
-  let avgKmPerGallon = fuelLevelData?.avgKmPerGallon || 0;
-  if (avgKmPerGallon === 0 && fuelLogs.length >= 2) {
-    const sorted = [...fuelLogs].sort((a, b) => a.km - b.km);
-    const totalKm = sorted[sorted.length - 1].km - sorted[0].km;
-    const totalGallons = sorted.slice(1).reduce((s, l) => s + l.gallons, 0);
-    if (totalGallons > 0 && totalKm > 0) {
-      avgKmPerGallon = Math.round(totalKm / totalGallons);
-    }
-  }
+  // Average km/gallon — same tank-to-tank engine the rest of the app uses, so
+  // this screen cannot drift from the dashboard or the fuel gauge.
+  const avgKmPerGallon = fuelLevelData?.avgKmPerGallon
+  || summarizeEfficiency(fuelLogs, { fallbackAverage: 0 }).average;
 
   // Cost to fill calculation — prefer the manually updated price.
   const costToFillData = (() => {

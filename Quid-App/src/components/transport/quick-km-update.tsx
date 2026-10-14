@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Sheet,
   SheetContent,
@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch } from "@/lib/api";
-import { Loader2, Gauge, TrendingUp } from "lucide-react";
+import { Loader2, Gauge, TrendingUp, AlertTriangle } from "lucide-react";
+import { validateOdometer, type OdometerValidationResult } from "@/lib/odometer-validation";
 
 interface QuickKmUpdateProps {
   open: boolean;
@@ -34,7 +35,25 @@ export function QuickKmUpdate({
   const [newKm, setNewKm] = useState("");
 
   const kmDiff = newKm ? parseFloat(newKm) - currentKm : 0;
-  const isValid = newKm && parseFloat(newKm) > currentKm;
+
+  // This flow only ever moves the odometer forward, so equality is rejected even
+  // though the shared validator allows it (it must permit same-km fills on a
+  // different date). Beyond that, the shared rules apply.
+  const kmCheck = useMemo<OdometerValidationResult | null>(() => {
+    if (newKm.trim() === "") return null;
+    const value = Number(newKm);
+    if (Number.isFinite(value) && value <= currentKm) {
+      return {
+        status: "error",
+        code: "below_current",
+        message: `El nuevo kilometraje debe ser mayor a ${currentKm.toLocaleString("es-CO")} km.`,
+        blocking: true,
+      };
+    }
+    return validateOdometer({ km: newKm, currentKm, mode: "create" });
+  }, [newKm, currentKm]);
+
+  const isValid = newKm.trim() !== "" && !kmCheck?.blocking;
 
   const handleSubmit = async () => {
     if (!isValid) return;
@@ -98,11 +117,28 @@ export function QuickKmUpdate({
             </div>
           )}
 
-          {/* Error message */}
-          {newKm && !isValid && parseFloat(newKm) <= currentKm && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl">
-              <span className="text-sm text-red-600 dark:text-red-400">
-                El nuevo kilometraje debe ser mayor a {currentKm.toLocaleString("es-CO")} km
+          {/* Validation message: blocking error, or a non-blocking warning */}
+          {kmCheck && kmCheck.status !== "ok" && (
+            <div
+              className={`flex items-start gap-2 p-3 rounded-xl ${
+                kmCheck.blocking
+                  ? "bg-red-50 dark:bg-red-900/20"
+                  : "bg-amber-50 dark:bg-amber-900/20"
+              }`}
+            >
+              <AlertTriangle
+                className={`mt-0.5 size-4 shrink-0 ${
+                  kmCheck.blocking ? "text-red-500" : "text-amber-500"
+                }`}
+              />
+              <span
+                className={`text-sm ${
+                  kmCheck.blocking
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-amber-700 dark:text-amber-300"
+                }`}
+              >
+                {kmCheck.message}
               </span>
             </div>
           )}

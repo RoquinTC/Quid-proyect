@@ -10,11 +10,57 @@ import {
   getTransportSubCategory,
 } from "@/lib/transport-finance";
 import { MAINTENANCE_TYPES } from "@/lib/types/transport";
-import { resolveMaintenanceRule } from "@/lib/transport-maintenance-rules";
+import {
+  normalizeMaintenanceTypeKey,
+  resolveMaintenanceDisplayName,
+  resolveMaintenanceRule,
+} from "@/lib/transport-maintenance-rules";
 
-function maintenanceReminderTitle(type: string) {
-  const config = MAINTENANCE_TYPES.find((item) => item.value === type);
-  return config?.label || "Mantenimiento";
+/**
+ * Store a rule row for every custom service name used in this record.
+ *
+ * The edit path titles reminders from the rules table, because it never sees the
+ * item list. Without this row a custom service would be titled "Mantenimiento" on
+ * edit while the record carried its real name — and since reminders are
+ * deactivated by title, that mismatch orphans the reminder instead of replacing
+ * it. Persisting here is what keeps both paths in agreement, and it also makes
+ * the custom service reusable from the intervals dialog.
+ */
+async function persistCustomServiceRules(
+  userId: string,
+  items: Array<{
+    name: string;
+    scheduleReminder?: boolean;
+    reminderIntervalKm?: number | null;
+    reminderIntervalDays?: number | null;
+    reminderWarningKm?: number | null;
+  }>
+) {
+  const builtIn = new Set([
+    ...MAINTENANCE_TYPES.map((type) => type.value),
+    ...MAINTENANCE_TYPES.map((type) => normalizeMaintenanceTypeKey(type.label)),
+  ]);
+
+  for (const item of items) {
+    const typeKey = normalizeMaintenanceTypeKey(item.name);
+    if (!typeKey || builtIn.has(typeKey)) continue;
+
+    await db.maintenanceServiceRule.upsert({
+      where: { userId_typeKey: { userId, typeKey } },
+      create: {
+        userId,
+        typeKey,
+        name: item.name.trim(),
+        intervalKm: item.reminderIntervalKm ?? null,
+        // Rules are stored in months; the form collects days.
+        intervalMonths: item.reminderIntervalDays ? Math.round(item.reminderIntervalDays / 30) : null,
+        warningKm: item.reminderWarningKm ?? 500,
+        isActive: item.scheduleReminder === true,
+      },
+      // Never overwrite what the user configured in the intervals dialog.
+      update: {},
+    });
+  }
 }
 
 async function syncMaintenanceReminder({
@@ -178,6 +224,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const recordKm = km ?? vehicle.currentKm;
     const maintenanceType = type || "general";
 
+    // Store custom service names BEFORE resolving the title: the resolution
+    // below reads the rules table, so the row has to exist first.
+    if (items && items.length > 0) {
+      await persistCustomServiceRules(session.user.id, items);
+    }
+
     // Calculate next due info for the record itself (if we want to store it on the record)
     let finalNextDueKm: number | null = null;
     let finalNextDueDate: Date | null = null;
@@ -185,12 +237,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const userRules = await db.maintenanceServiceRule.findMany({
       where: { userId: session.user.id },
     });
+    // Same resolver the edit path uses, so both title the reminder identically.
+    const displayName = resolveMaintenanceDisplayName(
+      maintenanceType,
+      userRules,
+      (items ?? []).map((item) => item.name)
+    );
     const existingReminder = await db.vehicleReminder.findFirst({
-      where: { userId: session.user.id, vehicleId: id, category: "maintenance", title: maintenanceReminderTitle(maintenanceType), isActive: true },
+      where: { userId: session.user.id, vehicleId: id, category: "maintenance", title: displayName, isActive: true },
     });
 
     const resolvedPrimaryRule = resolveMaintenanceRule(
-      { name: maintenanceReminderTitle(maintenanceType), typeKey: maintenanceType },
+      { name: displayName, typeKey: maintenanceType },
       userRules
     );
     const intervalKm = existingReminder?.repeatIntervalKm || resolvedPrimaryRule.intervalKm || 0;
@@ -253,7 +311,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           reminderWarningKm: item.reminderWarningKm,
         }))
       : [{
-          name: maintenanceReminderTitle(maintenanceType),
+          name: displayName,
           typeKey: maintenanceType,
           scheduleReminder: reminderEnabled ?? true,
           reminderIntervalKm: repeatIntervalKm ?? null,

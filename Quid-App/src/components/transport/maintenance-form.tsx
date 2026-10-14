@@ -31,9 +31,10 @@ import { MAINTENANCE_TYPES } from "@/lib/types/transport";
 import { PaymentMethodSelector } from "@/components/transport/payment-method-selector";
 import {
   Loader2, Plus, X, Wrench, ShoppingCart, ChevronDown, ChevronRight,
-  Search, Check, Calculator, MapPin, Clock, Gauge, Calendar,
+  Search, Check, Calculator, MapPin, Clock, Gauge, Calendar, AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { validateOdometer } from "@/lib/odometer-validation";
 
 // ─── Selected service shape (catalog-based) ───
 
@@ -57,6 +58,11 @@ function createId(): string {
 
 // ─── Component Props ───
 
+/** `/api/vehicles` ships the recent fuel logs alongside the vehicle. */
+type VehicleWithHistory = Vehicle & {
+  fuelLogs?: Array<{ id: string; km: number; date: string }>;
+};
+
 interface MaintenanceFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -79,7 +85,7 @@ export function MaintenanceForm({
 
   // ─── Core form state ───
   const [loading, setLoading] = useState(false);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleWithHistory[]>([]);
   const [vehicleId, setVehicleId] = useState(preselectedVehicleId || "");
   const [cost, setCost] = useState("");
   const [km, setKm] = useState("");
@@ -140,7 +146,7 @@ export function MaintenanceForm({
   const fetchVehiclesAndCustomItems = useCallback(async () => {
     try {
       const [vehiclesData, customItemsData, rulesData] = await Promise.all([
-        apiFetch<Vehicle[]>("/api/vehicles"),
+        apiFetch<VehicleWithHistory[]>("/api/vehicles"),
         apiFetch<string[]>("/api/vehicles/maintenance/custom-items").catch(() => [] as string[]),
         apiFetch<MaintenanceServiceRule[]>("/api/vehicles/maintenance/rules").catch(() => [] as MaintenanceServiceRule[]),
       ]);
@@ -323,6 +329,10 @@ export function MaintenanceForm({
 
   const handleSubmit = async () => {
     if (!vehicleId || !cost) return;
+    if (kmCheck?.blocking) {
+      toast.error(kmCheck.message);
+      return;
+    }
     if (selectedServices.length > 0 && selectedServices.some(s => !s.price || parseFloat(s.price) <= 0)) {
       toast.error("Completa el precio de todos los servicios seleccionados");
       return;
@@ -433,6 +443,20 @@ export function MaintenanceForm({
 
   // ─── Selected vehicle info ───
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId);
+
+  // Same odometer guard as the fuel form: a bad reading here breaks the
+  // tank-to-tank cycles and the maintenance forecast.
+  const kmCheck = useMemo(() => {
+    if (km.trim() === "") return null;
+    return validateOdometer({
+      km,
+      date,
+      currentKm: selectedVehicle?.currentKm ?? 0,
+      history: selectedVehicle?.fuelLogs ?? [],
+      editingId: record?.id ?? null,
+      mode: record ? "edit" : "create",
+    });
+  }, [km, date, selectedVehicle, record]);
 
   // ─── Catalog search filter ───
   const [catalogSearch, setCatalogSearch] = useState("");
@@ -678,6 +702,16 @@ export function MaintenanceForm({
                 onChange={(e) => setKm(e.target.value)}
                 className="rounded-xl"
               />
+              {kmCheck && kmCheck.status !== "ok" && (
+                <p
+                  className={`flex items-start gap-1.5 text-[11px] ${
+                    kmCheck.blocking ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                  {kmCheck.message}
+                </p>
+              )}
             </div>
           </div>
 
@@ -883,7 +917,7 @@ export function MaintenanceForm({
           <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white px-4 pb-1 pt-2 dark:border-gray-700 dark:bg-gray-900 sm:-mx-6 sm:px-6">
             <Button
               onClick={handleSubmit}
-              disabled={loading || !vehicleId || !cost || (selectedServices.length > 0 && selectedServices.some(s => !s.price || parseFloat(s.price) <= 0))}
+              disabled={loading || !vehicleId || !cost || Boolean(kmCheck?.blocking) || (selectedServices.length > 0 && selectedServices.some(s => !s.price || parseFloat(s.price) <= 0))}
               className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
             >
               {loading ? (

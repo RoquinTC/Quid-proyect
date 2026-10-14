@@ -103,3 +103,30 @@ export function resolveMaintenanceRule(
     source: "none",
   };
 }
+
+/**
+ * The display name a maintenance reminder must carry for a given service type.
+ *
+ * This is a single shared resolver on purpose. Reminders are deactivated by
+ * matching their TITLE, so if the create path and the edit path ever disagree on
+ * the name of a service, editing a record leaves the old reminder active and
+ * creates a second one — an orphan the user cannot turn off.
+ *
+ * Resolution order: the built-in catalog label, then the user's own rule (which
+ * is where a custom service name is stored), then any name supplied by the
+ * caller, and only then a generic fallback.
+ */
+export function resolveMaintenanceDisplayName(
+  type: string,
+  userRules: Array<{ typeKey: string; name: string }> = [],
+  fallbackNames: Array<string | null | undefined> = []
+): string {
+  const config = MAINTENANCE_TYPES.find((item) => item.value === type);
+  if (config) return config.label;
+
+  const userRule = userRules.find((rule) => rule.typeKey === type);
+  if (userRule?.name?.trim()) return userRule.name.trim();
+
+  const fromCaller = fallbackNames.map((name) => name?.trim()).find((name) => Boolean(name));
+  return fromCaller || "Mantenimiento";
+}
