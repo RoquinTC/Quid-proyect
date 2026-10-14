@@ -147,6 +147,8 @@ type VehicleWithDetails = Vehicle & {
   daysSinceLastLog?: number | null;
   fuelConfidence?: "high" | "medium" | "low";
   fuelConfidenceReasons?: string[];
+  efficiencyScope?: "window" | "all-time" | "estimate";
+  efficiencyWindowDays?: number | null;
 };
 
 type TimelineEntry = {

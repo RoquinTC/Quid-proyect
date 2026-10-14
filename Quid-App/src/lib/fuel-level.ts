@@ -5,6 +5,15 @@
 import { getVehicleDefaultEfficiency } from "@/lib/constants/vehicle-catalog";
 import { summarizeEfficiency } from "@/lib/fuel-efficiency";
 
+/**
+ * How far back the headline efficiency looks.
+ *
+ * A year is long enough to cover seasonal riding and short enough that habits
+ * and a vehicle's condition actually show up, and it lets incomplete years age
+ * out of the number instead of weighting it forever.
+ */
+export const EFFICIENCY_WINDOW_DAYS = 365;
+
 interface FuelLogInput {
   id: string;
   date: Date;
@@ -41,6 +50,11 @@ export interface FuelLevelResult {
   isLearning: boolean;            // true if using default efficiency (not enough real data yet)
   lastPricePerGallon: number;     // price per gallon from the most recent fuel log
 
+  /** Which slice of history produced `avgKmPerGallon`. */
+  efficiencyScope: "window" | "all-time" | "estimate";
+  /** The window applied, when one was used. */
+  efficiencyWindowDays: number | null;
+
   // ── Explanatory breakdown ──
   // The level is an *estimate* driven by four inputs the user controls: the tank
   // capacity, the "full tank" flag, the odometer, and the efficiency. These
@@ -64,8 +78,7 @@ export interface FuelLevelResult {
   confidenceReasons: string[];
 }
 
-const DEFAULT_FUEL_LEVEL: FuelLevelResult = {
-  fuelLevel: 0,
+const DEFAULT_FUEL_LEVEL: FuelLevelResult = {  fuelLevel: 0,
   currentFuel: 0,
   estimatedRange: 0,
   avgKmPerGallon: 0,
@@ -82,6 +95,8 @@ const DEFAULT_FUEL_LEVEL: FuelLevelResult = {
   isLowFuel: false,
   isLearning: true,
   lastPricePerGallon: 0,
+  efficiencyScope: "estimate",
+  efficiencyWindowDays: null,
   model: "none",
   assumedTankCapacity: 0,
   kmSinceFullTank: 0,
@@ -144,6 +159,11 @@ export function calculateFuelLevel(
     // Keep the previous rough estimate as the learning-state fallback so the
     // autonomy gauge does not regress for vehicles with little history.
     fallbackAverage: roughEstimate || getVehicleDefaultEfficiency(vehicle.type),
+    // Only recent cycles drive the headline. Years whose fills were not logged
+    // in full inflate a cumulative average permanently — in production one
+    // vehicle read 213 km/gallon against a real figure nearer 140, and diluting
+    // that would have taken roughly 44.000 km of flawless logging.
+    windowDays: EFFICIENCY_WINDOW_DAYS,
   });
   const avgKmPerGallon = efficiency.average;
   const isLearning = efficiency.isLearning;
@@ -350,6 +370,8 @@ export function calculateFuelLevel(
     isLowFuel,
     isLearning,
     lastPricePerGallon: Math.round(lastPricePerGallon * 100) / 100,
+    efficiencyScope: efficiency.scope,
+    efficiencyWindowDays: efficiency.windowDays ?? null,
     model,
     assumedTankCapacity: tankCapacity,
     kmSinceFullTank: Math.round(kmSinceFullTank * 10) / 10,

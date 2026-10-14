@@ -129,6 +129,8 @@ export async function GET() {
         daysSinceLastLog: fuelLevelData.daysSinceLastLog,
         fuelConfidence: fuelLevelData.confidence,
         fuelConfidenceReasons: fuelLevelData.confidenceReasons,
+        efficiencyScope: fuelLevelData.efficiencyScope,
+        efficiencyWindowDays: fuelLevelData.efficiencyWindowDays,
       };
     });
 

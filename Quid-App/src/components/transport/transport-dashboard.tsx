@@ -74,6 +74,9 @@ export interface DashboardVehicle {
   daysSinceLastLog?: number | null;
   fuelConfidence?: "high" | "medium" | "low";
   fuelConfidenceReasons?: string[];
+  /** Which slice of history produced `avgKmPerGallon`. */
+  efficiencyScope?: "window" | "all-time" | "estimate";
+  efficiencyWindowDays?: number | null;
 }
 
 export interface TransportDashboardProps {
@@ -602,9 +605,17 @@ export function TransportDashboard({
           }`
         : null;
 
-  const efficiencySublabel = efficiency?.fromCycles
-    ? `${efficiency.cycles.length} ciclo${efficiency.cycles.length === 1 ? "" : "s"} reciente${efficiency.cycles.length === 1 ? "" : "s"}`
-    : "Promedio general";
+  // Say where the headline number came from. Without this the driver cannot tell
+  // a figure measured over the last year from one averaged over a decade of
+  // uneven records.
+  const efficiencySublabel =
+    vehicle.efficiencyScope === "window"
+      ? `Últimos ${Math.round((vehicle.efficiencyWindowDays ?? 365) / 30)} meses`
+      : vehicle.efficiencyScope === "all-time"
+        ? "Todo el historial"
+        : efficiency?.fromCycles
+          ? `${efficiency.cycles.length} ciclo${efficiency.cycles.length === 1 ? "" : "s"} reciente${efficiency.cycles.length === 1 ? "" : "s"}`
+          : "Promedio general";
 
   const efficiencyFooter: Array<{ label: string; value: string; tone?: "good" | "bad" }> = efficiency?.fromCycles
     ? [

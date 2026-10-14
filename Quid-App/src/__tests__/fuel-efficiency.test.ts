@@ -295,6 +295,87 @@ describe("detectSuspiciousFullTank", () => {
   });
 });
 
+describe("summarizeEfficiency — the 12-month window", () => {
+  const NOW = new Date(2026, 9, 14);
+
+  /**
+   * The production shape, reproduced.
+   *
+   * The old years are incomplete: 862 km recorded between two fills on a tank
+   * that cannot cover it, because fills went unlogged. The recent months are
+   * complete, at a realistic ~250 km per fill. A cumulative average drags the
+   * old error forever; the window reflects how the vehicle runs now.
+   */
+  const old = [
+    log(1_000, 3.5, true, { date: new Date(2018, 0, 1) }),
+    log(1_862, 2.35, true, { date: new Date(2018, 5, 1) }),
+    log(2_724, 2.35, true, { date: new Date(2018, 10, 1) }),
+  ];
+  const recent = [
+    log(2_974, 2.3, true, { date: new Date(2025, 11, 1) }),
+    log(3_224, 2.3, true, { date: new Date(2026, 1, 1) }),
+    log(3_474, 2.3, true, { date: new Date(2026, 5, 1) }),
+    log(3_724, 2.3, true, { date: new Date(2026, 9, 1) }),
+  ];
+  const history = [...old, ...recent];
+
+  it("uses only the cycles inside the window", () => {
+    const summary = summarizeEfficiency(history, { windowDays: 365, now: NOW });
+    expect(summary.scope).toBe("window");
+    expect(summary.windowDays).toBe(365);
+    expect(summary.cycles).toHaveLength(4);
+    expect(summary.average).toBeCloseTo(1_000 / 9.2, 1); // 108,7
+  });
+
+  it("shows how far the old records inflate the all-time average", () => {
+    const allTime = summarizeEfficiency(history, { now: NOW });
+    expect(allTime.scope).toBe("all-time");
+    expect(allTime.totalCycles).toBe(6);
+    expect(allTime.average).toBeCloseTo(2_724 / 13.9, 1); // 196
+    // The whole point: the window is far below the cumulative number.
+    expect(summarizeEfficiency(history, { windowDays: 365, now: NOW }).average)
+      .toBeLessThan(allTime.average * 0.6);
+  });
+
+  it("keeps the full history when the window has too little data", () => {
+    // Only one cycle closed in the last year: not enough to trust over years of
+    // records, so the full history wins and `scope` says so.
+    const thin = [...old, recent[0]];
+    const summary = summarizeEfficiency(thin, { windowDays: 365, now: NOW });
+    expect(summary.scope).toBe("all-time");
+    expect(summary.cycles).toHaveLength(3);
+  });
+
+  it("honours a custom minimum", () => {
+    const thin = [...old, recent[0]];
+    const summary = summarizeEfficiency(thin, {
+      windowDays: 365,
+      now: NOW,
+      minCyclesInWindow: 1,
+    });
+    expect(summary.scope).toBe("window");
+    expect(summary.cycles).toHaveLength(1);
+  });
+
+  it("behaves exactly as before when no window is asked for", () => {
+    const summary = summarizeEfficiency(history, { now: NOW });
+    expect(summary.scope).toBe("all-time");
+    expect(summary.windowDays).toBeNull();
+    expect(summary.average).toBeCloseTo(196, 1);
+  });
+
+  it("still reports learning when there are no cycles at all", () => {
+    const summary = summarizeEfficiency([log(0, 10, true, { date: NOW })], {
+      windowDays: 365,
+      now: NOW,
+      fallbackAverage: 42,
+    });
+    expect(summary.scope).toBe("estimate");
+    expect(summary.isLearning).toBe(true);
+    expect(summary.average).toBe(42);
+  });
+});
+
 describe("describeEfficiencyQuality", () => {
   it("tells the user what to do when there is not enough data", () => {
     const summary = summarizeEfficiency([log(0, 10, true)]);

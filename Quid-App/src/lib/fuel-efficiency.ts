@@ -84,13 +84,27 @@ export interface EfficiencySummary {
   fromCycles: boolean;
   /** Logs dropped because a full tank had not been seen yet. */
   discardedBeforeFirstFullTank: number;
+  /** Which slice of history produced the headline number. */
+  scope: EfficiencyScope;
+  /** The window applied, when one was requested. */
+  windowDays: number | null;
+  /** Cycles found in the whole history, before any window. */
+  totalCycles: number;
 }
+
+export type EfficiencyScope = "window" | "all-time" | "estimate";
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 function positive(value: number | null | undefined): number {
   const n = Number(value ?? 0);
   return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function toDate(value: string | Date | null | undefined): Date | null {
+  if (value == null) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 /** Cost of a fill: the recorded amount, or gallons × price as a fallback. */
@@ -191,17 +205,63 @@ export function buildEfficiencyCycles(logs: EfficiencyLogLike[] | null | undefin
 /**
  * Summarize a vehicle's efficiency from its fill history.
  *
- * When no cycle can be closed yet, the caller-supplied `fallbackAverage` is kept
- * (typically the conservative per-vehicle-type default) and `isLearning` stays
- * true, so the UI never presents a guess as a measurement.
+ * WHY A WINDOW EXISTS
+ *
+ * The average is a quotient of sums over every closed cycle, so it is cumulative:
+ * a bad year keeps pulling on the number forever. That is not theoretical. In
+ * production one vehicle had years whose records were incomplete — 862 km
+ * recorded between two fills on a 3.65-gallon tank, which no motorcycle can do —
+ * and those missing fills inflated the all-time average to 213 km/gallon against
+ * a real figure nearer 140. Diluting that away would have taken about 44,000 km
+ * of flawless logging.
+ *
+ * So the headline can be limited to recent cycles, which reflects how the vehicle
+ * is driven now and heals itself as soon as new fills are complete. The window is
+ * never silent about a shortage of data: if it holds fewer than
+ * `minCyclesInWindow` cycles the full history is used instead, and `scope` says
+ * which one won.
+ *
+ * When no cycle can be closed at all, the caller-supplied `fallbackAverage` is
+ * kept (typically the conservative per-vehicle-type default) and `isLearning`
+ * stays true, so the UI never presents a guess as a measurement.
  */
 export function summarizeEfficiency(
   logs: EfficiencyLogLike[] | null | undefined,
-  options: { fallbackAverage?: number } = {}
+  options: {
+    fallbackAverage?: number;
+    /** Count only cycles closed within this many days. */
+    windowDays?: number;
+    /** Reference instant for the window. Defaults to now. */
+    now?: Date;
+    /** Cycles a window needs before it is trusted over the full history. */
+    minCyclesInWindow?: number;
+  } = {}
 ): EfficiencySummary {
-  const { cycles, discardedBeforeFirstFullTank } = buildEfficiencyCycles(logs);
+  const { cycles: allCycles, discardedBeforeFirstFullTank } = buildEfficiencyCycles(logs);
   const usable = usableEfficiencyLogs(logs);
   const fullTanks = usable.filter((log) => log.isFullTank).length;
+
+  const windowDays = options.windowDays != null && options.windowDays > 0 ? options.windowDays : null;
+  const minCycles = options.minCyclesInWindow ?? 2;
+  const now = options.now ?? new Date();
+
+  let cycles = allCycles;
+  let scope: EfficiencyScope = allCycles.length > 0 ? "all-time" : "estimate";
+
+  if (windowDays != null && allCycles.length > 0) {
+    const cutoff = now.getTime() - windowDays * 24 * 60 * 60 * 1000;
+    const inWindow = allCycles.filter((cycle) => {
+      const end = toDate(cycle.endDate);
+      return end != null && end.getTime() >= cutoff;
+    });
+
+    if (inWindow.length >= minCycles) {
+      cycles = inWindow;
+      scope = "window";
+    }
+    // Too little recent data: fall back to the full history rather than telling
+    // a vehicle that still has years of records that nothing is known.
+  }
 
   const distanceTotal = cycles.reduce((sum, cycle) => sum + cycle.distance, 0);
   const volumeTotal = cycles.reduce((sum, cycle) => sum + cycle.volume, 0);
@@ -223,6 +283,9 @@ export function summarizeEfficiency(
     isLearning: !fromCycles,
     fromCycles,
     discardedBeforeFirstFullTank,
+    scope,
+    windowDays,
+    totalCycles: allCycles.length,
   };
 }
 
