@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { validateOdometer } from "@/lib/odometer-validation";
 import { getVehicleDefaultEfficiency } from "@/lib/constants/vehicle-catalog";
 import { detectSuspiciousFullTank } from "@/lib/fuel-efficiency";
+import { validateFuelEntry } from "@/lib/fuel-entry-validation";
 
 /** `/api/vehicles` ships the recent fuel logs alongside the vehicle. */
 type VehicleWithHistory = Vehicle & {
@@ -220,6 +221,26 @@ export function FuelLogForm({
     [isFullTank, gallons, km, selectedVehicle]
   );
 
+  /**
+   * Guard the money-to-volume conversion.
+   *
+   * `gallons = amount ÷ pricePerGallon`, so a price typed in thousands creates
+   * thousands of gallons. Real rows in production recorded 3.040 and 3.321
+   * gallons in a 3.5-gallon tank that way, and they wrecked the vehicle's
+   * efficiency for months. More fuel than the tank holds is impossible, so this
+   * blocks.
+   */
+  const fuelEntryIssue = useMemo(
+    () =>
+      validateFuelEntry({
+        amount,
+        pricePerGallon,
+        gallons,
+        tankCapacity: vehicleTankCapacity,
+      }),
+    [amount, pricePerGallon, gallons, vehicleTankCapacity]
+  );
+
   // ─── Fuel level projection ──────────────────────────────────────
   const fuelProjection = useMemo(() => {
     if (isEditing) return null;
@@ -264,6 +285,10 @@ export function FuelLogForm({
     if (!vehicleId || !amount || !pricePerGallon) return;
     if (kmCheck?.blocking) {
       toast.error(kmCheck.message);
+      return;
+    }
+    if (fuelEntryIssue?.blocking) {
+      toast.error(fuelEntryIssue.message);
       return;
     }
     setLoading(true);
@@ -482,11 +507,55 @@ export function FuelLogForm({
 
           {/* Gallons calculation */}
           {gallons > 0 && (
-            <div className="flex items-center gap-2 p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-xl">
-              <Calculator className="size-4 text-cyan-600" />
-              <span className="text-sm text-cyan-700 dark:text-cyan-300">
+            <div
+              className={`flex items-center gap-2 p-3 rounded-xl ${
+                fuelEntryIssue?.blocking
+                  ? "bg-red-50 dark:bg-red-900/20"
+                  : "bg-cyan-50 dark:bg-cyan-900/20"
+              }`}
+            >
+              <Calculator
+                className={`size-4 ${fuelEntryIssue?.blocking ? "text-red-600" : "text-cyan-600"}`}
+              />
+              <span
+                className={`text-sm ${
+                  fuelEntryIssue?.blocking
+                    ? "text-red-700 dark:text-red-300"
+                    : "text-cyan-700 dark:text-cyan-300"
+                }`}
+              >
                 Galones calculados: <strong>{gallons.toFixed(2)} gal</strong>
               </span>
+            </div>
+          )}
+
+          {fuelEntryIssue && (
+            <div
+              className={`flex items-start gap-2 rounded-xl p-3 ${
+                fuelEntryIssue.blocking
+                  ? "bg-red-50 dark:bg-red-950/30"
+                  : "bg-amber-50 dark:bg-amber-950/30"
+              }`}
+            >
+              <AlertTriangle
+                className={`mt-0.5 size-4 shrink-0 ${
+                  fuelEntryIssue.blocking ? "text-red-500" : "text-amber-500"
+                }`}
+              />
+              <div
+                className={`text-[11px] leading-snug ${
+                  fuelEntryIssue.blocking
+                    ? "text-red-700 dark:text-red-300"
+                    : "text-amber-700 dark:text-amber-300"
+                }`}
+              >
+                <p className="font-semibold">
+                  {fuelEntryIssue.blocking
+                    ? "No se puede guardar: esa carga es imposible"
+                    : "Revisá el precio por galón"}
+                </p>
+                <p className="mt-0.5">{fuelEntryIssue.message}</p>
+              </div>
             </div>
           )}
 
@@ -643,7 +712,7 @@ export function FuelLogForm({
           <div className="sticky bottom-0 -mx-4 border-t border-gray-200 bg-white px-4 pb-1 pt-2 dark:border-gray-700 dark:bg-gray-900 sm:-mx-6 sm:px-6">
             <Button
               onClick={handleSubmit}
-              disabled={loading || !vehicleId || !amount || !pricePerGallon || Boolean(kmCheck?.blocking)}
+              disabled={loading || !vehicleId || !amount || !pricePerGallon || Boolean(kmCheck?.blocking) || Boolean(fuelEntryIssue?.blocking)}
               className="w-full rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
             >
               {loading ? (
