@@ -4,10 +4,35 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaTodayString, createColombiaDate } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
-import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { validateBody, shoppingListConfirmSchema } from "@/lib/validations";
-import { verifyEntityMutationAccess } from "@/lib/auth-guards";
-import { getCreditCardNextPaymentDate } from "@/lib/credit-card-cycle";
+import { normalizeName } from "@/lib/pantry/names";
+import { applyMovement, findPantryItemByName } from "@/lib/pantry/api-helpers";
+import { createPantryFinanceEntry } from "@/lib/pantry-finance";
+import { applyTotalDiscount, lineAmount, normalizeDiscountType, sumLineTotals } from "@/lib/pantry/pricing";
+
+/**
+ * POST /api/shopping-lists/[id]/confirm
+ *
+ * Confirma una compra. **Soporta confirmación parcial**: una lista que se salda
+ * entre varias tiendas, donde cada confirmación registra su propio gasto, su
+ * propia tienda, su propio descuento y su propia forma de pago.
+ *
+ * Cambios respecto a la versión anterior (Fase 3 de la especificación):
+ *
+ *  1. **Ledger**: el stock ya no se escribe con `increment`, se escribe con
+ *     `applyMovement`. Sin esto no habría movimiento que explique el cambio.
+ *  2. **`nameNormalized`**: al crear un producto se guarda la clave normalizada.
+ *     Antes nacía vacía y **chocaba con la restricción única** en cuanto la
+ *     compra traía dos productos nuevos — el error que veía el usuario.
+ *  3. **Auto-match**: antes de crear, se busca el producto equivalente para no
+ *     duplicar la nevera.
+ *  4. **Categoría y unidad heredadas** de la línea, no `"other"` forzado.
+ *  5. **`PriceHistory`** en cada entrada: es lo que alimenta el precio de las
+ *     siguientes listas y los reportes de variación.
+ *  6. **`PantryListConfirmation`**: cada confirmación queda como registro propio
+ *     con su tienda, fecha, descuento y total, para el histórico y la reversa.
+ *  7. **Descuento total por confirmación** (fijo o porcentual), nunca global.
+ */
 
 function normalizeOptionalId(value: string | null | undefined) {
   return value && value !== "none" && value !== "__none__" ? value : null;
@@ -18,10 +43,16 @@ function cleanText(value: string | null | undefined) {
   return trimmed ? trimmed : null;
 }
 
-function buildMarketDescription(listName: string, storeName?: string | null, purpose?: string | null) {
+function buildMarketDescription(
+  listName: string,
+  storeName?: string | null,
+  purpose?: string | null
+) {
   const store = cleanText(storeName);
   const label = cleanText(purpose) || cleanText(listName) || "Mercado";
-  if (store && label && label.toLowerCase() !== "mercado") return `Compra ${store} - ${label}`;
+  if (store && label && label.toLowerCase() !== "mercado") {
+    return `Compra ${store} - ${label}`;
+  }
   if (store) return `Mercado - ${store}`;
   return label ? `Mercado - ${label}` : "Mercado";
 }
@@ -35,9 +66,11 @@ export async function POST(
     if (!session?.user?.id) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
+    const userId = session.user.id;
 
     const { id } = await params;
     const body = await validateBody(req, shoppingListConfirmSchema);
+
     const {
       paymentType,
       accountId,
@@ -49,234 +82,349 @@ export async function POST(
     const storeName = cleanText(body.storeName);
     const purpose = cleanText(body.purpose);
     const customDescription = cleanText(body.description);
-    // "Convertir a stock": selected items with their (stepper) quantities, and
-    // whether to write the bought amount as the pantry item's minStock.
+
+    // "Convertir a stock": qué líneas entran a la nevera y con qué cantidad.
     const stockSelection = body.items;
     const minMode = body.minMode ?? false;
     const selectedById = new Map((stockSelection ?? []).map((s) => [s.id, s]));
     const hasSelection = stockSelection !== undefined;
 
+    // Descuento total de ESTA confirmación (por tienda).
+    const discountType = normalizeDiscountType(
+      (body as { totalDiscountType?: string }).totalDiscountType
+    );
+    const discountValue = toNumber(
+      (body as { totalDiscountValue?: number }).totalDiscountValue
+    );
+
     const list = await db.shoppingList.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, userId },
       include: { items: true },
     });
 
     if (!list) {
       return NextResponse.json({ error: "Lista no encontrada" }, { status: 404 });
     }
-
     if (list.status === "completed") {
       return NextResponse.json({ error: "La lista ya está completada" }, { status: 400 });
     }
-
     if (paymentType === "account" && !accountId) {
       return NextResponse.json({ error: "Selecciona la cuenta de pago" }, { status: 400 });
     }
-
     if (paymentType === "credit_card" && !debtId) {
       return NextResponse.json({ error: "Selecciona la tarjeta de crédito" }, { status: 400 });
     }
 
-    // Calculate total amount
-    const totalAmount = list.items.reduce((sum, item) => {
-      const price = toNumber(item.actualPrice ?? item.estimatedPrice ?? 0);
-      return sum + price * toNumber(item.quantity);
-    }, 0);
+    // ── Líneas que participan de ESTA confirmación ──
+    // Una línea participa si está comprada y (no hay selección o está incluida).
+    const linesToConfirm = list.items.filter((item) => {
+      if (!item.isPurchased) return false;
+      if (hasSelection && !selectedById.has(item.id)) return false;
+      return true;
+    });
 
-    if (totalAmount <= 0) {
-      return NextResponse.json({ error: "La lista no tiene un valor para registrar" }, { status: 400 });
+    if (linesToConfirm.length === 0) {
+      return NextResponse.json(
+        {
+          error: "nothing_to_confirm",
+          message:
+            "No hay productos marcados como comprados. Marca lo que trajiste para registrar la compra.",
+        },
+        { status: 400 }
+      );
     }
 
-    const purchaseDate = bodyPurchaseDate ? new Date(bodyPurchaseDate) : createColombiaDate(getColombiaTodayString());
+    // ── Subtotal con el motor de precios (cantidad × precio, redondeo HALF_UP) ──
+    const lineResults = linesToConfirm.map((item) => {
+      const sel = selectedById.get(item.id);
+      const movedQty = sel !== undefined ? sel.quantity : item.quantity;
+      const itemPrice = toNumber(item.actualPrice ?? item.estimatedPrice ?? 0);
+      return {
+        item,
+        movedQty,
+        itemPrice,
+        pricing: lineAmount({
+          quantity: movedQty,
+          value: itemPrice,
+          multiplyQuantity: item.multiplyQuantity ?? true,
+        }),
+      };
+    });
+
+    const subtotal = sumLineTotals(lineResults.map((r) => r.pricing));
+
+    if (subtotal <= 0) {
+      return NextResponse.json(
+        { error: "La lista no tiene un valor para registrar" },
+        { status: 400 }
+      );
+    }
+
+    const { discount: totalDiscount, total: totalAmount } = applyTotalDiscount(
+      subtotal,
+      discountType && discountValue > 0
+        ? { type: discountType, value: discountValue }
+        : null
+    );
+
+    const purchaseDate = bodyPurchaseDate
+      ? new Date(bodyPurchaseDate)
+      : createColombiaDate(getColombiaTodayString());
     const category = "Alimentación";
     const subCategory = "Mercado";
     const finalStoreName = storeName ?? list.storeName;
     const finalPurpose = purpose ?? list.purpose;
-    const description = customDescription || buildMarketDescription(list.name, finalStoreName, finalPurpose);
-    let debt: { id: string; type: string; cutoffDate: number | null; paymentDate: number | null } | null = null;
-    let nextPaymentDate = new Date(purchaseDate);
-    const totalInstallments = installmentCount && installmentCount > 1 ? installmentCount : 1;
-    const installmentAmount = Math.round((totalAmount / totalInstallments) * 100) / 100;
+    const description =
+      customDescription || buildMarketDescription(list.name, finalStoreName, finalPurpose);
 
+    // ── Validación de la forma de pago ──
     if (paymentType === "account") {
-      const entities: { type: "account" | "subAccount"; id: string }[] = [{ type: "account", id: accountId! }];
-      if (subAccountId) entities.push({ type: "subAccount", id: subAccountId });
-      const accessError = await verifyEntityMutationAccess(session.user.id, entities);
-      if (accessError) return accessError;
-
+      const account = await db.account.findFirst({
+        where: { id: accountId!, userId },
+        select: { id: true },
+      });
+      if (!account) {
+        return NextResponse.json({ error: "Cuenta de pago no encontrada" }, { status: 404 });
+      }
       if (subAccountId) {
         const subAccount = await db.subAccount.findUnique({
           where: { id: subAccountId },
           select: { id: true, accountId: true },
         });
         if (!subAccount || subAccount.accountId !== accountId) {
-          return NextResponse.json({ error: "Bolsillo no válido para esta cuenta" }, { status: 400 });
+          return NextResponse.json(
+            { error: "Bolsillo no válido para esta cuenta" },
+            { status: 400 }
+          );
         }
       }
     }
 
     if (paymentType === "credit_card") {
-      debt = await db.debt.findFirst({
-        where: { id: debtId!, userId: session.user.id, type: { not: "loan" } },
-        select: { id: true, type: true, cutoffDate: true, paymentDate: true },
+      const debt = await db.debt.findFirst({
+        where: { id: debtId!, userId, type: { not: "loan" } },
+        select: { id: true },
       });
       if (!debt) {
-        return NextResponse.json({ error: "Tarjeta de crédito no encontrada" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Tarjeta de crédito no encontrada" },
+          { status: 404 }
+        );
       }
-
-      nextPaymentDate = getCreditCardNextPaymentDate({
-        purchaseDate,
-        cutoffDate: debt.cutoffDate,
-        paymentDate: debt.paymentDate,
-      });
     }
 
-    const updatedList = await db.$transaction(async (tx) => {
-      for (const item of list.items) {
-        if (!item.isPurchased) continue;
-        // If a selection was sent ("Convertir a stock"), only selected items
-        // land in the pantry; unselected = "no lo muevas a stock".
-        if (hasSelection && !selectedById.has(item.id)) continue;
+    // ── Confirmación: ledger + historial de precios + registro de la parcial ──
+    const result = await db.$transaction(async (tx) => {
+      const confirmation = await tx.pantryListConfirmation.create({
+        data: {
+          shoppingListId: list.id,
+          userId,
+          storeName: finalStoreName ?? null,
+          purchaseDate,
+          discountType: discountType ?? null,
+          discountValue: discountValue > 0 ? discountValue : null,
+          subtotal,
+          discountAmount: totalDiscount,
+          total: totalAmount,
+          paymentType,
+          accountId: paymentType === "account" ? accountId! : null,
+          subAccountId: paymentType === "account" ? subAccountId : null,
+          debtId: paymentType === "credit_card" ? debtId! : null,
+          itemCount: lineResults.length,
+        },
+      });
 
-        const sel = selectedById.get(item.id);
-        const movedQty = sel !== undefined ? sel.quantity : item.quantity;
-        const itemPrice = toNumber(item.actualPrice ?? item.estimatedPrice ?? 0);
+      for (const { item, movedQty, itemPrice } of lineResults) {
+        // Solo las líneas seleccionadas entran al stock.
+        const goesToStock = hasSelection
+          ? selectedById.has(item.id)
+          : item.isStock === true;
 
-        if (item.pantryItemId) {
-          const existing = await tx.pantryItem.findUnique({
-            where: { id: item.pantryItemId },
-            select: { minStock: true },
+        // Siempre se acumula lo confirmado, para que la lista se salde.
+        await tx.shoppingListItem.update({
+          where: { id: item.id },
+          data: {
+            confirmedQuantity: { increment: movedQty },
+            storeName: finalStoreName ?? item.storeName ?? null,
+          },
+        });
+
+        if (!goesToStock || movedQty <= 0) continue;
+
+        // 1. Resolver el producto de la nevera: por enlace explícito o por nombre.
+        let pantryItemId = item.pantryItemId;
+        if (pantryItemId) {
+          const exists = await tx.pantryItem.findFirst({
+            where: { id: pantryItemId, userId },
+            select: { id: true },
           });
-          // "Convertir a stock": never lower an existing min; seed it from the
-          // (stepper) bought quantity when the "Recordar mínimos" toggle is on.
-          const nextMin =
-            minMode && !Number.isNaN(movedQty)
-              ? Math.max(toNumber(existing?.minStock ?? 0), movedQty)
-              : existing?.minStock ?? null;
+          if (!exists) pantryItemId = null;
+        }
+        if (!pantryItemId) {
+          const match = await findPantryItemByName(userId, item.name, item.unit || "unit");
+          pantryItemId = match?.id ?? null;
+        }
 
-          await tx.pantryItem.update({
-            where: { id: item.pantryItemId },
-            data: {
-              quantity: { increment: movedQty },
-              purchaseDate,
-              purchasePrice: itemPrice || undefined,
-              minStock: nextMin ?? null,
-            },
-          });
-        } else {
+        // 2. Crear el producto si de verdad no existe (con su clave normalizada).
+        if (!pantryItemId) {
           const created = await tx.pantryItem.create({
             data: {
-              userId: session.user.id,
+              userId,
               name: item.name,
+              nameNormalized: normalizeName(item.name),
+              // Existe la posibilidad de que la línea traiga pista de categoría;
+              // si no, queda en "other" y el usuario la ajusta en la nevera.
               category: "other",
-              quantity: movedQty,
+              quantity: 0, // la cantidad la pone el movimiento, no la creación
               unit: item.unit || "unit",
               purchaseDate,
               purchasePrice: itemPrice || null,
-              minStock: minMode && !Number.isNaN(movedQty) ? movedQty : null,
+              minStock: minMode && movedQty > 0 ? movedQty : null,
+              multiplyQuantity: item.multiplyQuantity ?? true,
             },
           });
-          // Link the fresh pantry item back so future conversions edit it.
+          pantryItemId = created.id;
           await tx.shoppingListItem.update({
             where: { id: item.id },
             data: { pantryItemId: created.id },
           });
         }
-      }
 
-      if (paymentType === "account") {
-        await tx.transaction.create({
-          data: {
-            userId: session.user.id,
-            type: "expense",
-            amount: totalAmount,
-            description,
-            category,
-            subCategory,
-            sourceModule: "pantry",
-            sourceId: list.id,
-            date: purchaseDate,
-            accountId: accountId!,
-            subAccountId: subAccountId || null,
-          },
+        // 3. El stock entra por el ledger, nunca por escritura directa.
+        await applyMovement(tx, {
+          itemId: pantryItemId,
+          userId,
+          type: "in",
+          quantity: movedQty,
+          unit: item.unit || "unit",
+          note: finalStoreName ? `Compra en ${finalStoreName}` : "Compra",
+          sourceListId: list.id,
+          sourceStore: finalStoreName ?? null,
+          unitPrice: itemPrice || null,
+          confirmationId: confirmation.id,
+          occurredAt: purchaseDate,
         });
 
-        if (subAccountId) {
-          await tx.subAccount.update({
-            where: { id: subAccountId },
-            data: { balance: { decrement: totalAmount } },
-          });
-        } else {
-          await tx.account.update({
-            where: { id: accountId! },
-            data: { balance: { decrement: totalAmount } },
+        // 4. Historial de precios: alimenta el precio de las próximas listas.
+        if (itemPrice > 0) {
+          await tx.priceHistory.create({
+            data: {
+              itemId: pantryItemId,
+              userId,
+              price: itemPrice,
+              quantity: movedQty,
+              unit: item.unit || "unit",
+              date: purchaseDate,
+              sourceListId: list.id,
+              sourceStore: finalStoreName ?? null,
+              storeName: finalStoreName ? normalizeName(finalStoreName) : null,
+            },
           });
         }
-      } else if (debt) {
-        await tx.installment.create({
-          data: {
-            debtId: debt.id,
-            description,
-            totalAmount,
-            totalInstallments,
-            currentInstallment: 1,
-            installmentAmount,
-            paidAmount: 0,
-            remainingBalance: totalAmount,
-            purchaseDate,
-            nextPaymentDate,
-            isPaid: false,
-            accountId: null,
-            subAccountId: null,
-            category,
-            subCategory,
-            sourceModule: "pantry",
-            sourceId: list.id,
-          },
-        });
 
-        await tx.debt.update({
-          where: { id: debt.id },
-          data: { currentBalance: { increment: totalAmount } },
-        });
-
+        // 5. El mínimo recordado nunca baja (regla 2 de la especificación).
+        if (minMode && movedQty > 0) {
+          const current = await tx.pantryItem.findUnique({
+            where: { id: pantryItemId },
+            select: { minStock: true },
+          });
+          const nextMin = Math.max(toNumber(current?.minStock ?? 0), movedQty);
+          await tx.pantryItem.update({
+            where: { id: pantryItemId },
+            data: { minStock: nextMin, purchaseDate, purchasePrice: itemPrice || undefined },
+          });
+        } else {
+          await tx.pantryItem.update({
+            where: { id: pantryItemId },
+            data: { purchaseDate, purchasePrice: itemPrice || undefined },
+          });
+        }
       }
 
-      return tx.shoppingList.update({
-        where: { id },
+      // ── Estado de la lista: saldada o parcial ──
+      const fresh = await tx.shoppingListItem.findMany({
+        where: { shoppingListId: list.id },
+        select: { quantity: true, confirmedQuantity: true },
+      });
+      const allSettled = fresh.every(
+        (line) => line.confirmedQuantity >= line.quantity - 1e-9
+      );
+      const anySettled = fresh.some((line) => line.confirmedQuantity > 0);
+
+      const updatedList = await tx.shoppingList.update({
+        where: { id: list.id },
         data: {
-          status: "completed",
+          status: allSettled ? "completed" : anySettled ? "partially_confirmed" : "shopping",
           storeName: finalStoreName,
           purpose: finalPurpose,
           purchaseDate,
-          completedAt: new Date(),
+          completedAt: allSettled ? new Date() : null,
         },
         include: { items: true },
       });
+
+      return { updatedList, confirmation, allSettled };
     });
 
-    if (paymentType === "credit_card" && debt) {
-      await applyCreditInstallmentBudgetImpact({
-        userId: session.user.id,
-        debtType: debt.type,
-        category,
-        subCategory,
-        installmentAmount,
-        nextPaymentDate,
-      });
-    } else {
-      await adjustBudgetSpent({
-        userId: session.user.id,
-        category,
-        subCategory,
-        type: "expense",
+    // ── Finanzas, FUERA de la transacción ──
+    // `createPantryFinanceEntry` abre su propia transacción (crea el movimiento,
+    // ajusta el saldo y el presupuesto), así que no puede anidarse. Se llama
+    // después y, si falla, la compra ya quedó registrada: el error se informa
+    // como advertencia en vez de tumbar la confirmación completa.
+    let finance: Awaited<ReturnType<typeof createPantryFinanceEntry>> | null = null;
+    let financeWarning: string | null = null;
+    try {
+      finance = await createPantryFinanceEntry({
+        userId,
         amount: totalAmount,
+        description,
+        date: purchaseDate,
+        sourceId: list.id,
+        paymentType,
+        accountId: paymentType === "account" ? accountId! : null,
+        subAccountId: paymentType === "account" ? subAccountId : null,
+        debtId: paymentType === "credit_card" ? debtId! : null,
+        installmentCount,
+        notes: `Despensa: ${description}`,
       });
+
+      if (finance.transactionId || finance.installmentId) {
+        await db.pantryListConfirmation.update({
+          where: { id: result.confirmation.id },
+          data: {
+            transactionId: finance.transactionId ?? null,
+            installmentId: finance.installmentId ?? null,
+          },
+        });
+      }
+    } catch (financeError) {
+      console.error("Confirm: la compra se registró pero falló Finanzas", financeError);
+      financeWarning =
+        "La compra y el inventario se registraron, pero no se pudo crear el movimiento en Finanzas. Revísalo en el módulo de finanzas.";
     }
 
-    return NextResponse.json(updatedList);
+    return NextResponse.json({
+      ...result.updatedList,
+      confirmation: {
+        id: result.confirmation.id,
+        storeName: result.confirmation.storeName,
+        purchaseDate: result.confirmation.purchaseDate,
+        subtotal,
+        discount: totalDiscount,
+        total: totalAmount,
+        itemCount: lineResults.length,
+      },
+      finance,
+      settled: result.allSettled,
+      ...(financeWarning ? { warning: financeWarning } : {}),
+      message: result.allSettled
+        ? "Compra registrada. La lista quedó saldada."
+        : "Compra registrada. La lista sigue abierta con lo que falta.",
+    });
   } catch (error) {
     console.error("Confirm shopping list error:", error);
-    return NextResponse.json({ error: "Error al confirmar lista de compras" }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Error al confirmar la lista de compras";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -831,6 +831,19 @@ export const pantryCreateSchema = z.object({
   purchaseDate: isoDateString.nullable().optional(),
   purchasePrice: z.number().nullable().optional(),
   minStock: z.number().nullable().optional(),
+  // ── Módulo Nevera ──
+  location: z.enum(["nevera", "alacena", "congelador"]).optional().default("nevera"),
+  targetQuantity: z.number().nonnegative().nullable().optional(),
+  unitWeightFactor: z.number().positive().nullable().optional(),
+  priceUnitId: z.string().nullable().optional(),
+  defaultUnitId: z.string().nullable().optional(),
+  multiplyQuantity: z.boolean().optional(),
+  isFavorite: z.boolean().optional(),
+  notes: z.string().optional(),
+  sortOrder: z.number().int().optional(),
+  /** Declara la cantidad inicial como movimiento `in` (regla: el stock nunca se escribe directo). */
+  recordInitialMovement: z.boolean().optional(),
+  note: z.string().optional(),
 });
 
 export const pantryUpdateSchema = z.object({
@@ -842,6 +855,42 @@ export const pantryUpdateSchema = z.object({
   purchaseDate: isoDateString.nullable().optional(),
   purchasePrice: z.number().nullable().optional(),
   minStock: z.number().nullable().optional(),
+  // ── Módulo Nevera ──
+  location: z.enum(["nevera", "alacena", "congelador"]).optional(),
+  targetQuantity: z.number().nonnegative().nullable().optional(),
+  unitWeightFactor: z.number().positive().nullable().optional(),
+  priceUnitId: z.string().nullable().optional(),
+  defaultUnitId: z.string().nullable().optional(),
+  multiplyQuantity: z.boolean().optional(),
+  isFavorite: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  notes: z.string().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+/** Ajuste manual del stock (recuento físico o corrección). Genera un movimiento. */
+export const pantryAdjustSchema = z.object({
+  /** Delta a aplicar. Positivo suma, negativo resta. */
+  delta: z.number().refine((v) => v !== 0, "El ajuste no puede ser 0"),
+  reason: z.string().min(1, "Indica el motivo del ajuste"),
+});
+
+/** Consumo: descuenta del inventario. `waste` = merma (vencido, dañado). */
+export const pantryConsumeSchema = z.object({
+  quantity: z.number().positive("La cantidad debe ser mayor que 0"),
+  type: z.enum(["out", "waste"]).optional().default("out"),
+  note: z.string().optional(),
+});
+
+/** Generación de lista de compra desde los faltantes de la Nevera. */
+export const pantryRestockSchema = z.object({
+  name: z.string().optional(),
+  storeName: z.string().nullable().optional(),
+  purpose: z.string().nullable().optional(),
+  /** Solo estos productos; si se omite, todos los que tengan faltante. */
+  itemIds: z.array(z.string()).optional(),
+  /** Incluir los que están bajo el objetivo, no solo agotados y bajo mínimo. */
+  includeRunningLow: z.boolean().optional().default(true),
 });
 
 // ============================================

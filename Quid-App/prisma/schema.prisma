@@ -41,6 +41,9 @@ model User {
   medicalAuthorizations MedicalAuthorization[]
   healthAiReport      HealthAiReport?
   pantryItems         PantryItem[]
+  healthConditions    HealthCondition[]
+  pantryConfirmations PantryListConfirmation[]
+  pantryMealLogs      PantryMealLog[]
   shoppingLists       ShoppingList[]
   healthProfiles      HealthProfile[]
   pantryMovements     PantryMovement[]
@@ -945,18 +948,40 @@ model PantryItem {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // ── Módulo Nevera (docs/MODULO_NEVERA_ESPECIFICACION.md §3.1) ──
+  nameNormalized   String   @default("") // clave de deduplicación (names.ts)
+  location         String   @default("nevera") // nevera | alacena | congelador
+  isFavorite       Boolean  @default(false)
+  isActive         Boolean  @default(true) // soft delete
+  sortOrder        Int      @default(1)
+  defaultUnitId    String?  // unidad preferida (código de units.ts)
+  priceUnitId      String?  // unidad de precio; g/ml ⇒ no multiplica
+  multiplyQuantity Boolean  @default(true)
+  notes            String   @default("")
+
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   movements   PantryMovement[]
   priceHistory PriceHistory[]
 
+  @@unique([userId, nameNormalized, unit])
+  @@index([userId, isActive])
   @@map("pantry_items")
+}
+
+/// Tipo de movimiento del ledger. `quantity` se guarda siempre en positivo;
+/// el signo lo determina este enum (SoftList no distingue merma: `waste` es nuevo).
+enum PantryMovementType {
+  in     // entrada por compra o carga manual
+  out    // consumo
+  adjust // corrección manual
+  waste  // merma: vencido, dañado, derramado
 }
 
 model PantryMovement {
   id              String    @id @default(cuid())
   itemId          String
   userId          String
-  type            String    // in, out, adjust (in=added to inventory, out=consumed, adjust=manual correction)
+  type            String    // valores de PantryMovementType (String por compatibilidad con datos previos)
   quantity        Float     // amount added or removed (positive always)
   unit            String?   // unit of the movement (defaults to item's unit)
   note            String?   // reason: purchase, recipe, manual, expired, etc.
@@ -964,10 +989,21 @@ model PantryMovement {
   sourceRecipeId  String?   // links to Recipe.id if movement was from cooking
   createdAt       DateTime  @default(now())
 
+  // ── Módulo Nevera (§3.2) ──
+  sourceStore   String?   // tienda de la compra
+  unitPrice     Decimal?  // precio unitario pagado en este movimiento
+  occurredAt    DateTime  @default(now()) // fecha real del evento (≠ createdAt)
+  reversedAt    DateTime? // si el movimiento fue reversado
+  confirmationId String?
+  sourceMealId  String?
+
   item            PantryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([itemId])
+  @@index([userId, occurredAt])
+  @@index([sourceListId])
+  @@index([confirmationId])
   @@map("pantry_movements")
 }
 
@@ -982,19 +1018,73 @@ model PriceHistory {
   sourceListId    String?   // links to ShoppingList if from a verified purchase
   createdAt       DateTime  @default(now())
 
+  // ── Módulo Nevera (§3.3): habilita precio por tienda y detección de cambios ──
+  sourceStore String? // tienda de esta compra
+  storeName   String? // nombre normalizado de la tienda (comparación entre tiendas)
+
   item            PantryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([itemId])
+  @@index([itemId, date])
   @@index([date])
   @@map("price_history")
+}
+
+model PantryListConfirmation {
+  id             String   @id @default(cuid())
+  shoppingListId String
+  userId         String
+  storeName      String?
+  purchaseDate   DateTime
+  discountType   String?  // FIXED | PERCENT — descuento TOTAL de ESTA confirmación
+  discountValue  Decimal? // monto o fracción
+  subtotal       Decimal
+  discountAmount Decimal  @default(0)
+  total          Decimal
+  paymentType    String   // account | credit_card | none
+  accountId      String?
+  subAccountId   String?
+  debtId         String?
+  transactionId  String?  // movimiento creado en Finanzas
+  installmentId  String?
+  itemCount      Int      @default(0)
+  reversedAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  shoppingList ShoppingList @relation(fields: [shoppingListId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([shoppingListId])
+  @@index([userId, purchaseDate])
+  @@map("pantry_list_confirmations")
+}
+
+/// Bitácora de "preparé esta receta". Sostiene el modo A (solo preparar, sin
+/// tocar inventario) y el historial de cocina (§7.5).
+model PantryMealLog {
+  id           String    @id @default(cuid())
+  userId       String
+  recipeId     String?
+  recipeName   String    // copiado: sobrevive si la receta se borra
+  servingsMade Float     @default(1)
+  mode         String    // A = solo preparar · B = descontar lo disponible · C = escalado
+  affectedStock Boolean  @default(false)
+  cookedAt     DateTime  @default(now())
+  notes        String    @default("")
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+
+  @@index([userId, cookedAt])
+  @@map("pantry_meal_logs")
 }
 
 model ShoppingList {
   id              String    @id @default(cuid())
   userId          String
   name            String    @default("Lista de Mercado")
-  status          String    @default("draft") // draft, shopping, verified, completed
+  status          String    @default("draft") // draft, shopping, partially_confirmed, completed
   profileId       String?   // Health profile to consider
   storeName       String?   // tienda asociada: D1, Éxito, Olímpica, etc.
   purpose         String?   // motivo/nombre especial: Mercado, Postre, Cumpleaños, etc.
@@ -1003,9 +1093,17 @@ model ShoppingList {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // ── Módulo Nevera (§3.4): compra dividida entre tiendas ──
+  totalDiscountType   String?   // FIXED | PERCENT (propuesta; cada confirmación guarda la suya)
+  totalDiscountValue  Decimal?
+  reversedAt          DateTime?
+  storeId             String?   // tienda de la lista de tiendas del usuario
+
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   items           ShoppingListItem[]
+  confirmations   PantryListConfirmation[]
 
+  @@index([userId, status])
   @@map("shopping_lists")
 }
 
@@ -1023,8 +1121,20 @@ model ShoppingListItem {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // ── Módulo Nevera (§3.5): saldado parcial + carrito + descuento por línea ──
+  nameNormalized    String  @default("") // para casar con la nevera sin duplicar
+  confirmedQuantity Float   @default(0)  // acumulado confirmado; saldo = quantity - confirmedQuantity
+  addedToCart       Boolean @default(false)
+  storeName         String? // tienda donde se compró ESTA línea
+  discountType      String? // FIXED | PERCENT
+  discountValue     Decimal?
+  multiplyQuantity  Boolean @default(true)
+  isStock           Boolean @default(false) // marcar el producto (no la lista) como stock
+  sortOrder         Int     @default(1)
+
   shoppingList    ShoppingList @relation(fields: [shoppingListId], references: [id], onDelete: Cascade)
 
+  @@index([shoppingListId])
   @@map("shopping_list_items")
 }
 
@@ -1040,8 +1150,57 @@ model HealthProfile {
   updatedAt       DateTime  @updatedAt
 
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conditions      HealthCondition[]
+  dietaryProfile  DietaryProfile?
 
+  @@index([userId])
   @@map("health_profiles")
+}
+
+/// Padecimiento declarado del perfil. Nace de un medicamento (Aura pregunta qué
+/// trata), de entrada manual, o de confirmar una sugerencia de la IA.
+/// Ver §3.7 y §9.1 de la especificación.
+model HealthCondition {
+  id           String   @id @default(cuid())
+  userId       String
+  profileId    String
+  name         String   // "Diabetes tipo 2"
+  origin       String   @default("manual") // medication | manual | ai_confirmed
+  medicationId String?  // si nació de un medicamento
+  severity     String   @default("diagnosed") // diagnosed | suspected
+  notes        String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([profileId])
+  @@map("health_conditions")
+}
+
+/// Perfil alimenticio derivado, con TRES niveles de restricción (§3.8):
+///   restrictions   → DURAS: bloquean (intolerancias, alergias, celiaquía)
+///   preferences    → BLANDAS: advierten (artritis, diabetes, hipertensión)
+///   allowOverrides → EXCEPCIONES del usuario, que GANAN sobre todo lo anterior
+model DietaryProfile {
+  id             String   @id @default(cuid())
+  profileId      String   @unique
+  isActive       Boolean  @default(true)
+  restrictions   Json?
+  preferences    Json?
+  avoid          Json?
+  allowOverrides Json?
+  aiSummary      String?
+  sourceHash     String?
+  generatedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  profile HealthProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("dietary_profiles")
 }
 
 model Recipe {
@@ -1058,10 +1217,21 @@ model Recipe {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  // ── Módulo Nevera (§3.9) ──
+  prepTime          Int?      // minutos de preparación (aparte de cocción)
+  difficulty        String?   // facil | media | dificil
+  recommendations   String?   // JSON array de recomendaciones
+  source            String    @default("manual") // manual | ai | base
+  isFavorite        Boolean   @default(false)
+  lastCookedAt      DateTime?
+  applicableProfileIds Json?  // perfiles considerados al generar
+
   user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   ingredients     RecipeIngredient[]
+  mealLogs        PantryMealLog[]
 
   @@index([userId])
+  @@index([userId, isFavorite])
   @@map("recipes")
 }
 
@@ -1073,6 +1243,11 @@ model RecipeIngredient {
   unit            String?   // unit (should be canonical: kg, unit, l, etc.)
   category        String?   // category hint for matching (dairy, meat, etc.)
   createdAt       DateTime  @default(now())
+
+  // ── Módulo Nevera (§3.9) ──
+  nameNormalized String  @default("") // para casar contra la nevera sin duplicar
+  isOptional     Boolean @default(false)
+  notes          String?
 
   recipe          Recipe    @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 

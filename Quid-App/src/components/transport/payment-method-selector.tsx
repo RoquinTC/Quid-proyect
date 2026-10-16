@@ -71,6 +71,12 @@ interface PaymentMethodSelectorProps {
   disabled?: boolean;
   /** Whether payment method is optional (for imports) */
   optional?: boolean;
+  /**
+   * Texto del contexto cuando se paga con tarjeta. El módulo Transporte lo usa
+   * para decir "Al pagar la TC, se debitará de…". Nevera pasa su propio texto
+   * para que el usuario de la despensa lea algo que le hable de su compra.
+   */
+  creditCardAccountHint?: string;
 }
 
 export function PaymentMethodSelector({
@@ -83,6 +89,7 @@ export function PaymentMethodSelector({
   onChange,
   disabled = false,
   optional = false,
+  creditCardAccountHint = "Al pagar la TC, se debitará de",
 }: PaymentMethodSelectorProps) {
   const [paymentType, setPaymentType] = useState<PaymentMethodType>(
     defaultPaymentType || "account"
@@ -449,7 +456,7 @@ export function PaymentMethodSelector({
                   : " de contado"
                 }.
                 {accountId
-                  ? ` Al pagar la TC, se debitará de ${selectedAccount?.name}${subAccountId ? ` → ${selectedAccount?.subAccounts?.find(s => s.id === subAccountId)?.name || "bolsillo"}` : ""}.`
+                  ? ` ${creditCardAccountHint} ${selectedAccount?.name}${subAccountId ? ` → ${selectedAccount?.subAccounts?.find(s => s.id === subAccountId)?.name || "bolsillo"}` : ""}.`
                   : " Configura la cuenta desde donde se pagará la TC."
                 }
               </span>

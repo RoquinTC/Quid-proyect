@@ -60,10 +60,19 @@ const modelPlan = [
   ["priceHistory", "PriceHistory"],
   ["shoppingList", "ShoppingList"],
   ["shoppingListItem", "ShoppingListItem"],
+  // Módulo Nevera: confirmaciones parciales (compra dividida entre tiendas).
+  // Va DESPUÉS de shoppingList porque lo referencia.
+  ["pantryListConfirmation", "PantryListConfirmation"],
   // Faltaba: recetas y sus ingredientes.
   ["recipe", "Recipe"],
   ["recipeIngredient", "RecipeIngredient"],
+  // Módulo Nevera: bitácora de recetas preparadas.
+  ["pantryMealLog", "PantryMealLog"],
   ["healthProfile", "HealthProfile"],
+  // Módulo Nevera: padecimientos declarados y perfil alimenticio derivado.
+  // Van DESPUÉS de healthProfile porque lo referencian.
+  ["healthCondition", "HealthCondition"],
+  ["dietaryProfile", "DietaryProfile"],
   ["healthAiReport", "HealthAiReport"],
   ["fuelPrice", "FuelPrice"],
   ["category", "Category"],

@@ -1,6 +1,18 @@
 // ─── Pantry Entity Types ───
 // API response shapes (money = number, dates = string)
 
+/** Cápsula de estado que la API evalúa y la UI muestra (una sola por producto). */
+export type StockStatus =
+  | "expired"
+  | "expiring"
+  | "out"
+  | "low"
+  | "running_low"
+  | "unused"
+  | "ok";
+
+export type PantryLocation = "nevera" | "alacena" | "congelador";
+
 export interface PantryItem {
   id: string;
   name: string;
@@ -11,13 +23,32 @@ export interface PantryItem {
   purchaseDate: string | null;
   purchasePrice: number | null;
   minStock: number | null;
-    targetQuantity?: number | null;
-    unitWeightFactor?: number | null;
-    lastUsedAt?: string | null;
-    deficit?: number;
-    createdAt?: string;
-    updatedAt?: string;
-  }
+  // ── Módulo Nevera ──
+  nameNormalized?: string;
+  location?: PantryLocation;
+  isFavorite?: boolean;
+  isActive?: boolean;
+  sortOrder?: number;
+  defaultUnitId?: string | null;
+  priceUnitId?: string | null;
+  multiplyQuantity?: boolean;
+  notes?: string;
+  targetQuantity?: number | null;
+  unitWeightFactor?: number | null;
+  lastUsedAt?: string | null;
+  deficit?: number;
+  // ── Estado de stock evaluado por el servidor ──
+  status?: StockStatus;
+  label?: string;
+  effectiveTarget?: number;
+  isLow?: boolean;
+  isOut?: boolean;
+  daysToExpiry?: number | null;
+  daysSinceUse?: number | null;
+  flags?: StockStatus[];
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface ShoppingList {
   id: string;
@@ -44,6 +75,15 @@ export interface ShoppingListItem {
   isPurchased: boolean;
   checked: boolean;
   pantryItemId?: string | null;
+  // ── Módulo Nevera: carrito y saldado parcial ──
+  confirmedQuantity?: number;
+  addedToCart?: boolean;
+  storeName?: string | null;
+  discountType?: "FIXED" | "PERCENT" | null;
+  discountValue?: number | null;
+  multiplyQuantity?: boolean;
+  isStock?: boolean;
+  sortOrder?: number;
   createdAt?: string;
   updatedAt?: string;
 }

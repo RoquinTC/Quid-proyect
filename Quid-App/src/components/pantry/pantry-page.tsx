@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Refrigerator, ShoppingCart, ChefHat, ShieldCheck } from "lucide-react";
 import { useAppStore, type SidebarAction } from "@/lib/store";
-import { PantryView } from "./pantry-view";
+import { NeveraView } from "./nevera-view";
 import { ShoppingListsView } from "./shopping-lists-view";
 import { RecipesView } from "./recipes-view";
 import { HealthProfilesView } from "./health-profiles-view";
@@ -94,7 +94,7 @@ export function PantryPage() {
   const renderContent = () => {
     switch (activeTab) {
       case "fridge":
-        return <PantryView />;
+        return <NeveraView />;
       case "shopping":
         return <ShoppingListsView />;
       case "recipes":
@@ -102,7 +102,7 @@ export function PantryPage() {
       case "health":
         return <HealthProfilesView />;
       default:
-        return <PantryView />;
+        return <NeveraView />;
     }
   };
 

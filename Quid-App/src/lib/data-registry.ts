@@ -189,6 +189,8 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   { model: "MedicalOrder", table: "medical_orders", scope: "user", strategy: "both", orphanAudit: false, hasUpdatedAt: true },
   { model: "MedicalOrderItem", table: "medical_order_items", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: true, parentRelation: "order" },
   { model: "HealthProfile", table: "health_profiles", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  { model: "HealthCondition", table: "health_conditions", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  { model: "DietaryProfile", table: "dietary_profiles", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: true, parentRelation: "profile" },
   { model: "HealthAiReport", table: "health_ai_reports", scope: "user", strategy: "excluded", orphanAudit: false, hasUpdatedAt: true, reason: "Es salida regenerable de IA; se recalcula en vez de restaurarse." },
 
   // ── Despensa ────────────────────────────────────────────────────────────
@@ -199,6 +201,8 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   { model: "ShoppingListItem", table: "shopping_list_items", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: true, parentRelation: "shoppingList" },
   { model: "Recipe", table: "recipes", scope: "user", strategy: "both", orphanAudit: false, hasUpdatedAt: true },
   { model: "RecipeIngredient", table: "recipe_ingredients", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: false, parentRelation: "recipe" },
+  { model: "PantryListConfirmation", table: "pantry_list_confirmations", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: false, parentRelation: "shoppingList" },
+  { model: "PantryMealLog", table: "pantry_meal_logs", scope: "user", strategy: "both", orphanAudit: false, hasUpdatedAt: false },
 
   // ── Aura ────────────────────────────────────────────────────────────────
   {

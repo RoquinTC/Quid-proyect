@@ -41,6 +41,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { PaymentMethodSelector } from "@/components/transport/payment-method-selector";
 import type { Account, Debt, ShoppingListItem, ShoppingList, HealthProfile } from "@/lib/types";
 
 const unitLabels: Record<string, string> = {
@@ -781,118 +782,26 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
               </p>
             </div>
 
-            <RadioGroup
-              value={paymentType}
-              onValueChange={(value) => {
-                setPaymentType(value as "account" | "credit_card");
+            {/* Mismo selector de pago que Transporte: maneja bolsillos dentro de
+                la cuenta y, al pagar con TC, desde qué cuenta se debita. */}
+            <PaymentMethodSelector
+              defaultPaymentType={paymentType}
+              defaultAccountId={paymentAccountId || null}
+              defaultSubAccountId={paymentSubAccountId || null}
+              defaultDebtId={paymentDebtId || null}
+              defaultInstallmentCount={Number(installmentCount) || 1}
+              creditCardAccountHint="Al pagar la tarjeta, se debitará de"
+              onChange={(payment) => {
+                setPaymentType(payment.paymentType);
+                setPaymentAccountId(payment.accountId ?? "");
+                setPaymentSubAccountId(payment.subAccountId ?? "");
+                setPaymentDebtId(payment.debtId ?? "");
+                setInstallmentCount(
+                  payment.installmentCount ? String(payment.installmentCount) : "1"
+                );
                 setConfirmError(null);
               }}
-              className="grid grid-cols-2 gap-2"
-            >
-              <Label
-                htmlFor="pantry-pay-account"
-                className={`flex items-center gap-2 rounded-xl border p-3 cursor-pointer ${
-                  paymentType === "account"
-                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
-              >
-                <RadioGroupItem id="pantry-pay-account" value="account" />
-                <Wallet className="size-4" />
-                <span className="text-sm font-medium">Cuenta</span>
-              </Label>
-              <Label
-                htmlFor="pantry-pay-card"
-                className={`flex items-center gap-2 rounded-xl border p-3 cursor-pointer ${
-                  paymentType === "credit_card"
-                    ? "border-rose-500 bg-rose-50 text-rose-700 dark:bg-rose-900/20"
-                    : "border-gray-200 dark:border-gray-700"
-                }`}
-              >
-                <RadioGroupItem id="pantry-pay-card" value="credit_card" />
-                <CreditCard className="size-4" />
-                <span className="text-sm font-medium">Tarjeta</span>
-              </Label>
-            </RadioGroup>
-
-            {paymentType === "account" ? (
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Cuenta de pago</Label>
-                  <Select
-                    value={paymentAccountId}
-                    onValueChange={(value) => {
-                      setPaymentAccountId(value);
-                      setPaymentSubAccountId("");
-                    }}
-                  >
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue placeholder="Selecciona una cuenta" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.name} · {formatCurrency(account.balance)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {availableSubAccounts.length > 0 && (
-                  <div className="space-y-1.5">
-                    <Label>Bolsillo</Label>
-                    <Select value={paymentSubAccountId || "none"} onValueChange={(value) => setPaymentSubAccountId(value === "none" ? "" : value)}>
-                      <SelectTrigger className="rounded-xl">
-                        <SelectValue placeholder="Cuenta principal" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Cuenta principal</SelectItem>
-                        {availableSubAccounts.map((subAccount) => (
-                          <SelectItem key={subAccount.id} value={subAccount.id}>
-                            {subAccount.name} · {formatCurrency(subAccount.balance)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Tarjeta de crédito</Label>
-                  <Select value={paymentDebtId} onValueChange={setPaymentDebtId}>
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue placeholder="Selecciona una tarjeta" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {debts.map((debt) => (
-                        <SelectItem key={debt.id} value={debt.id}>
-                          {debt.name} · saldo {formatCurrency(debt.currentBalance)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Cuotas</Label>
-                  <Select value={installmentCount} onValueChange={setInstallmentCount}>
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[1, 2, 3, 4, 6, 12].map((count) => (
-                        <SelectItem key={count} value={String(count)}>
-                          {count === 1 ? "Una cuota" : `${count} cuotas`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
+            />
 
             {confirmError && (
               <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
