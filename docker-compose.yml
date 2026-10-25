@@ -83,6 +83,11 @@ services:
       - MEDICATION_REMINDER_WINDOW_MINUTES=${MEDICATION_REMINDER_WINDOW_MINUTES:-2}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      # APK publicadas para descarga: se montan desde el host para no meter
+      # 15 MB en cada build de la imagen.
+      - DOWNLOADS_DIR=/app/downloads
+    volumes:
+      - ./downloads:/app/downloads:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

@@ -51,3 +51,6 @@ Aura-IA/out_*.mp3
 
 # Ollama local models (multi-GB, no subir al repo)
 ollama_data/
+
+# APK publicadas (se suben al servidor, no al repo)
+/downloads/
