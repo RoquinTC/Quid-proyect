@@ -48,10 +48,24 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
+
+      # El proyecto Android depende de carpetas que genera `cap sync`
+      # (capacitor-cordova-android-plugins, capacitor.build.gradle), y esas no
+      # están en git. Sin este paso Gradle falla con "cordova.variables.gradle
+      # does not exist". `cap sync` exige que exista webDir (out/), y los assets
+      # no se usan en runtime porque la APK carga la web del servidor.
+      - name: Preparar proyecto Android
+        working-directory: Quid-App
+        run: |
+          mkdir -p out
+          if [ ! -f out/index.html ]; then
+            printf '<!doctype html><meta charset="utf-8"><title>Quid</title>' > out/index.html
+          fi
+          npx cap sync android
 
       # El runner ubuntu-latest ya trae el Android SDK. Se usa el que viene en la
       # imagen en vez de android-actions/setup-android (que era el paso que
