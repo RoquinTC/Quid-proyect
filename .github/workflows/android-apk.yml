@@ -106,7 +106,30 @@ jobs:
         working-directory: Quid-App/android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          set -o pipefail
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-build.log
+
+      # Si falla, el error se publica como anotación del check: así queda
+      # legible sin necesidad de descargar los logs (que exigen token).
+      - name: Diagnóstico si falla
+        if: failure()
+        working-directory: Quid-App/android
+        run: |
+          if [ -f gradle-build.log ]; then
+            echo "== extracto del build =="
+            grep -nE "FAILURE|What went wrong|error:|Could not|Caused by|Execution failed" gradle-build.log | tail -25 | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+          fi
+
+      - name: Subir log del build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: Quid-App/android/gradle-build.log
+          retention-days: 15
+          if-no-files-found: ignore
 
       - name: Renombrar APK
         run: |
