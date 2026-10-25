@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { App } from "@capacitor/app";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { isNativeAndroid } from "@/lib/native/biometric";
+import { syncHydrationReminders } from "@/lib/native/hydration-reminders";
 import {
   type ReminderDose,
   cancelDoseNotification,
@@ -54,8 +55,13 @@ export function NativeDeviceBridge() {
 
     // Sincroniza al abrir la app y cada vez que vuelve a primer plano.
     void syncReminders();
+    // Los avisos de agua se recalculan con la ventana despierta actual.
+    void syncHydrationReminders();
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void syncReminders();
+      if (document.visibilityState === "visible") {
+        void syncReminders();
+        void syncHydrationReminders();
+      }
     };
     document.addEventListener("visibilitychange", onVisibility);
 

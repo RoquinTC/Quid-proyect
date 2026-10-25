@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.0.22",
+  "currentVersion": "1.0.23",
   "releases": [
+    {
+      "version": "1.0.23",
+      "date": "2026-10-25",
+      "title": "Quid 1.0.23",
+      "changes": [
+        "Resumen de Salud rediseñado: lo primero es la proxima toma, con adherencia, agua y proximos 7 dias.",
+        "Nueva tarjeta de agua: calculo por peso, talla, actividad y clima, con la meta expresada en vasos.",
+        "Recordatorios de agua repartidos entre la hora de despertar y la de dormir, con reparto centrado o exacto.",
+        "El widget grande de agua del dashboard usa la misma formula (una sola meta en toda la app)."
+      ]
+    },
     {
       "version": "1.0.22",
       "date": "2026-10-25",

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useHydrationStore } from "@/lib/stores/use-hydration-store";
+import { computeHydrationPlan } from "@/lib/health/hydration-plan";
 
 interface HydrationProfile {
   weight: number;
@@ -134,14 +135,21 @@ export function WaterWidget() {
   };
 
   const calculateIntelligentGoal = () => {
-    let goal = profile.weight * 35;
-    if (profile.activity === "moderate") goal += 400;
-    if (profile.activity === "active") goal += 800;
-    if (profile.climate === "temperate") goal += 250;
-    if (profile.climate === "hot") goal += 500;
-    goal = Math.max(1000, Math.min(8000, Math.round(goal / 100) * 100));
+    // Fórmula compartida con la tarjeta del resumen (una sola fuente de verdad).
+    const plan = computeHydrationPlan({
+      weightKg: profile.weight,
+      heightCm: profile.height,
+      activity: profile.activity,
+      climate: profile.climate,
+      glassMl: profile.plannedServingMl,
+      manualGoalMl: null,
+      wakeTime: profile.wakeTime,
+      sleepTime: profile.sleepTime,
+      remindersEnabled: true,
+      reminderAlignment: "centered",
+    });
 
-    setDailyGoal(goal);
+    setDailyGoal(plan.goalMl);
     setIsSettingsOpen(false);
     try {
       localStorage.setItem("quid-hydration-profile", JSON.stringify(profile));

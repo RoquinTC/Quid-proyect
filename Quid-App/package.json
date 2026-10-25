@@ -1,6 +1,6 @@
 {
   "name": "quid-app",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" next dev -p 3000",
