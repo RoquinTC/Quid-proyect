@@ -88,6 +88,21 @@ jobs:
           key: android-debug-keystore-v1
           restore-keys: android-debug-keystore-
 
+      # Si el repo define DEBUG_KEYSTORE_BASE64 (el keystore de la máquina de
+      # desarrollo), las APK del CI se firman con la MISMA clave y se pueden
+      # instalar encima de las locales. Sin el secreto se usa el del caché.
+      - name: Restaurar keystore de desarrollo
+        env:
+          KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            mkdir -p ~/.android
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+            echo "keystore restaurado desde el secreto"
+          else
+            echo "sin secreto DEBUG_KEYSTORE_BASE64: se usa el keystore del runner"
+          fi
+
       # Si no vino del caché, se genera una vez y queda estable.
       - name: Asegurar keystore de depuración
         run: |
