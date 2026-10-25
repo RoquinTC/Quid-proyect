@@ -31,6 +31,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // La firma de depuración usa por defecto $HOME/.android/debug.keystore, pero
+    // si ANDROID_SDK_HOME está definido (como en los runners de GitHub) Android
+    // busca en otra ruta y termina firmando con una clave distinta. Con esta
+    // variable el keystore es explícito y el APK del CI coincide con el local.
+    signingConfigs {
+        debug {
+            def explicitKeystore = System.getenv("DEBUG_KEYSTORE_PATH")
+            if (explicitKeystore) {
+                storeFile file(explicitKeystore)
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false

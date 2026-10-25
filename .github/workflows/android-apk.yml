@@ -95,9 +95,13 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
+          echo "ANDROID_SDK_HOME=$ANDROID_SDK_HOME"
           if [ -n "$KEYSTORE_BASE64" ]; then
             mkdir -p ~/.android
             printf '%s' "$KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
+            # Gradle recibe la ruta explícita: con ANDROID_SDK_HOME definido no
+            # usa ~/.android y firmaría con otra clave.
+            echo "DEBUG_KEYSTORE_PATH=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
             echo "keystore restaurado desde el secreto"
           else
             echo "sin secreto DEBUG_KEYSTORE_BASE64: se usa el keystore del runner"
