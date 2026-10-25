@@ -74,7 +74,10 @@ export function AppDeepLinkHandler() {
       setSidebarAction(action);
     }
 
-    window.history.replaceState({}, "", window.location.pathname);
+    // NO se borra el query a propósito. Antes se hacía `replaceState` aquí y
+    // eso rompía el enlace: el efecto del shell lee la URL *después* (los
+    // efectos de los hijos corren primero), la encontraba vacía y forzaba
+    // Dashboard. Además, un `?module=` que sobrevive es un enlace compartible.
   }, [setActiveModule, setFinanceSubView, setHealthSubView, setPantrySubView, setSidebarAction, setTransportSubView]);
 
   return null;

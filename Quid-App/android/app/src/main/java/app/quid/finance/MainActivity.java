@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(QuidBiometricPlugin.class);
         registerPlugin(QuidCalendarPlugin.class);
         registerPlugin(QuidGoogleAuthPlugin.class);
+        registerPlugin(QuidDoseSoundPlugin.class);
         super.onCreate(savedInstanceState);
 
         CookieManager cookieManager = CookieManager.getInstance();

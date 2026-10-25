@@ -22,8 +22,25 @@ import { apiFetch, toColombiaDateString } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { UnitConverter } from "./unit-converter";
-import { UNITS } from "@/lib/pantry/units";
+import { UNITS, convertQuantity } from "@/lib/pantry/units";
 import type { PantryItem, PantryLocation } from "@/lib/types/pantry";
+
+/**
+ * Texto de equivalencia del umbral: "= 0,25 kg".
+ *
+ * Sirve para que el usuario vea en qué se traduce lo que escribió, sin tener
+ * que hacer la conversión mental. Devuelve `null` cuando no hay nada que
+ * aclarar (misma unidad, valor vacío o unidades incompatibles).
+ */
+function thresholdHint(value: string, fromUnit: string, itemUnit: string): string | null {
+  const numeric = parseFloat(value);
+  if (!value || !Number.isFinite(numeric)) return null;
+  if (fromUnit === itemUnit) return null;
+  const { quantity, converted } = convertQuantity(numeric, fromUnit, itemUnit);
+  if (!converted) return null;
+  const pretty = Math.round(quantity * 1000) / 1000;
+  return `= ${pretty} ${itemUnit}`;
+}
 
 const categoryOptions = [
   { value: "dairy", label: "Lácteos" },
@@ -79,6 +96,9 @@ export function PantryItemForm({ open, onOpenChange, item, onSuccess }: PantryIt
   const [purchasePrice, setPurchasePrice] = useState("");
   const [priceUnitId, setPriceUnitId] = useState<string>("");
   const [minStock, setMinStock] = useState("");
+  // Unidad en la que se escribe cada umbral. Por defecto, la del producto.
+  const [minUnit, setMinUnit] = useState("unit");
+  const [targetUnit, setTargetUnit] = useState("unit");
   const [targetQuantity, setTargetQuantity] = useState("");
   const [notes, setNotes] = useState("");
   const [showConverter, setShowConverter] = useState(false);
@@ -99,9 +119,30 @@ export function PantryItemForm({ open, onOpenChange, item, onSuccess }: PantryIt
     setPriceUnitId(item?.priceUnitId || "");
     setMinStock(item?.minStock?.toString() || "");
     setTargetQuantity(item?.targetQuantity?.toString() || "");
+    // Los umbrales guardados están en la unidad del producto, así que el
+    // selector arranca ahí; el usuario puede cambiarlo al reeditarlos.
+    setMinUnit(item?.unit || unit);
+    setTargetUnit(item?.unit || unit);
     setNotes(item?.notes || "");
     setShowConverter(false);
   }, [itemId, open]);
+
+  /**
+   * Convierte un umbral escrito en SU unidad a la unidad del producto.
+   *
+   * Devuelve `null` si no hay valor. Si las unidades son incompatibles (el
+   * usuario eligió "unidad" para un producto en kg), se guarda el número tal
+   * cual en vez de inventar una conversión: es preferible un umbral imperfecto
+   * y visible a uno silenciosamente equivocado.
+   */
+  const toItemUnit = (value: string, fromUnit: string): number | null => {
+    if (!value) return null;
+    const numeric = parseFloat(value);
+    if (!Number.isFinite(numeric)) return null;
+    if (fromUnit === unit) return numeric;
+    const { quantity, converted } = convertQuantity(numeric, fromUnit, unit);
+    return converted ? Math.round(quantity * 1000) / 1000 : numeric;
+  };
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
@@ -117,8 +158,8 @@ export function PantryItemForm({ open, onOpenChange, item, onSuccess }: PantryIt
         expirationDate: expirationDate || null,
         purchasePrice: purchasePrice ? parseFloat(purchasePrice) : null,
         priceUnitId: priceUnitId || null,
-        minStock: minStock ? parseFloat(minStock) : null,
-        targetQuantity: targetQuantity ? parseFloat(targetQuantity) : null,
+        minStock: toItemUnit(minStock, minUnit),
+        targetQuantity: toItemUnit(targetQuantity, targetUnit),
         notes,
       };
 
@@ -335,42 +376,84 @@ export function PantryItemForm({ open, onOpenChange, item, onSuccess }: PantryIt
             />
           </div>
 
-          {/* Umbrales: mínimo y objetivo, con la explicación de cada uno */}
+          {/* Umbrales: mínimo y objetivo.
+              Se escriben en la unidad que el usuario piense (gramos, libras) y
+              se convierten a la unidad del producto antes de guardar. El stock
+              se lleva canónico; el umbral no tiene por qué. */}
           <div className="space-y-2 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/60">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <Label className="text-[12.5px]">Mínimo</Label>
                 <p className="text-[10.5px] leading-tight text-gray-400">
                   Te avisa cuando bajas de aquí
                 </p>
               </div>
-              <Input
-                type="number"
-                step="0.001"
-                min="0"
-                placeholder="—"
-                value={minStock}
-                onChange={(e) => setMinStock(e.target.value)}
-                className="h-8 w-20 rounded-xl text-center"
-              />
+              <div className="flex shrink-0 items-center gap-1">
+                <Input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  placeholder="—"
+                  value={minStock}
+                  onChange={(e) => setMinStock(e.target.value)}
+                  className="h-8 w-16 rounded-lg text-center"
+                />
+                <Select value={minUnit} onValueChange={setMinUnit}>
+                  <SelectTrigger className="h-8 w-[60px] rounded-lg px-1 text-[11px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UNITS.map((u) => (
+                      <SelectItem key={u.code} value={u.code}>
+                        {u.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-3">
+            {thresholdHint(minStock, minUnit, unit) && (
+              <p className="text-right text-[10.5px] text-cyan-700 dark:text-cyan-400">
+                {thresholdHint(minStock, minUnit, unit)}
+              </p>
+            )}
+
+            <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
                 <Label className="text-[12.5px]">Quiero tener</Label>
                 <p className="text-[10.5px] leading-tight text-gray-400">
                   La lista de faltantes apunta a este valor
                 </p>
               </div>
-              <Input
-                type="number"
-                step="0.001"
-                min="0"
-                placeholder="—"
-                value={targetQuantity}
-                onChange={(e) => setTargetQuantity(e.target.value)}
-                className="h-8 w-20 rounded-xl text-center"
-              />
+              <div className="flex shrink-0 items-center gap-1">
+                <Input
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  placeholder="—"
+                  value={targetQuantity}
+                  onChange={(e) => setTargetQuantity(e.target.value)}
+                  className="h-8 w-16 rounded-lg text-center"
+                />
+                <Select value={targetUnit} onValueChange={setTargetUnit}>
+                  <SelectTrigger className="h-8 w-[60px] rounded-lg px-1 text-[11px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UNITS.map((u) => (
+                      <SelectItem key={u.code} value={u.code}>
+                        {u.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            {thresholdHint(targetQuantity, targetUnit, unit) && (
+              <p className="text-right text-[10.5px] text-cyan-700 dark:text-cyan-400">
+                {thresholdHint(targetQuantity, targetUnit, unit)}
+              </p>
+            )}
             {!minStock && !targetQuantity && (
               <p className="text-[10.5px] leading-tight text-amber-600 dark:text-amber-400">
                 Sin mínimo ni objetivo, este producto no entra en las listas de faltantes.

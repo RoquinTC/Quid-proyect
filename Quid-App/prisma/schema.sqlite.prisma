@@ -37,6 +37,9 @@ model User {
   vehicleReminders    VehicleReminder[]
   maintenanceServiceRules MaintenanceServiceRule[]
   medications         Medication[]
+  doseOccurrences         DoseOccurrence[]
+  doseOverrides           DoseOverride[]
+  medicationStockEntries  MedicationStockEntry[]
   appointments        MedicalAppointment[]
   medicalOrders       MedicalOrder[]
   medicalAuthorizations MedicalAuthorization[]
@@ -774,6 +777,9 @@ model Medication {
 
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderItems      MedicalOrderItem[]
+  doseOccurrences DoseOccurrence[]
+  doseOverrides   DoseOverride[]
+  stockEntries    MedicationStockEntry[]
 
   @@map("medications")
 }
@@ -964,6 +970,9 @@ model PantryMovement {
   occurredAt    DateTime  @default(now()) // fecha real del evento (≠ createdAt)
   reversedAt    DateTime? // si el movimiento fue reversado
   confirmationId String?
+  /// Línea de la lista que originó el movimiento. Permite reversar una
+  /// confirmación parcial devolviendo exactamente su cantidad a su línea.
+  sourceItemId  String?
   sourceMealId  String?
 
   item            PantryItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
@@ -1098,6 +1107,10 @@ model ShoppingListItem {
   discountType      String? // FIXED | PERCENT
   discountValue     Decimal?
   multiplyQuantity  Boolean @default(true)
+  /// Unidad en que la tienda cobra el precio. Distinta de `unit` cuando compras
+  /// 250 g de algo que se cobra por kg: sin esto la línea multiplicaba
+  /// precio × gramos y el importe salía 1.000 veces más grande.
+  priceUnitId       String?
   isStock           Boolean @default(false) // marcar el producto (no la lista) como stock
   sortOrder         Int     @default(1)
 
@@ -1312,10 +1325,12 @@ model UserSettings {
   countryCode         String    @default("CO") // For holiday calculations
   lastBudgetReset     DateTime? // When budgets were last reset
   notificationsEnabled Boolean  @default(true) // Global notifications toggle
+  therapyDayStartHour Int      @default(4)  // hora (0-23) a la que empieza el dia logico de salud
   pinEnabled          Boolean   @default(false) // PIN lock enabled
   pinHash             String?                    // bcrypt hash of the 4-digit PIN
   biometricEnabled    Boolean   @default(false) // Biometric auth enabled
   lockOnResume        Boolean   @default(true)  // Lock when app comes back to foreground
+  lockGraceMinutes    Int      @default(15)  // minutos de gracia antes de bloquear al volver
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -1410,4 +1425,102 @@ model PendingAuraAction {
   @@index([userId, status])
   @@index([expiresAt])
   @@map("pending_aura_actions")
+}
+
+// ============================================
+// SALUD — TOMAS (DoseOccurrence)
+// ============================================
+
+/// Una toma concreta de un medicamento en un instante planificado.
+/// Es la entidad que hace posible la adherencia: guarda la hora PROGRAMADA
+/// (inmutable) y la hora REAL de la acción, más el estado.
+/// El día lógico ("therapy day") se resuelve con UserSettings.therapyDayStartHour.
+model DoseOccurrence {
+  id           String   @id @default(cuid())
+  userId       String
+  medicationId String
+
+  scheduledAt  DateTime // instante planificado (UTC)
+  scheduledDay String   // "YYYY-MM-DD" del día lógico al que pertenece (para agrupar sin TZ)
+  timezone     String   @default("America/Bogota")
+
+  plannedDose  Float // dosis prescrita para esta toma
+  actualDose   Float? // dosis realmente tomada
+
+  // pending | taken | skipped | missed | snoozed | dismissed
+  status String @default("pending")
+
+  actedAt        DateTime? // cuándo actuó el usuario (o cuándo venció, para missed)
+  snoozeCount    Int       @default(0)
+  lastRemindedAt DateTime?
+  reminderCount  Int       @default(0)
+
+  // scheduled | prn | external
+  source String  @default("scheduled")
+  note   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medication Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+
+  @@unique([medicationId, scheduledAt])
+  @@index([userId, scheduledAt])
+  @@index([userId, status, scheduledAt])
+  @@index([userId, scheduledDay])
+  @@map("dose_occurrences")
+}
+
+/// Libro mayor de existencias: cada movimiento de stock deja un asiento.
+/// Permite reconstruir el inventario y auditar por qué cambió.
+model MedicationStockEntry {
+  id           String @id @default(cuid())
+  userId       String
+  medicationId String
+
+  delta        Float  // negativo consume, positivo repone
+  balanceAfter Float?
+  reason       String // dose | refill | adjustment | order_delivery
+  refId        String?
+  note         String?
+
+  createdAt DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medication Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+
+  @@index([medicationId, createdAt])
+  @@index([userId, createdAt])
+  @@map("medication_stock_entries")
+}
+
+/// Excepción puntual sobre el plan de un medicamento en un día concreto.
+///
+/// Regla de diseño (verificada en MyTherapy `scheduler_modification`): los
+/// overrides NO mutan la recurrencia; se aplican **al final** del cálculo.
+/// Así el patrón base queda auditable y se puede volver atrás.
+model DoseOverride {
+  id           String @id @default(cuid())
+  userId       String
+  medicationId String
+
+  /// Día lógico afectado, "YYYY-MM-DD".
+  day  String
+  /// modify_time | modify_dose | skip_day
+  type String
+
+  /// { times: ["10:30"], dose: 2, note: "..." }
+  payload Json?
+  note    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medication Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+
+  @@unique([medicationId, day, type])
+  @@index([userId, day])
+  @@map("dose_overrides")
 }

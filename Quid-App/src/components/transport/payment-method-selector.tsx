@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -159,8 +159,19 @@ export function PaymentMethodSelector({
   }, [fetchPaymentDefault]);
 
   // Notify parent of changes
+  //
+  // `onChange` vive en un ref a propósito: la mayoría de los consumidores pasan
+  // una flecha inline, que cambia de identidad en cada render. Si el efecto
+  // dependiera de `onChange`, cada render lo volvería a disparar y, como el
+  // padre actualiza estado al recibirlo, se entra en un bucle de renders que
+  // congela la pantalla. Con el ref, el efecto depende solo de los valores.
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    onChange({
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    onChangeRef.current({
       paymentType,
       // For account payment: accountId/subAccountId are the payment source
       // For CC payment: accountId/subAccountId are where the CC will be paid from
@@ -169,7 +180,7 @@ export function PaymentMethodSelector({
       debtId: paymentType === "credit_card" ? debtId : null,
       installmentCount: paymentType === "credit_card" ? installmentCount : null,
     });
-  }, [paymentType, accountId, subAccountId, debtId, installmentCount, onChange]);
+  }, [paymentType, accountId, subAccountId, debtId, installmentCount]);
 
   // Reset sub-account when account changes
   const handleAccountChange = (value: string) => {

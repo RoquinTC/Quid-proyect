@@ -1,5 +1,6 @@
 "use client";
 
+import { lineTotal } from "@/lib/pantry/line-total";
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency } from "@/lib/api";
 import { useDataEvent } from "@/hooks/use-data-event";
@@ -113,7 +114,7 @@ export function ShoppingListsView() {
 
   if (loading) {
     return (
-      <div className="p-4 space-y-3 pb-safe">
+      <div className="mx-auto w-full max-w-3xl p-4 space-y-3 pb-safe">
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-24 rounded-2xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         ))}
@@ -126,26 +127,24 @@ export function ShoppingListsView() {
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="p-4 space-y-4 pb-safe"
+      className="mx-auto w-full max-w-3xl p-4 space-y-4 pb-safe"
     >
-      {/* Header Card */}
+      {/* Header Card — compacta: dos cifras no necesitan 180px de alto.
+          Antes era una tarjeta de 5 de padding con tipografía 3xl; comía el
+          espacio de la primera lista, que es lo que de verdad se usa. */}
       <motion.div variants={itemVariants}>
-        <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-amber-600 to-orange-500 text-white overflow-hidden relative">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)] pointer-events-none" />
-          <CardContent className="p-5 relative z-10">
-            <div className="flex items-center gap-2 mb-1">
-              <ShoppingCart className="size-4 text-amber-200" />
-              <span className="text-sm text-amber-100">Listas de Mercado</span>
-            </div>
-            <div className="flex items-end justify-between">
+        <Card className="border-0 shadow-sm rounded-2xl bg-gradient-to-br from-amber-600 to-orange-500 text-white overflow-hidden relative">
+          <CardContent className="flex items-center justify-between gap-3 px-4 py-3 relative z-10">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="size-4 text-amber-100" />
               <div>
-                <p className="text-3xl font-bold tracking-tight">{activeLists.length}</p>
-                <span className="text-xs text-amber-200">listas activas</span>
+                <p className="text-lg font-bold leading-none">{activeLists.length}</p>
+                <span className="text-[10.5px] text-amber-100">activas</span>
               </div>
-              <div className="text-right">
-                <p className="text-lg font-bold">{completedLists.length}</p>
-                <span className="text-xs text-amber-200">completadas</span>
-              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-bold leading-none">{completedLists.length}</p>
+              <span className="text-[10.5px] text-amber-100">completadas</span>
             </div>
           </CardContent>
         </Card>
@@ -208,7 +207,15 @@ export function ShoppingListsView() {
               {activeLists.map((list) => {
                 const status = statusConfig[list.status] || statusConfig.draft;
                 const totalEstimated = list.items.reduce(
-                  (sum, i) => sum + (i.estimatedPrice || 0) * i.quantity,
+                  (sum, i) =>
+                    sum +
+                    lineTotal({
+                      quantity: i.quantity,
+                      price: i.estimatedPrice,
+                      unit: i.unit,
+                      priceUnitId: i.priceUnitId,
+                      multiplyQuantity: i.multiplyQuantity,
+                    }),
                   0
                 );
                 const StatusIcon = status.icon;
@@ -295,7 +302,15 @@ export function ShoppingListsView() {
               <h3 className="text-sm font-semibold text-gray-500">Completadas</h3>
               {completedLists.map((list) => {
                 const totalActual = list.items.reduce(
-                  (sum, i) => sum + (i.actualPrice || i.estimatedPrice || 0) * i.quantity,
+                  (sum, i) =>
+                    sum +
+                    lineTotal({
+                      quantity: i.quantity,
+                      price: i.actualPrice ?? i.estimatedPrice,
+                      unit: i.unit,
+                      priceUnitId: i.priceUnitId,
+                      multiplyQuantity: i.multiplyQuantity,
+                    }),
                   0
                 );
                 const previewItems = list.items.slice(0, 3).map((item) => item.name).join(", ");

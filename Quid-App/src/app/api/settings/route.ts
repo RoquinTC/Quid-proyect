@@ -85,6 +85,8 @@ export async function PUT(req: NextRequest) {
       lockOnResume,
       pinEnabled,
       biometricEnabled,
+      lockGraceMinutes,
+      therapyDayStartHour,
     } = body;
 
     // Validate cutoff day
@@ -112,6 +114,8 @@ export async function PUT(req: NextRequest) {
     if (lockOnResume !== undefined) data.lockOnResume = lockOnResume;
     if (pinEnabled !== undefined) data.pinEnabled = pinEnabled;
     if (biometricEnabled !== undefined) data.biometricEnabled = biometricEnabled;
+    if (lockGraceMinutes !== undefined) data.lockGraceMinutes = lockGraceMinutes;
+    if (therapyDayStartHour !== undefined) data.therapyDayStartHour = therapyDayStartHour;
 
     const settings = await db.userSettings.upsert({
       where: { userId: session.user.id },

@@ -154,6 +154,31 @@ export function NeveraView() {
     }
   };
 
+  /**
+   * Fija una cantidad exacta desde el campo editable del recuento.
+   *
+   * El ledger solo entiende deltas, así que se calcula `nuevo − actual`. Es
+   * importante hacerlo aquí y no en la fila: la fila no sabe si hay un ajuste
+   * en curso, y el delta debe calcularse contra el valor vigente en pantalla.
+   */
+  const handleSetQuantity = async (item: PantryItem, nextQuantity: number) => {
+    const delta = Math.round((nextQuantity - item.quantity) * 1000) / 1000;
+    if (Math.abs(delta) < 1e-9) return;
+
+    setItems((prev) =>
+      prev.map((it) => (it.id === item.id ? { ...it, quantity: nextQuantity } : it))
+    );
+    try {
+      await apiFetch(`/api/pantry/${item.id}/adjust`, {
+        method: "POST",
+        body: JSON.stringify({ delta, reason: "Recuento" }),
+      });
+    } catch {
+      toast.error("No se pudo guardar el ajuste");
+      fetchItems();
+    }
+  };
+
   const generateRestockList = async () => {
     setGenerating(true);
     try {
@@ -186,14 +211,20 @@ export function NeveraView() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2.5 p-4 pb-safe">
-      {/* Voz del personaje + acción explícita de recuento */}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="mx-auto w-full max-w-3xl space-y-2.5 p-4 pb-safe"
+    >
+      {/* Voz del personaje + acción explícita de recuento.
+          En escritorio la acción va a la derecha, no como barra de ancho
+          completo: ocupaba una línea entera para un solo botón. */}
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl bg-gradient-to-br from-cyan-50 to-sky-50 px-3.5 py-3 dark:from-cyan-950/30 dark:to-sky-950/20"
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-gradient-to-br from-cyan-50 to-sky-50 px-3.5 py-3 dark:from-cyan-950/30 dark:to-sky-950/20"
       >
-        <p className="text-[12.5px] font-medium leading-snug text-cyan-900 dark:text-cyan-200">
+        <p className="min-w-0 flex-1 text-[12.5px] font-medium leading-snug text-cyan-900 dark:text-cyan-200">
           {fridgeVoice({
             total,
             out: counts?.out ?? 0,
@@ -203,7 +234,7 @@ export function NeveraView() {
         </p>
         <button
           onClick={() => setRecount(true)}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-cyan-200 bg-white/70 py-1.5 text-[12px] font-semibold text-cyan-700 transition-colors hover:bg-white dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-300"
+          className="flex shrink-0 items-center gap-1.5 rounded-xl border border-cyan-200 bg-white/80 px-3 py-1.5 text-[12px] font-semibold text-cyan-700 transition-colors hover:bg-white dark:border-cyan-900 dark:bg-cyan-950/40 dark:text-cyan-300"
         >
           <RefreshCw className="size-3.5" />
           Actualizar nevera
@@ -382,6 +413,7 @@ export function NeveraView() {
         onOpenChange={setRecount}
         items={items}
         onQuickAdjust={handleQuickAdjust}
+        onSetQuantity={handleSetQuantity}
         onEdit={(item) => { setEditingItem(item); setShowForm(true); }}
       />
     </motion.div>

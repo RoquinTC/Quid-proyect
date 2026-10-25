@@ -1,0 +1,131 @@
+name: APK Android
+
+# Compila la APK de Quid-App y la publica como Release descargable.
+#
+# Cómo usarlo:
+#   1) Push a main  → compila y deja la APK como artefacto (90 días).
+#   2) Crear un tag → además publica un Release con la APK adjunta, con URL estable:
+#      https://github.com/<usuario>/<repo>/releases/latest/download/Quid.apk
+#
+# La raíz del repo es Quid-proyect; la app vive en Quid-App/.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "Quid-App/**"
+      - ".github/workflows/android-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Compilar APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: Quid-App
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: Quid-App/package-lock.json
+
+      # Hace falta node_modules porque android/capacitor.settings.gradle apunta a
+      # ../node_modules/@capacitor/*/android (los plugins se compilan desde ahí).
+      - name: Dependencias
+        run: npm ci --legacy-peer-deps
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache de Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('Quid-App/android/**/*.gradle*', 'Quid-App/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # La build debug se firma con ~/.android/debug.keystore. Si el runner lo
+      # regenera en cada ejecución, cada APK tiene una firma distinta y Android
+      # NO permite instalarla encima de la anterior ("app no instalada").
+      # Cachear el keystore mantiene la misma firma entre builds.
+      - name: Cache del keystore de depuración
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+          restore-keys: android-debug-keystore-
+
+      # Si no vino del caché, se genera una vez y queda estable.
+      - name: Asegurar keystore de depuración
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore ~/.android/debug.keystore \
+              -storepass android -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          keytool -list -keystore ~/.android/debug.keystore -storepass android | tail -2
+
+      - name: Compilar APK (debug)
+        working-directory: Quid-App/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Renombrar APK
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk dist/Quid.apk
+          ls -lh dist
+
+      - name: Subir artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: quid-apk
+          path: Quid-App/dist/Quid.apk
+          retention-days: 90
+
+      # Solo en tags: Release con descarga directa permanente.
+      - name: Publicar Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Quid-App/dist/Quid.apk
+          name: Quid ${{ github.ref_name }}
+          body: |
+            APK de Quid compilada automáticamente desde ${{ github.sha }}.
+
+            **Instalación:** descarga `Quid.apk` y ábrelo en el teléfono.
+            Si Android lo pide, habilita "Instalar apps desconocidas" para el
+            navegador o el gestor de archivos.
+
+            Nota: es una build *debug*, firmada con la clave de depuración.
+            Sirve para uso personal; no se publica en Play Store.
+            Para actualizar sin perder datos, instala siempre sobre la misma
+            versión instalada (misma firma).
+          draft: false
+          prerelease: false

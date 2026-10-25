@@ -8,7 +8,8 @@ import { validateBody, shoppingListConfirmSchema } from "@/lib/validations";
 import { normalizeName } from "@/lib/pantry/names";
 import { applyMovement, findPantryItemByName } from "@/lib/pantry/api-helpers";
 import { createPantryFinanceEntry } from "@/lib/pantry-finance";
-import { applyTotalDiscount, lineAmount, normalizeDiscountType, sumLineTotals } from "@/lib/pantry/pricing";
+import { applyTotalDiscount, normalizeDiscountType, sumLineTotals } from "@/lib/pantry/pricing";
+import { lineTotal } from "@/lib/pantry/line-total";
 
 /**
  * POST /api/shopping-lists/[id]/confirm
@@ -116,11 +117,22 @@ export async function POST(
     }
 
     // ── Líneas que participan de ESTA confirmación ──
-    // Una línea participa si está comprada y (no hay selección o está incluida).
+    // Una línea participa si está comprada, si se seleccionó y si **todavía le
+    // queda saldo**. Lo de `remaining` es lo que permite comprar en varias
+    // tiendas sin duplicar: lo ya confirmado no se vuelve a sumar.
+    const remainingOf = (item: { quantity: number; confirmedQuantity?: number | null }) =>
+      Math.max(0, item.quantity - (item.confirmedQuantity ?? 0));
+
     const linesToConfirm = list.items.filter((item) => {
-      if (!item.isPurchased) return false;
-      if (hasSelection && !selectedById.has(item.id)) return false;
-      return true;
+      // Lo que seleccionaste manda. Si no hay selección explícita, se confirma
+      // lo que está en el carrito (`addedToCart`) y, por compatibilidad, lo ya
+      // marcado como comprado en listas antiguas.
+      if (hasSelection) {
+        if (!selectedById.has(item.id)) return false;
+      } else if (!item.addedToCart && !item.isPurchased) {
+        return false;
+      }
+      return remainingOf(item) > 1e-9;
     });
 
     if (linesToConfirm.length === 0) {
@@ -134,24 +146,42 @@ export async function POST(
       );
     }
 
-    // ── Subtotal con el motor de precios (cantidad × precio, redondeo HALF_UP) ──
+    // ── Subtotal con el motor de precios ──
+    // `resolveLinePrice` convierte la cantidad a la unidad en que la tienda
+    // cobra. Sin eso, 250 g de café a 38.000/kg sumaban 9.500.000 al subtotal.
     const lineResults = linesToConfirm.map((item) => {
       const sel = selectedById.get(item.id);
-      const movedQty = sel !== undefined ? sel.quantity : item.quantity;
+      // La cantidad movida nunca supera el saldo pendiente: si pediste 5 y ya
+      // habías confirmado 3, esta compra solo mueve 2.
+      const wanted = sel !== undefined ? sel.quantity : item.quantity;
+      const movedQty = Math.min(wanted, remainingOf(item));
       const itemPrice = toNumber(item.actualPrice ?? item.estimatedPrice ?? 0);
       return {
         item,
         movedQty,
         itemPrice,
-        pricing: lineAmount({
+        total: lineTotal({
           quantity: movedQty,
-          value: itemPrice,
-          multiplyQuantity: item.multiplyQuantity ?? true,
+          price: itemPrice,
+          unit: item.unit || "unit",
+          priceUnitId: item.priceUnitId ?? null,
+          multiplyQuantity: item.multiplyQuantity ?? undefined,
+          discountType: item.discountType ?? null,
+          discountValue: toNumber(item.discountValue),
         }),
       };
     });
 
-    const subtotal = sumLineTotals(lineResults.map((r) => r.pricing));
+    const subtotal = sumLineTotals(
+      lineResults.map((r) => ({
+        amount: r.total,
+        discount: 0,
+        base: r.total,
+        tax: 0,
+        total: r.total,
+        discountApplied: false,
+      }))
+    );
 
     if (subtotal <= 0) {
       return NextResponse.json(
@@ -246,6 +276,8 @@ export async function POST(
           data: {
             confirmedQuantity: { increment: movedQty },
             storeName: finalStoreName ?? item.storeName ?? null,
+            // Confirmar es lo que marca la línea como comprada.
+            isPurchased: true,
           },
         });
 
@@ -261,7 +293,7 @@ export async function POST(
           if (!exists) pantryItemId = null;
         }
         if (!pantryItemId) {
-          const match = await findPantryItemByName(userId, item.name, item.unit || "unit");
+          const match = await findPantryItemByName(tx, userId, item.name, item.unit || "unit");
           pantryItemId = match?.id ?? null;
         }
 
@@ -281,6 +313,9 @@ export async function POST(
               purchasePrice: itemPrice || null,
               minStock: minMode && movedQty > 0 ? movedQty : null,
               multiplyQuantity: item.multiplyQuantity ?? true,
+              // La unidad de cobro viaja con el producto: sin ella, la próxima
+              // lista generada desde la nevera volvería a inflar el precio.
+              priceUnitId: item.priceUnitId ?? null,
             },
           });
           pantryItemId = created.id;
@@ -299,6 +334,7 @@ export async function POST(
           unit: item.unit || "unit",
           note: finalStoreName ? `Compra en ${finalStoreName}` : "Compra",
           sourceListId: list.id,
+          sourceItemId: item.id,
           sourceStore: finalStoreName ?? null,
           unitPrice: itemPrice || null,
           confirmationId: confirmation.id,
@@ -364,7 +400,12 @@ export async function POST(
       });
 
       return { updatedList, confirmation, allSettled };
-    });
+    },
+    // Un timeout explícito evita que la petición se quede colgada sin límite si
+    // el pool está saturado. El valor por defecto de Prisma (5 s) es corto para
+    // una compra con muchas líneas, y quedarse esperando es peor que fallar.
+    { timeout: 20_000, maxWait: 10_000 }
+    );
 
     // ── Finanzas, FUERA de la transacción ──
     // `createPantryFinanceEntry` abre su propia transacción (crea el movimiento,
@@ -379,10 +420,17 @@ export async function POST(
         amount: totalAmount,
         description,
         date: purchaseDate,
-        sourceId: list.id,
+        // Cada confirmación es su propio movimiento financiero: se enlaza por
+        // `confirmation.id`, no por la lista, para poder reversar una parcial
+        // sin tocar las demás tiendas.
+        sourceId: result.confirmation.id,
         paymentType,
-        accountId: paymentType === "account" ? accountId! : null,
-        subAccountId: paymentType === "account" ? subAccountId : null,
+        // Con tarjeta, `accountId`/`subAccountId` significan **desde qué cuenta
+        // se pagará la TC** (igual que en Transporte). Antes se enviaban en
+        // `null` y la cuota quedaba "sin cuenta": el gasto aparecía, pero no
+        // había de dónde cobrarlo después.
+        accountId: accountId ?? null,
+        subAccountId: subAccountId ?? null,
         debtId: paymentType === "credit_card" ? debtId! : null,
         installmentCount,
         notes: `Despensa: ${description}`,

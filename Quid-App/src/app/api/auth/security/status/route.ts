@@ -32,12 +32,15 @@ export async function GET(request: Request) {
     const pinEnabled = settings?.pinEnabled ?? false;
     const biometricEnabled = settings?.biometricEnabled ?? false;
     const lockOnResume = settings?.lockOnResume ?? true;
+    // Minutos de gracia antes de volver a pedir desbloqueo al regresar a la app.
+    const lockGraceMinutes = settings?.lockGraceMinutes ?? 15;
     const hasCredentials = credentials.length > 0;
 
     return NextResponse.json({
       pinEnabled,
       biometricEnabled,
       lockOnResume,
+      lockGraceMinutes,
       hasCredentials,
       credentials: credentials.map((c) => ({
         id: c.id,

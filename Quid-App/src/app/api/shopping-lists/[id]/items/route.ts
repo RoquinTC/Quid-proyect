@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { validateBody, shoppingItemCreateSchema } from "@/lib/validations";
+import { normalizeName } from "@/lib/pantry/names";
+import { defaultMultiplyQuantity } from "@/lib/pantry/units";
 
 export async function GET(
   _req: NextRequest,
@@ -54,7 +56,7 @@ export async function POST(
       if (err instanceof Response) return err;
       return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
-    const { name, quantity, unit, estimatedPrice, pantryItemId } = body;
+    const { name, quantity, unit, estimatedPrice, pantryItemId, priceUnitId, multiplyQuantity, isStock, discountType, discountValue } = body;
 
     if (!name) {
       return NextResponse.json({ error: "El nombre es requerido" }, { status: 400 });
@@ -72,6 +74,7 @@ export async function POST(
       data: {
         shoppingListId: id,
         name,
+        nameNormalized: normalizeName(name),
         quantity: quantity || 1,
         unit: unit || "unit",
         estimatedPrice: estimatedPrice || null,
@@ -79,6 +82,12 @@ export async function POST(
         isPurchased: false,
         checked: false,
         pantryItemId: pantryItemId || null,
+        // La unidad de precio es lo que evita que 250 g a 38.000/kg sumen 9,5 M.
+        priceUnitId: priceUnitId || null,
+        multiplyQuantity: multiplyQuantity ?? defaultMultiplyQuantity(unit || "unit"),
+        isStock: isStock ?? false,
+        discountType: discountType ?? null,
+        discountValue: discountValue ?? null,
       },
     });
 

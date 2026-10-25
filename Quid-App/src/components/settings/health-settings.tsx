@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,11 +28,29 @@ import {
   Stethoscope,
   ShieldCheck,
   EyeOff,
+  Music,
+  Play,
+  Smartphone,
 } from "lucide-react";
+import { isNativeAndroid } from "@/lib/native/biometric";
+import {
+  BUNDLED_SOUNDS,
+  DEFAULT_SOUND_CHOICE,
+  SILENT_CHOICE,
+  SYSTEM_DEFAULT_CHOICE,
+  type DoseSoundChoice,
+  getDoseSoundChoice,
+  pickSoundFromDevice,
+  previewSound,
+  saveDoseSound,
+} from "@/lib/native/notification-sound";
+import { syncDoseNotifications, type ReminderDose } from "@/lib/native/medication-reminders";
 
 type HealthSettingsProps = {
   setResetResult: (msg: string | null) => void;
 };
+
+const PICK_FROM_DEVICE = "__pick__";
 
 export function HealthSettings({ setResetResult }: HealthSettingsProps) {
   const [medAlerts, setMedAlerts] = useState(true);
@@ -40,6 +58,68 @@ export function HealthSettings({ setResetResult }: HealthSettingsProps) {
   const [minDoseWarning, setMinDoseWarning] = useState("5");
   const [calendarSync, setCalendarSync] = useState(false);
   const [clinicPrivacy, setClinicPrivacy] = useState(true);
+
+  const [soundChoice, setSoundChoice] = useState<DoseSoundChoice>(DEFAULT_SOUND_CHOICE);
+  const [soundBusy, setSoundBusy] = useState(false);
+
+  useEffect(() => {
+    setSoundChoice(getDoseSoundChoice());
+  }, []);
+
+  /** Reprograma los avisos abiertos para que usen el canal nuevo. */
+  const rescheduleReminders = async () => {
+    if (!isNativeAndroid()) return;
+    try {
+      const response = await fetch("/api/doses?status=pending,snoozed");
+      if (!response.ok) return;
+      const payload = (await response.json()) as { items?: ReminderDose[] };
+      if (payload.items?.length) await syncDoseNotifications(payload.items);
+    } catch {
+      // Sin red: el próximo arranque de la app reprograma.
+    }
+  };
+
+  const applyChoice = async (choice: DoseSoundChoice) => {
+    setSoundBusy(true);
+    try {
+      await saveDoseSound(choice);
+      setSoundChoice(choice);
+      await rescheduleReminders();
+      setResetResult(`Sonido de recordatorio: ${choice.title}`);
+    } catch {
+      setResetResult("No se pudo cambiar el sonido");
+    } finally {
+      setSoundBusy(false);
+      setTimeout(() => setResetResult(null), 2500);
+    }
+  };
+
+  const onSelectSound = async (value: string) => {
+    if (value === PICK_FROM_DEVICE) {
+      try {
+        const picked = await pickSoundFromDevice();
+        if (picked) await applyChoice(picked);
+      } catch {
+        setResetResult("Selección de sonido cancelada");
+        setTimeout(() => setResetResult(null), 2000);
+      }
+      return;
+    }
+
+    const preset = [...BUNDLED_SOUNDS, SYSTEM_DEFAULT_CHOICE, SILENT_CHOICE].find(
+      (item) => item.key === value,
+    );
+    if (preset) await applyChoice(preset);
+  };
+
+  const previewCurrent = async () => {
+    setSoundBusy(true);
+    try {
+      await previewSound(soundChoice);
+    } finally {
+      setTimeout(() => setSoundBusy(false), 600);
+    }
+  };
 
   const saveSettings = () => {
     setResetResult("Ajustes de salud guardados");
@@ -97,6 +177,65 @@ export function HealthSettings({ setResetResult }: HealthSettingsProps) {
                         <SelectItem value="20">20 dosis</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Sonido de la notificación */}
+                  <div className="pt-3 border-t border-gray-100 dark:border-gray-700/50 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="size-8 rounded-lg bg-violet-50 dark:bg-violet-950/20 flex items-center justify-center shrink-0">
+                          <Music className="size-3.5 text-violet-600 dark:text-violet-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-gray-900 dark:text-white">Sonido del recordatorio</p>
+                          <p className="text-xs text-gray-400 truncate">{soundChoice.title}</p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-xl text-xs shrink-0"
+                        onClick={previewCurrent}
+                        disabled={soundBusy || soundChoice.source === "silent"}
+                      >
+                        <Play className="size-3.5 mr-1" />
+                        Probar
+                      </Button>
+                    </div>
+
+                    <Select value={soundChoice.key} onValueChange={onSelectSound} disabled={soundBusy}>
+                      <SelectTrigger className="w-full rounded-xl text-xs h-9">
+                        <SelectValue placeholder="Elegir sonido" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BUNDLED_SOUNDS.map((option) => (
+                          <SelectItem key={option.key} value={option.key}>
+                            {option.title}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value={SYSTEM_DEFAULT_CHOICE.key}>
+                          {SYSTEM_DEFAULT_CHOICE.title}
+                        </SelectItem>
+                        <SelectItem value={SILENT_CHOICE.key}>{SILENT_CHOICE.title}</SelectItem>
+                        {isNativeAndroid() && (
+                          <SelectItem value={PICK_FROM_DEVICE}>
+                            Elegir del teléfono…
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+
+                    {soundChoice.source === "custom" && (
+                      <Badge variant="secondary" className="text-[10px] gap-1">
+                        <Smartphone className="size-3" />
+                        Sonido elegido del dispositivo
+                      </Badge>
+                    )}
+                    <p className="text-[11px] text-gray-400 leading-snug">
+                      El sonido se guarda en este teléfono. Los avisos ya programados se
+                      actualizan al cambiar la opción.
+                    </p>
                   </div>
                 </CardContent>
               </Card>

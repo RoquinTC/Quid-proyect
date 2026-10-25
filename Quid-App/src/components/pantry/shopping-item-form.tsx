@@ -21,19 +21,26 @@ import {
 import { apiFetch } from "@/lib/api";
 import type { PantryItem } from "@/lib/types";
 import { Loader2, Sparkles } from "lucide-react";
+import { UNITS } from "@/lib/pantry/units";
+import { lineTotal } from "@/lib/pantry/line-total";
 
-const unitOptions = [
-  { value: "unit", label: "Unidad" },
-  { value: "lb", label: "Libra" },
-  { value: "kg", label: "Kilogramo" },
-  { value: "g", label: "Gramo" },
-  { value: "oz", label: "Onza" },
-  { value: "ml", label: "Mililitro" },
-  { value: "l", label: "Litro" },
-  { value: "package", label: "Paquete" },
-  { value: "bottle", label: "Botella" },
-  { value: "can", label: "Lata" },
-];
+/** Etiquetas largas para los selectores de unidad. */
+const unitLabels: Record<string, string> = {
+  unit: "Unidad",
+  dozen: "Docena",
+  kg: "Kilogramo",
+  g: "Gramo",
+  lb: "Libra",
+  oz: "Onza",
+  l: "Litro",
+  ml: "Mililitro",
+  gal: "Galón",
+  package: "Paquete",
+  box: "Caja",
+  bottle: "Botella",
+  can: "Lata",
+  bag: "Bolsa",
+};
 
 interface ShoppingItemFormProps {
   open: boolean;
@@ -48,6 +55,12 @@ export function ShoppingItemForm({ open, onOpenChange, listId, onSuccess }: Shop
   const [quantity, setQuantity] = useState("1");
   const [unit, setUnit] = useState("unit");
   const [estimatedPrice, setEstimatedPrice] = useState("");
+  // Unidad en que la tienda cobra. Clave para carnes, verduras y frutas: se
+  // compra en gramos o libras, pero el precio está por kilo.
+  const [priceUnitId, setPriceUnitId] = useState<string>("");
+  // Descuento de la tienda en ESTE producto (no el total de la compra).
+  const [discountType, setDiscountType] = useState<"FIXED" | "PERCENT">("FIXED");
+  const [discountValue, setDiscountValue] = useState("");
   const [pantryItemId, setPantryItemId] = useState<string | null>(null);
   const [lowStockItems, setLowStockItems] = useState<PantryItem[]>([]);
 
@@ -63,9 +76,23 @@ export function ShoppingItemForm({ open, onOpenChange, listId, onSuccess }: Shop
     setName(item.name);
     setUnit(item.unit);
     setPantryItemId(item.id);
+    // Hereda la unidad de precio del producto de la nevera: si el café se
+    // cobra por kilo, la línea debe saberlo.
+    setPriceUnitId(item.priceUnitId || "");
+    if (item.purchasePrice != null) setEstimatedPrice(String(item.purchasePrice));
     const needed = item.minStock !== null && item.minStock !== undefined ? item.minStock - item.quantity : 1;
-    setQuantity(Math.max(needed, 1).toString());
+    setQuantity(Math.max(needed, 0.001).toString());
   };
+
+  /** Importe real de esta línea, con la conversión aplicada. */
+  const previewTotal = lineTotal({
+    quantity: parseFloat(quantity) || 0,
+    price: estimatedPrice ? parseFloat(estimatedPrice) : 0,
+    unit,
+    priceUnitId: priceUnitId || null,
+    discountType: discountValue ? discountType : null,
+    discountValue: discountValue ? parseFloat(discountValue) : null,
+  });
 
   const handleSubmit = async () => {
     if (!name) return;
@@ -78,6 +105,9 @@ export function ShoppingItemForm({ open, onOpenChange, listId, onSuccess }: Shop
           quantity: parseFloat(quantity) || 1,
           unit,
           estimatedPrice: estimatedPrice ? parseFloat(estimatedPrice) : null,
+          priceUnitId: priceUnitId || null,
+    discountType: discountValue ? discountType : null,
+    discountValue: discountValue ? parseFloat(discountValue) : null,
           pantryItemId,
         }),
       });
@@ -96,6 +126,8 @@ export function ShoppingItemForm({ open, onOpenChange, listId, onSuccess }: Shop
     setQuantity("1");
     setUnit("unit");
     setEstimatedPrice("");
+    setPriceUnitId("");
+    setDiscountValue("");
     setPantryItemId(null);
   };
 
@@ -161,8 +193,45 @@ export function ShoppingItemForm({ open, onOpenChange, listId, onSuccess }: Shop
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {unitOptions.map((u) => (
-                    <SelectItem key={u.value} value={u.value}>
+                  {UNITS.map((u) => (
+                    <SelectItem key={u.code} value={u.code}>
+                      {unitLabels[u.code] ?? u.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Precio + unidad de cobro.
+              El caso de carnes, verduras y frutas: compras 800 g de pollo pero
+              el precio está por kilo. Sin la unidad de cobro la línea multiplica
+              800 × 14.200 y el total sale 800 veces más grande. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="itemPrice">Precio</Label>
+              <CurrencyInput
+                id="itemPrice"
+                showPrefix
+                placeholder="0"
+                value={estimatedPrice}
+                onChange={(v) => setEstimatedPrice(v)}
+                className="rounded-xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Cobran por</Label>
+              <Select
+                value={priceUnitId || "__same__"}
+                onValueChange={(v) => setPriceUnitId(v === "__same__" ? "" : v)}
+              >
+                <SelectTrigger className="rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__same__">Igual a la unidad</SelectItem>
+                  {UNITS.map((u) => (
+                    <SelectItem key={u.code} value={u.code}>
                       {u.label}
                     </SelectItem>
                   ))}
@@ -171,18 +240,49 @@ export function ShoppingItemForm({ open, onOpenChange, listId, onSuccess }: Shop
             </div>
           </div>
 
-          {/* Estimated Price */}
+          {/* Descuento de la tienda en ESTE producto. El descuento por el total
+              de la compra se pone al confirmar, no aquí. */}
           <div className="space-y-2">
-            <Label htmlFor="itemPrice">Precio estimado (opcional)</Label>
-            <CurrencyInput
-              id="itemPrice"
-              showPrefix
-              placeholder="0"
-              value={estimatedPrice}
-              onChange={(v) => setEstimatedPrice(v)}
-              className="rounded-xl"
-            />
+            <Label>Descuento de este producto (opcional)</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                placeholder="0"
+                value={discountValue}
+                onChange={(e) => setDiscountValue(e.target.value)}
+                className="rounded-xl text-right"
+              />
+              <Select
+                value={discountType}
+                onValueChange={(v) => setDiscountType(v as "FIXED" | "PERCENT")}
+              >
+                <SelectTrigger className="w-[118px] rounded-xl text-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FIXED">Monto $</SelectItem>
+                  <SelectItem value="PERCENT">Porcentaje %</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          {/* Importe real calculado con la conversión: es el número que verá
+              la lista, así que se muestra aquí para que no haya sorpresas. */}
+          {previewTotal > 0 && (
+            <div className="flex items-center justify-between rounded-xl bg-amber-50 px-3 py-2 dark:bg-amber-900/10">
+              <span className="text-[11.5px] text-amber-700 dark:text-amber-400">
+                {priceUnitId && priceUnitId !== unit
+                  ? `${quantity} ${unit} a ${estimatedPrice}/${priceUnitId}`
+                  : `${quantity} ${unit}`}
+              </span>
+              <span className="text-[13.5px] font-bold tabular-nums text-gray-900 dark:text-white">
+                ${previewTotal.toLocaleString("es-CO")}
+              </span>
+            </div>
+          )}
 
           {/* Submit */}
           <Button

@@ -10,6 +10,7 @@ import { CalendarDays, ChevronRight, ClipboardList, FileClock, Pill, ShieldAlert
 import type { LucideIcon } from "lucide-react";
 import type { MedicalAppointment, MedicalOrder, Medication } from "@/lib/types";
 import { WaterWidget } from "@/components/health/hydration/water-widget";
+import { AdherenceCard } from "@/components/health/adherence-card";
 
 interface Authorization {
   id: string;
@@ -192,6 +193,9 @@ export function HealthSummaryView() {
 
       {/* Hydration Widget */}
       <WaterWidget />
+
+      {/* Adherencia al tratamiento (tomas confirmadas vs omitidas) */}
+      <AdherenceCard />
 
       <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800">
         <CardContent className="p-4">

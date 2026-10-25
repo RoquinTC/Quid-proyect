@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { App } from "@capacitor/app";
+import { isNativeAndroid } from "@/lib/native/biometric";
 import { useTheme } from "next-themes";
 import { apiFetch } from "@/lib/api";
 import {
@@ -134,6 +136,15 @@ export function GeneralSettings({
   const push = usePushNotifications();
   const [themeConfig, setThemeConfig] = useState<ThemeConfig>(() => readStoredTheme());
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  // Versión real del APK instalado (solo en Android).
+  const [nativeAppInfo, setNativeAppInfo] = useState<{ version: string; build: string } | null>(null);
+  useEffect(() => {
+    if (!isNativeAndroid()) return;
+    App.getInfo()
+      .then((info) => setNativeAppInfo({ version: info.version, build: info.build }))
+      .catch(() => setNativeAppInfo(null));
+  }, []);
+
 
   // Dialog states
   const [showResetFinanceDialog, setShowResetFinanceDialog] = useState(false);
@@ -662,7 +673,12 @@ export function GeneralSettings({
           </div>
           <p className="text-[11px] font-semibold text-gray-900 dark:text-white">Quid</p>
           <div className="flex flex-col gap-0.5">
-            <p className="text-[11px] text-gray-400">Versión {appVersion}</p>
+            <p className="text-[11px] text-gray-400">Versión web {appVersion}</p>
+            {nativeAppInfo && (
+              <p className="text-[11px] text-gray-400">
+                APK {nativeAppInfo.version} ({nativeAppInfo.build})
+              </p>
+            )}
             <Button
               type="button"
               variant="outline"

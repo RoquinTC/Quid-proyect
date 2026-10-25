@@ -82,6 +82,7 @@ export interface ShoppingListItem {
   discountType?: "FIXED" | "PERCENT" | null;
   discountValue?: number | null;
   multiplyQuantity?: boolean;
+  priceUnitId?: string | null;
   isStock?: boolean;
   sortOrder?: number;
   createdAt?: string;

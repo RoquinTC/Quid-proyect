@@ -74,6 +74,11 @@ const modelPlan = [
   ["healthCondition", "HealthCondition"],
   ["dietaryProfile", "DietaryProfile"],
   ["healthAiReport", "HealthAiReport"],
+  // Tomas (adherencia) y libro mayor de stock. Van DESPUÉS de medication/user
+  // porque los referencian.
+  ["doseOccurrence", "DoseOccurrence"],
+  ["medicationStockEntry", "MedicationStockEntry"],
+  ["doseOverride", "DoseOverride"],
   ["fuelPrice", "FuelPrice"],
   ["category", "Category"],
   // Faltaba: reglas automáticas de categorización.
@@ -233,3 +238,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+

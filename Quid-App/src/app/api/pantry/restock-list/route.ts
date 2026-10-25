@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
             unit: item.unit,
             estimatedPrice: price?.price ?? null,
             multiplyQuantity: item.multiplyQuantity,
+            priceUnitId: item.priceUnitId ?? null,
             // Ya está en la nevera: no se declara como stock de nuevo.
             isStock: false,
             sortOrder: order++,

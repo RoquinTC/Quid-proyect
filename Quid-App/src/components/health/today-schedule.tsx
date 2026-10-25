@@ -1,92 +1,109 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { apiFetch, getColombiaTodayString } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Pill, Check } from "lucide-react";
-import { isMedicationDueToday } from "@/lib/medication-schedule";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Clock, Pill, Check, X, AlarmClock, MoreVertical, RotateCcw, Loader2, CalendarCog } from "lucide-react";
 import type { Medication } from "@/lib/types";
+import { DoseOverrideDialog } from "@/components/health/dose-override-dialog";
 
 interface TodayScheduleProps {
-  medications: Medication[];
+  /** Se mantiene por compatibilidad; la lista ahora la manda el servidor. */
+  medications?: Medication[];
   onTaken?: () => void;
 }
 
-interface ScheduleItem {
-  time: string;
-  hour: number;
-  minute: number;
-  medication: Medication;
-  taken: boolean;
+interface DoseItem {
+  id: string;
+  medicationId: string;
+  medicationName: string;
+  dosage: string | null;
+  scheduledAt: string;
+  /** Día lógico al que pertenece la toma ("YYYY-MM-DD"). */
+  scheduledDay: string;
+  status: string;
+  plannedDose: number;
+  actualDose: number | null;
+  snoozeCount: number;
+  lowStock: boolean;
+  stockUnit: string | null;
 }
 
-export function TodaySchedule({ medications, onTaken }: TodayScheduleProps) {
-  const [takenMeds, setTakenMeds] = useState<Set<string>>(() => {
+const TIME_FORMAT = new Intl.DateTimeFormat("es-CO", {
+  timeZone: "America/Bogota",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+/** Estados que ya no admiten acción. */
+const CLOSED = new Set(["taken", "skipped", "missed", "dismissed"]);
+
+export function TodaySchedule({ onTaken }: TodayScheduleProps) {
+  const [items, setItems] = useState<DoseItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [overrideTarget, setOverrideTarget] = useState<DoseItem | null>(null);
+
+  const load = useCallback(async () => {
     try {
-      const stored = localStorage.getItem("takenMeds");
-      if (stored) {
-        const parsed = JSON.parse(stored) as { date: string; meds: string[] };
-        const today = getColombiaTodayString();
-        if (parsed.date === today) return new Set(parsed.meds);
-      }
-      return new Set();
-    } catch {
-      return new Set();
+      const data = (await apiFetch("/api/doses")) as { items?: DoseItem[] };
+      setItems(data.items ?? []);
+    } catch (error) {
+      console.error("Error cargando las tomas del día:", error);
+    } finally {
+      setLoading(false);
     }
-  });
+  }, []);
 
-  const schedule: ScheduleItem[] = medications
-    .filter((m) => m.reminderTimes && isMedicationDueToday(m))
-    .flatMap((med) => {
-      try {
-        const times: string[] = JSON.parse(med.reminderTimes!);
-        return times.map((time) => {
-          const [h, m] = time.split(":").map(Number);
-          return { time, hour: h, minute: m, medication: med, taken: takenMeds.has(`${med.id}-${time}`) };
-        });
-      } catch {
-        return [];
-      }
-    })
-    .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-  const toggleTaken = async (medId: string, time: string) => {
-    const key = `${medId}-${time}`;
-    const wasTaken = takenMeds.has(key);
-    setTakenMeds((prev) => {
-      const next = new Set(prev);
-      if (wasTaken) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      // Persist
-      const today = getColombiaTodayString();
-      localStorage.setItem("takenMeds", JSON.stringify({ date: today, meds: Array.from(next) }));
-      return next;
-    });
-
-    if (!wasTaken) {
-      try {
-        await apiFetch(`/api/medications/${medId}/take`, {
-          method: "POST",
-          body: JSON.stringify({ takenAt: new Date().toISOString() }),
-        });
-        onTaken?.();
-      } catch (error) {
-        console.error("Error registering medication dose:", error);
-      }
+  const runAction = async (
+    id: string,
+    action: "take" | "skip" | "snooze" | "reopen",
+    minutes?: number,
+  ) => {
+    setBusyId(id);
+    try {
+      await apiFetch(`/api/doses/${id}/action`, {
+        method: "POST",
+        body: JSON.stringify(minutes ? { action, minutes } : { action }),
+      });
+      await load();
+      if (action === "take" || action === "reopen") onTaken?.();
+    } catch (error) {
+      console.error("Error aplicando la acción:", error);
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const takenCount = schedule.filter((s) => takenMeds.has(`${s.medication.id}-${s.time}`)).length;
-  const totalDoses = schedule.length;
+  const takenCount = items.filter((item) => item.status === "taken").length;
+  const totalDoses = items.length;
 
-  if (schedule.length === 0) return null;
+  if (loading) {
+    return (
+      <Card className="border-0 shadow-md rounded-2xl">
+        <CardContent className="p-4 flex items-center gap-2 text-sm text-gray-400">
+          <Loader2 className="size-4 animate-spin" />
+          Cargando las tomas de hoy…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (items.length === 0) return null;
 
   return (
     <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
@@ -96,62 +113,176 @@ export function TodaySchedule({ medications, onTaken }: TodayScheduleProps) {
             <Clock className="size-4 text-rose-500" />
             <span className="text-sm font-semibold text-gray-900 dark:text-white">Hoy</span>
           </div>
-          <Badge variant="secondary" className="text-xs bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+          <Badge
+            variant="secondary"
+            className="text-xs bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+          >
             {takenCount}/{totalDoses} tomados
           </Badge>
         </div>
 
         <div className="space-y-1.5">
-          {schedule.map((item, idx) => {
-            const isPast = item.hour * 60 + item.minute <= currentMinutes;
-            const isTaken = takenMeds.has(`${item.medication.id}-${item.time}`);
-            const isNext = !isTaken && isPast;
+          {items.map((item) => {
+            const date = new Date(item.scheduledAt);
+            const time = TIME_FORMAT.format(date);
+            const hour = Number(time.slice(0, 2));
+            const isTaken = item.status === "taken";
+            const isSkipped = item.status === "skipped";
+            const isMissed = item.status === "missed";
+            const isPending = !CLOSED.has(item.status);
+            const isBusy = busyId === item.id;
 
-            const timeColor = item.hour >= 6 && item.hour < 12
-              ? "text-amber-600 bg-amber-50 dark:bg-amber-900/20"
-              : item.hour >= 12 && item.hour < 18
-              ? "text-sky-600 bg-sky-50 dark:bg-sky-900/20"
-              : "text-purple-600 bg-purple-50 dark:bg-purple-900/20";
+            const timeColor =
+              hour >= 6 && hour < 12
+                ? "text-amber-600 bg-amber-50 dark:bg-amber-900/20"
+                : hour >= 12 && hour < 18
+                  ? "text-sky-600 bg-sky-50 dark:bg-sky-900/20"
+                  : "text-purple-600 bg-purple-50 dark:bg-purple-900/20";
 
             return (
-              <button
-                key={`${item.medication.id}-${item.time}-${idx}`}
-                onClick={() => toggleTaken(item.medication.id, item.time)}
-                className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              <div
+                key={item.id}
+                className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
-                {/* Time */}
-                <div className={`px-2 py-1 rounded-lg text-xs font-medium ${timeColor} min-w-[52px] text-center`}>
-                  {item.time}
+                <div
+                  className={`px-2 py-1 rounded-lg text-xs font-medium ${timeColor} min-w-[52px] text-center`}
+                >
+                  {time}
                 </div>
 
-                {/* Timeline dot */}
-                <div className={`size-2.5 rounded-full shrink-0 ${
-                  isTaken ? "bg-emerald-500" : isNext ? "bg-rose-500 animate-pulse" : "bg-gray-300"
-                }`} />
+                <div
+                  className={`size-2.5 rounded-full shrink-0 ${
+                    isTaken
+                      ? "bg-emerald-500"
+                      : isSkipped
+                        ? "bg-amber-400"
+                        : isMissed
+                          ? "bg-gray-400"
+                          : "bg-rose-500 animate-pulse"
+                  }`}
+                />
 
-                {/* Medication name */}
-                <div className="flex-1 text-left">
-                  <span className={`text-sm ${isTaken ? "line-through text-gray-400" : "text-gray-900 dark:text-white"}`}>
-                    {item.medication.name}
+                <button
+                  type="button"
+                  onClick={() => isPending && !isBusy && runAction(item.id, "take")}
+                  className="flex-1 text-left min-w-0"
+                  aria-label={`Marcar ${item.medicationName} como tomada`}
+                >
+                  <span
+                    className={`text-sm ${
+                      isTaken
+                        ? "line-through text-gray-400"
+                        : isSkipped
+                          ? "text-amber-700 dark:text-amber-400"
+                          : "text-gray-900 dark:text-white"
+                    }`}
+                  >
+                    {item.medicationName}
                   </span>
-                  {item.medication.dosage && (
-                    <span className="text-xs text-gray-400 ml-1.5">{item.medication.dosage}</span>
+                  {item.dosage && (
+                    <span className="text-xs text-gray-400 ml-1.5">{item.dosage}</span>
+                  )}
+                  {item.snoozeCount > 0 && isPending && (
+                    <span className="text-[10px] text-gray-400 ml-1.5">
+                      pospuesta {item.snoozeCount}×
+                    </span>
+                  )}
+                  {item.lowStock && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 ml-1.5">
+                      · stock bajo
+                    </span>
+                  )}
+                </button>
+
+                <div
+                  className={`size-6 rounded-full flex items-center justify-center shrink-0 ${
+                    isTaken
+                      ? "bg-emerald-500 text-white"
+                      : isSkipped
+                        ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30"
+                        : isMissed
+                          ? "bg-gray-200 text-gray-500 dark:bg-gray-700"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-400"
+                  }`}
+                >
+                  {isBusy ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : isTaken ? (
+                    <Check className="size-3.5" />
+                  ) : isSkipped ? (
+                    <X className="size-3.5" />
+                  ) : isMissed ? (
+                    <AlarmClock className="size-3.5" />
+                  ) : (
+                    <Pill className="size-3.5" />
                   )}
                 </div>
 
-                {/* Check */}
-                <div className={`size-6 rounded-full flex items-center justify-center shrink-0 ${
-                  isTaken
-                    ? "bg-emerald-500 text-white"
-                    : "bg-gray-100 dark:bg-gray-700 text-gray-400"
-                }`}>
-                  <Check className="size-3.5" />
-                </div>
-              </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="size-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      aria-label="Más acciones"
+                    >
+                      <MoreVertical className="size-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuLabel className="text-xs">
+                      {time} · {item.medicationName}
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {isPending ? (
+                      <>
+                        <DropdownMenuItem onClick={() => runAction(item.id, "take")}>
+                          <Check className="size-3.5 mr-2" />
+                          Tomar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => runAction(item.id, "snooze", 5)}>
+                          <AlarmClock className="size-3.5 mr-2" />
+                          En 5 minutos
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => runAction(item.id, "skip")}>
+                          <X className="size-3.5 mr-2" />
+                          Omitir
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setOverrideTarget(item)}>
+                          <CalendarCog className="size-3.5 mr-2" />
+                          Ajustar solo este día…
+                        </DropdownMenuItem>
+                      </>
+                    ) : (
+                      <DropdownMenuItem onClick={() => runAction(item.id, "reopen")}>
+                        <RotateCcw className="size-3.5 mr-2" />
+                        Reabrir toma
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             );
           })}
         </div>
       </CardContent>
+
+      {overrideTarget && (
+        <DoseOverrideDialog
+          open={Boolean(overrideTarget)}
+          onOpenChange={(open) => {
+            if (!open) setOverrideTarget(null);
+          }}
+          medicationId={overrideTarget.medicationId}
+          medicationName={overrideTarget.medicationName}
+          day={overrideTarget.scheduledDay}
+          defaultTime={TIME_FORMAT.format(new Date(overrideTarget.scheduledAt))}
+          onSaved={() => {
+            setOverrideTarget(null);
+            void load();
+          }}
+        />
+      )}
     </Card>
   );
 }

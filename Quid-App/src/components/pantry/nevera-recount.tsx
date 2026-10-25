@@ -21,6 +21,8 @@ interface NeveraRecountProps {
   onOpenChange: (open: boolean) => void;
   items: PantryItem[];
   onQuickAdjust: (item: PantryItem, delta: number) => void;
+  /** Fija la cantidad exacta (campo editable de cada fila). */
+  onSetQuantity: (item: PantryItem, quantity: number) => void;
   onEdit: (item: PantryItem) => void;
 }
 
@@ -40,6 +42,7 @@ export function NeveraRecount({
   onOpenChange,
   items,
   onQuickAdjust,
+  onSetQuantity,
   onEdit,
 }: NeveraRecountProps) {
   const [search, setSearch] = useState("");
@@ -114,6 +117,10 @@ export function NeveraRecount({
                         item={item}
                         onEdit={() => onEdit(item)}
                         onQuickAdjust={(delta) => handleAdjust(item, delta)}
+                        onSetQuantity={(next) => {
+                          setTouched((n) => n + 1);
+                          onSetQuantity(item, next);
+                        }}
                         recountMode
                       />
                     ))}

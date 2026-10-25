@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Timer } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -217,6 +218,29 @@ export function SecuritySettings() {
     }
   }, [userId, fetchStatus]);
 
+  /** Minutos de gracia antes de volver a pedir desbloqueo (-1 = nunca). */
+  const handleChangeGrace = useCallback(async (value: string) => {
+    const minutes = Number(value);
+    setSaving(true);
+    try {
+      await apiFetch("/api/settings", {
+        method: "PUT",
+        headers: userId ? { "x-user-id": userId } : undefined,
+        body: JSON.stringify({ lockGraceMinutes: minutes }),
+      });
+      fetchStatus();
+      toast.success(
+        minutes < 0
+          ? "La app no volverá a pedir desbloqueo al cambiar de aplicación"
+          : `Pedirá desbloqueo después de ${minutes} min fuera`,
+      );
+    } catch {
+      toast.error("Error al actualizar configuración");
+    } finally {
+      setSaving(false);
+    }
+  }, [userId, fetchStatus]);
+
   // ── Toggle PIN ──
 
   const handleTogglePin = useCallback((enabled: boolean) => {
@@ -417,6 +441,33 @@ export function SecuritySettings() {
               disabled={saving || (!status.pinEnabled && !status.biometricEnabled)}
             />
           </div>
+
+          {/* Tiempo de gracia: cuánto puede estar la app en segundo plano sin bloquearse */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="size-8 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                <Timer className="size-3.5 text-sky-600 dark:text-sky-400" />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-900 dark:text-white">Tiempo antes de bloquear</p>
+                <p className="text-xs text-gray-400">Cuánto puede pasar fuera de la app</p>
+              </div>
+            </div>
+            <select
+              className="h-8 rounded-xl border border-gray-200 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-800"
+              value={String(status.lockGraceMinutes ?? 15)}
+              onChange={(event) => void handleChangeGrace(event.target.value)}
+              disabled={saving || !status.lockOnResume}
+            >
+              <option value="1">1 minuto</option>
+              <option value="5">5 minutos</option>
+              <option value="15">15 minutos</option>
+              <option value="30">30 minutos</option>
+              <option value="60">1 hora</option>
+              <option value="240">4 horas</option>
+              <option value="-1">Nunca</option>
+            </select>
+          </div>
         </CardContent>
       </Card>
 
@@ -526,3 +577,4 @@ export function SecuritySettings() {
     </div>
   );
 }
+

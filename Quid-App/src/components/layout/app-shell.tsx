@@ -76,9 +76,14 @@ export function AppShell() {
   useEffect(() => {
     if (!session?.user?.id) return;
 
-    if (!hasInitialDeepLinkRef.current) {
-      setActiveModule("dashboard");
-    }
+    // Se lee la URL **en el efecto**, no en un ref de render: el efecto del
+    // deep link corre antes (es hijo) y puede haber cambiado la URL. Antes el
+    // ref se calculaba en un render temprano y, si la URL ya estaba limpia,
+    // el módulo pedido se perdía y caía en Dashboard.
+    const requested = new URLSearchParams(window.location.search).get("module");
+    if (requested) return;
+
+    setActiveModule("dashboard");
   }, [session?.user?.id, setActiveModule]);
 
   // Track whether the user just logged in (vs page reload with existing session)
@@ -121,70 +126,110 @@ export function AppShell() {
     }
   }, [isOffline, session, manuallyUnlocked]);
 
-  // Check if security is enabled and lock the app accordingly
-  const pinEnabled = session?.user?.pinEnabled;
-  const biometricEnabled = session?.user?.biometricEnabled;
-  const securityEnabled = pinEnabled || biometricEnabled;
+  // Estado de seguridad autoritativo (el del JWT se queda viejo: si activas el
+  // PIN después de iniciar sesión, el token sigue diciendo pinEnabled=false).
+  const [securityStatus, setSecurityStatus] = useState<{
+    pinEnabled: boolean;
+    biometricEnabled: boolean;
+    lockOnResume: boolean;
+    lockGraceMinutes: number;
+  } | null>(null);
+
+  const sessionPinEnabled = session?.user?.pinEnabled;
+  const sessionBiometricEnabled = session?.user?.biometricEnabled;
+  const pinEnabled = securityStatus?.pinEnabled ?? sessionPinEnabled;
+  const biometricEnabled = securityStatus?.biometricEnabled ?? sessionBiometricEnabled;
+  const securityEnabled = Boolean(pinEnabled || biometricEnabled);
 
   // Compute locked state: if security is enabled and user hasn't unlocked yet, lock
   const shouldLock = securityEnabled && !manuallyUnlocked;
 
-  // Listen for visibility change events to lock on resume
-  // Grace period: when the app goes to background, start a short timer.
-  // Quick app switching should not destroy an in-progress form.
-  const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lockTriggeredRef = useRef(false);
+  /**
+   * Bloqueo al volver a la app.
+   *
+   * Se compara una marca de tiempo en vez de usar `setTimeout`: cuando Android
+   * suspende el WebView, los temporizadores de JS **no corren**, así que un
+   * "temporizador de gracia" nunca vence y la app se queda abierta (o bloquea
+   * en el momento equivocado). Con marcas de tiempo el cálculo es correcto sin
+   * importar cuánto tiempo estuvo el proceso pausado.
+   */
+  const hiddenAtRef = useRef<number | null>(null);
+  const securityStatusRef = useRef(securityStatus);
+
+  useEffect(() => {
+    securityStatusRef.current = securityStatus;
+  }, [securityStatus]);
+
+  // Carga el estado real de seguridad y lo cachea para poder decidir sin red.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await apiFetch<{
+          pinEnabled?: boolean;
+          biometricEnabled?: boolean;
+          lockOnResume?: boolean;
+          lockGraceMinutes?: number;
+        }>("/api/auth/security/status");
+        if (cancelled) return;
+        const next = {
+          pinEnabled: Boolean(status.pinEnabled),
+          biometricEnabled: Boolean(status.biometricEnabled),
+          lockOnResume: status.lockOnResume ?? true,
+          lockGraceMinutes: status.lockGraceMinutes ?? 15,
+        };
+        setSecurityStatus(next);
+        try {
+          localStorage.setItem("quid:security-status", JSON.stringify(next));
+        } catch {
+          // Sin almacenamiento: se usa el valor de esta sesión.
+        }
+      } catch {
+        if (cancelled) return;
+        // Sin red: se usa la última copia conocida.
+        try {
+          const cached = localStorage.getItem("quid:security-status");
+          if (cached) setSecurityStatus(JSON.parse(cached));
+        } catch {
+          // Sin caché: se cae a los datos del JWT.
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!securityEnabled) return;
 
-    const LOCK_DELAY_MS = 5 * 60_000; // 5 minutes before locking on resume
+    const handleVisibilityChange = () => {
+      const config = securityStatusRef.current;
+      const graceMinutes = config?.lockGraceMinutes ?? 15;
 
-    const handleVisibilityChange = async () => {
       if (document.hidden) {
-        // App going to background — start grace timer
-        lockTriggeredRef.current = false;
-        lockTimerRef.current = setTimeout(() => {
-          // Grace period expired — mark that we should lock on next foreground
-          lockTriggeredRef.current = true;
-        }, LOCK_DELAY_MS);
-      } else {
-        // App coming back to foreground
-        // Cancel any pending lock timer
-        if (lockTimerRef.current) {
-          clearTimeout(lockTimerRef.current);
-          lockTimerRef.current = null;
-        }
-
-        // Only lock if the grace period fully expired while in background
-        if (!lockTriggeredRef.current) return;
-
-        lockTriggeredRef.current = false;
-
-        // Check lockOnResume setting (only when online)
-        if (!isOffline) {
-          try {
-            const settings = await apiFetch<{ lockOnResume?: boolean; pinEnabled?: boolean; biometricEnabled?: boolean }>("/api/settings");
-            if (settings.lockOnResume && (settings.pinEnabled || settings.biometricEnabled)) {
-              setManuallyUnlocked(false);
-            }
-          } catch {
-            // If we can't check settings, lock anyway for safety
-            setManuallyUnlocked(false);
-          }
-        }
+        hiddenAtRef.current = Date.now();
+        return;
       }
+
+      const hiddenAt = hiddenAtRef.current;
+      hiddenAtRef.current = null;
+      if (hiddenAt == null) return;
+
+      // "Nunca" se representa con -1: no se bloquea al volver.
+      if (graceMinutes < 0) return;
+      if (Date.now() - hiddenAt < graceMinutes * 60_000) return;
+      if (config && !config.lockOnResume) return;
+
+      setManuallyUnlocked(false);
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      if (lockTimerRef.current) {
-        clearTimeout(lockTimerRef.current);
-        lockTimerRef.current = null;
-      }
     };
-  }, [securityEnabled, isOffline]);
+  }, [securityEnabled]);
 
   // Load user's saved theme from DB on login (only when online)
   useEffect(() => {

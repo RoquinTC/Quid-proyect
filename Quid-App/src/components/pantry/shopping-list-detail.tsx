@@ -41,7 +41,9 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { PaymentMethodSelector } from "@/components/transport/payment-method-selector";
+import { lineTotal } from "@/lib/pantry/line-total";
 import type { Account, Debt, ShoppingListItem, ShoppingList, HealthProfile } from "@/lib/types";
 
 const unitLabels: Record<string, string> = {
@@ -89,19 +91,32 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   const [stockSelection, setStockSelection] = useState<Record<string, number>>({});
   const [stockEditing, setStockEditing] = useState<Record<string, boolean>>({});
   const [minMode, setMinMode] = useState(true);
+  // Descuento TOTAL de esta confirmación: el que da la tienda por la compra
+  // completa (monto fijo o porcentaje), no por producto.
+  const [totalDiscountType, setTotalDiscountType] = useState<"FIXED" | "PERCENT">("FIXED");
+  const [totalDiscountValue, setTotalDiscountValue] = useState("");
 
-  const fetchList = useCallback(async () => {
-    setLoading(true);
+  /**
+   * Recarga la lista.
+   *
+   * `silent` es la clave para que la pantalla NO parpadee: en modo silencioso
+   * no toca `loading`, así que no se reemplaza la vista por el skeleton. Solo
+   * la primera carga (y un cambio de lista) muestran el skeleton.
+   */
+  const fetchList = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const data = await apiFetch<ShoppingList>(`/api/shopping-lists/${listId}`);
       setList(data);
     } catch (error) {
       console.error("Error fetching list:", error);
-      setError(error instanceof Error ? error.message : "No pudimos cargar la lista.");
-      setList(null);
+      if (!silent) {
+        setError(error instanceof Error ? error.message : "No pudimos cargar la lista.");
+        setList(null);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [listId]);
 
@@ -114,6 +129,14 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
     }
   }, []);
 
+  /**
+   * Opciones de pago. Se ejecuta UNA vez: los defaults se resuelven con
+   * `setState` funcional para no depender de `paymentAccountId`/`paymentDebtId`.
+   *
+   * Antes dependía de ambos, y como el efecto de montaje la tenía en sus
+   * dependencias, elegir una cuenta o una tarjeta volvía a disparar el efecto
+   * completo —incluido `fetchList()` con skeleton— y la pantalla parpadeaba.
+   */
   const fetchFinanceOptions = useCallback(async () => {
     try {
       const [accountsData, debtsData] = await Promise.all([
@@ -122,57 +145,70 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
       ]);
       setAccounts(accountsData);
       setDebts(debtsData.filter((debt) => debt.type !== "loan"));
-      if (!paymentAccountId && accountsData.length > 0) setPaymentAccountId(accountsData[0].id);
-      if (!paymentDebtId) {
+      setPaymentAccountId((prev) => prev || (accountsData[0]?.id ?? ""));
+      setPaymentDebtId((prev) => {
+        if (prev) return prev;
         const firstCreditCard = debtsData.find((debt) => debt.type !== "loan");
-        if (firstCreditCard) setPaymentDebtId(firstCreditCard.id);
-      }
+        return firstCreditCard?.id ?? "";
+      });
     } catch (error) {
       console.error("Error fetching finance options:", error);
     }
-  }, [paymentAccountId, paymentDebtId]);
+  }, []);
 
-  useEffect(() => {
-    fetchList();
-    fetchProfiles();
-    fetchFinanceOptions();
-  }, [fetchList, fetchProfiles, fetchFinanceOptions]);
+  // Efectos separados a propósito: así un cambio de pago no recarga la lista.
+  useEffect(() => { fetchList(); }, [fetchList]);
+  useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
+  useEffect(() => { fetchFinanceOptions(); }, [fetchFinanceOptions]);
 
-  const handleToggleChecked = async (itemId: string, checked: boolean) => {
-    try {
-      await apiFetch(`/api/shopping-lists/${listId}/items/${itemId}`, {
-        method: "PUT",
-        body: JSON.stringify({ checked }),
-      });
-      await fetchList();
-    } catch (error) {
-      console.error("Error toggling item:", error);
-    }
-  };
+  /**
+   * Actualización optimista de una línea.
+   *
+   * El estado local se toca PRIMERO para que la fila responda al instante; la
+   * petición va detrás y solo si falla se revierte. Después se reconcilia en
+   * silencio. Así marcar algo se siente como mover la fila, no como recargar.
+   */
+  const patchItemOptimistically = useCallback(
+    async (
+      itemId: string,
+      patch: Partial<Pick<ShoppingListItem, "isPurchased" | "checked" | "actualPrice" | "addedToCart">>
+    ) => {
+      setList((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.map((item) =>
+                item.id === itemId ? { ...item, ...patch } : item
+              ),
+            }
+          : prev
+      );
+      try {
+        await apiFetch(`/api/shopping-lists/${listId}/items/${itemId}`, {
+          method: "PUT",
+          body: JSON.stringify(patch),
+        });
+        fetchList(true);
+      } catch (error) {
+        console.error("Error updating item:", error);
+        fetchList(true); // revierte al estado del servidor
+      }
+    },
+    [listId, fetchList]
+  );
 
-  const handleTogglePurchased = async (itemId: string, isPurchased: boolean) => {
-    try {
-      await apiFetch(`/api/shopping-lists/${listId}/items/${itemId}`, {
-        method: "PUT",
-        body: JSON.stringify({ isPurchased }),
-      });
-      await fetchList();
-    } catch (error) {
-      console.error("Error toggling purchased:", error);
-    }
-  };
+  const handleToggleChecked = (itemId: string, checked: boolean) =>
+    patchItemOptimistically(itemId, { checked });
 
-  const handleUpdateActualPrice = async (itemId: string, actualPrice: number) => {
-    try {
-      await apiFetch(`/api/shopping-lists/${listId}/items/${itemId}`, {
-        method: "PUT",
-        body: JSON.stringify({ actualPrice }),
-      });
-      await fetchList();
-    } catch (error) {
-      console.error("Error updating price:", error);
-    }
-  };
+  const handleTogglePurchased = (itemId: string, isPurchased: boolean) =>
+    patchItemOptimistically(itemId, { isPurchased });
+
+  /** Marca/desmarca "va al carrito". El carrito es su propio total. */
+  const handleToggleCart = (itemId: string, addedToCart: boolean) =>
+    patchItemOptimistically(itemId, { addedToCart });
+
+  const handleUpdateActualPrice = (itemId: string, actualPrice: number) =>
+    patchItemOptimistically(itemId, { actualPrice });
 
   const handleDeleteItem = async (itemId: string) => {
     try {
@@ -215,8 +251,15 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
     setConfirmDescription("");
     const sel: Record<string, number> = {};
     (list?.items || [])
-      .filter((i) => i.isPurchased)
-      .forEach((i) => { sel[i.id] = i.quantity; });
+      // Se confirma lo que está EN EL CARRITO: ese es el total que ves.
+      .filter((i) => i.addedToCart || i.isPurchased)
+      // Solo lo que falta: si ya confirmaste 3 de 5, esta compra propone 2.
+      // Antes proponía la cantidad completa y el servidor la recortaba en
+      // silencio, que es confuso al revisar el ticket.
+      .forEach((i) => {
+        const remaining = Math.max(0, i.quantity - (i.confirmedQuantity ?? 0));
+        if (remaining > 1e-9) sel[i.id] = remaining;
+      });
     setStockSelection(sel);
     setStockEditing({});
     setMinMode(true);
@@ -240,8 +283,8 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
         method: "POST",
         body: JSON.stringify({
           paymentType,
-          accountId: paymentType === "account" ? paymentAccountId : null,
-          subAccountId: paymentType === "account" ? paymentSubAccountId || null : null,
+          accountId: paymentAccountId || null,
+          subAccountId: paymentSubAccountId || null,
           debtId: paymentType === "credit_card" ? paymentDebtId : null,
           installmentCount: paymentType === "credit_card" ? Number(installmentCount) || 1 : null,
           purchaseDate: purchaseDate ? `${purchaseDate}T12:00:00.000Z` : null,
@@ -253,10 +296,16 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
             quantity,
           })),
           minMode,
+          totalDiscountType: totalDiscountValue ? totalDiscountType : null,
+          totalDiscountValue: totalDiscountValue ? parseFloat(totalDiscountValue) : null,
         }),
       });
       setConfirmDialogOpen(false);
-      await fetchList();
+      // Silencioso: el diálogo ya se cerró y la lista se reconcilia en su
+      // sitio. Antes esto ponía `loading`, la pantalla se iba a skeleton y
+      // volvía — el parpadeo al confirmar.
+      fetchList(true);
+      toast.success("Compra registrada");
     } catch (error) {
       console.error("Error confirming list:", error);
       setConfirmError(error instanceof Error ? error.message : "No se pudo confirmar la compra.");
@@ -309,20 +358,48 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   };
 
   const totalEstimated = list.items.reduce(
-    (sum, i) => sum + (i.estimatedPrice || 0) * i.quantity,
+    (sum, i) =>
+      sum +
+      lineTotal({
+        quantity: i.quantity,
+        price: i.estimatedPrice,
+        unit: i.unit,
+        priceUnitId: i.priceUnitId,
+        multiplyQuantity: i.multiplyQuantity,
+      }),
     0
   );
   const totalActual = list.items.reduce(
-    (sum, i) => sum + ((i.actualPrice ?? i.estimatedPrice) ?? 0) * i.quantity,
+    (sum, i) =>
+      sum +
+      lineTotal({
+        quantity: i.quantity,
+        price: i.actualPrice ?? i.estimatedPrice,
+        unit: i.unit,
+        priceUnitId: i.priceUnitId,
+        multiplyQuantity: i.multiplyQuantity,
+      }),
     0
   );
-  const purchasedCount = list.items.filter((i) => i.isPurchased).length;
+  const cartCount = list.items.filter((i) => i.addedToCart).length;
   const selectedAccount = accounts.find((account) => account.id === paymentAccountId);
   const availableSubAccounts = selectedAccount?.subAccounts || [];
+
+  /**
+   * ¿La lista está en fase de compra?
+   *
+   * `partially_confirmed` cuenta como fase de compra: es una lista a la que le
+   * falta parte del mercado y debe poder seguir marcándose en otra tienda. Antes
+   * se quedaba sin checkbox ni botón de confirmar, así que la compra parcial
+   * dejaba la lista inservible.
+   */
+  const isShoppingPhase =
+    list.status === "shopping" || list.status === "partially_confirmed";
 
   const statusLabel: Record<string, string> = {
     draft: "Borrador",
     shopping: "Comprando",
+    partially_confirmed: "Compra parcial",
     verified: "Verificando",
     completed: "Completada",
   };
@@ -330,6 +407,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
   const statusColor: Record<string, string> = {
     draft: "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300",
     shopping: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    partially_confirmed: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
     verified: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
     completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   };
@@ -348,7 +426,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
               {statusLabel[list.status]}
             </Badge>
             <span className="text-xs text-gray-400">
-              {list.items.length} items · {purchasedCount} comprados
+              {list.items.length} productos · {cartCount} en el carrito
             </span>
           </div>
           {(list.storeName || list.purpose || list.purchaseDate) && (
@@ -391,124 +469,136 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
         </div>
       )}
 
-      {/* Progress bar for shopping phase */}
-      {list.status === "shopping" && (
-        <Card className="border-0 shadow-sm rounded-xl bg-white dark:bg-gray-800">
-          <CardContent className="p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-500">Progreso de compra</span>
-              <span className="text-xs font-medium text-gray-900 dark:text-white">
-                {purchasedCount}/{list.items.length}
-              </span>
-            </div>
-            <div className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
-                initial={{ width: 0 }}
-                animate={{
-                  width: `${list.items.length > 0 ? (purchasedCount / list.items.length) * 100 : 0}%`,
-                }}
-                transition={{ duration: 0.5 }}
-              />
-            </div>
-          </CardContent>
-        </Card>
+      {/* Progress bar for shopping phase — inline, not a card: el progreso no
+          merece 60px de alto cuando lo que importa es la lista. */}
+      {isShoppingPhase && (
+        <div className="flex items-center gap-2">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500"
+              initial={{ width: 0 }}
+              animate={{
+                width: `${list.items.length > 0 ? (cartCount / list.items.length) * 100 : 0}%`,
+              }}
+              transition={{ duration: 0.4 }}
+            />
+          </div>
+          <span className="shrink-0 text-[11px] font-medium tabular-nums text-gray-500">
+            {cartCount}/{list.items.length}
+          </span>
+        </div>
       )}
 
-      {/* Items list */}
-      <div className="space-y-2">
-        {list.items.map((item) => (
-          <Card key={item.id} className="border-0 shadow-sm rounded-xl bg-white dark:bg-gray-800">
-            <CardContent className="p-3">
-              <div className="flex items-start gap-3">
-                {/* Checkbox */}
-                {list.status === "shopping" && (
-                  <Checkbox
-                    checked={item.isPurchased}
-                    onCheckedChange={(checked) =>
-                      handleTogglePurchased(item.id, checked as boolean)
-                    }
-                    className="mt-0.5"
-                  />
-                )}
-                {list.status === "verified" && (
-                  <Checkbox
-                    checked={item.checked}
-                    onCheckedChange={(checked) =>
-                      handleToggleChecked(item.id, checked as boolean)
-                    }
-                    className="mt-0.5"
-                  />
-                )}
-                {list.status === "completed" && (
-                  <CheckCircle2 className="size-4 text-green-500 mt-0.5 shrink-0" />
-                )}
+      {/* Items list — UNA sola tarjeta con filas compactas.
+          Antes cada producto era una Card con sombra y padding propio: ~90px por
+          fila, así que en un monitor solo entraban tres. Ahora la fila mide ~46px
+          y el contenedor aporta la única elevación. */}
+      <div className="overflow-hidden rounded-xl bg-white shadow-sm dark:bg-gray-800">
+        {[...list.items]
+          // Lo marcado baja: primero lo pendiente, y `sortOrder` mantiene el
+          // orden manual dentro de cada grupo. El sort es estable, así que no
+          // bailan entre sí cuando cambian de grupo.
+          .sort((a, b) => {
+            const aDone = isShoppingPhase ? a.isPurchased : a.checked;
+            const bDone = isShoppingPhase ? b.isPurchased : b.checked;
+            if (aDone !== bDone) return aDone ? 1 : -1;
+            return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+          })
+          .map((item) => (
+          <motion.div
+            layout
+            transition={{ type: "spring", stiffness: 420, damping: 38 }}
+            key={item.id}
+            className="flex items-center gap-2.5 border-b border-gray-50 px-3 py-2 last:border-0 dark:border-gray-700/50"
+          >
+            {isShoppingPhase && (
+              <Checkbox
+                checked={!!item.addedToCart}
+                onCheckedChange={(checked) =>
+                  handleToggleCart(item.id, checked as boolean)
+                }
+                className="size-4 shrink-0"
+              />
+            )}
+            {list.status === "verified" && (
+              <Checkbox
+                checked={item.checked}
+                onCheckedChange={(checked) =>
+                  handleToggleChecked(item.id, checked as boolean)
+                }
+                className="size-4 shrink-0"
+              />
+            )}
+            {list.status === "completed" && (
+              <CheckCircle2 className="size-4 shrink-0 text-green-500" />
+            )}
 
-                {/* Item details */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-sm font-medium ${
-                        item.isPurchased && list.status !== "draft"
-                          ? "line-through text-gray-400 dark:text-gray-500"
-                          : "text-gray-900 dark:text-white"
-                      }`}
-                    >
-                      {item.name}
-                    </span>
-                  </div>
-                  <span className="text-xs text-gray-500">
-                    {item.quantity} {unitLabels[item.unit] || item.unit}
-                  </span>
-                </div>
+            <div className="min-w-0 flex-1">
+              <p
+                className={`truncate text-[13px] font-medium leading-tight ${
+                  item.isPurchased && list.status !== "draft"
+                    ? "text-gray-400 line-through dark:text-gray-500"
+                    : "text-gray-900 dark:text-white"
+                }`}
+              >
+                {item.name}
+              </p>
+              <p className="text-[10.5px] leading-tight text-gray-400">
+                {item.quantity} {unitLabels[item.unit] || item.unit}
+              </p>
+            </div>
 
-                {/* Price section */}
-                <div className="text-right shrink-0">
-                  {list.status === "verified" ? (
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-gray-400">$</span>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="0"
-                        value={item.actualPrice ?? ""}
-                        onChange={(e) =>
-                          handleUpdateActualPrice(
-                            item.id,
-                            parseFloat(e.target.value) || 0
-                          )
-                        }
-                        className="w-20 h-7 text-xs rounded-lg text-right"
-                      />
-                    </div>
-                  ) : (
-                    <>
-                      {item.estimatedPrice && (
-                        <span className="text-xs text-gray-500">
-                          ~{formatCurrency(item.estimatedPrice * item.quantity)}
-                        </span>
-                      )}
-                      {item.actualPrice && list.status === "completed" && (
-                        <span className="text-xs font-medium text-gray-900 dark:text-white">
-                          {formatCurrency(item.actualPrice * item.quantity)}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* Delete button for draft */}
-                {list.status === "draft" && (
-                  <button
-                    onClick={() => handleDeleteItem(item.id)}
-                    className="size-6 rounded-md flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                )}
+            {/* Precio: en modo verificación se edita en línea; si no, se lee. */}
+            {list.status === "verified" ? (
+              <div className="flex shrink-0 items-center gap-0.5">
+                <span className="text-[11px] text-gray-400">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0"
+                  value={item.actualPrice ?? ""}
+                  onChange={(e) =>
+                    handleUpdateActualPrice(item.id, parseFloat(e.target.value) || 0)
+                  }
+                  className="h-6 w-16 rounded-md px-1 text-right text-[12px]"
+                />
               </div>
-            </CardContent>
-          </Card>
+            ) : (
+              <span className="shrink-0 text-right text-[12.5px] font-semibold tabular-nums text-gray-900 dark:text-white">
+                {item.actualPrice && list.status === "completed"
+                  ? formatCurrency(
+                      lineTotal({
+                        quantity: item.quantity,
+                        price: item.actualPrice,
+                        unit: item.unit,
+                        priceUnitId: item.priceUnitId,
+                        multiplyQuantity: item.multiplyQuantity,
+                      })
+                    )
+                  : item.estimatedPrice
+                    ? `~${formatCurrency(
+                        lineTotal({
+                          quantity: item.quantity,
+                          price: item.estimatedPrice,
+                          unit: item.unit,
+                          priceUnitId: item.priceUnitId,
+                          multiplyQuantity: item.multiplyQuantity,
+                        })
+                      )}`
+                    : ""}
+              </span>
+            )}
+
+            {list.status === "draft" && (
+              <button
+                onClick={() => handleDeleteItem(item.id)}
+                className="flex size-6 shrink-0 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                aria-label={`Eliminar ${item.name}`}
+              >
+                <Trash2 className="size-3" />
+              </button>
+            )}
+          </motion.div>
         ))}
       </div>
 
@@ -520,39 +610,46 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
         </div>
       )}
 
-      {/* Totals */}
+      {/* Totales — dos cifras en una sola línea, como el papelito:
+          lo que vale la lista y lo que llevas en el carrito. */}
       {list.items.length > 0 && (
-        <Card className="border-0 shadow-sm rounded-xl bg-amber-50 dark:bg-amber-900/10">
-          <CardContent className="p-4 space-y-2">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-500">Estimado</span>
-              <span className="text-gray-900 dark:text-white">{formatCurrency(totalEstimated)}</span>
-            </div>
-            {(list.status === "verified" || list.status === "completed") && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Real</span>
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  {formatCurrency(totalActual)}
-                </span>
-              </div>
-            )}
-            {totalActual !== totalEstimated && (list.status === "verified" || list.status === "completed") && (
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500">Diferencia</span>
-                <span
-                  className={
-                    totalActual > totalEstimated
-                      ? "text-red-500"
-                      : "text-green-500"
-                  }
-                >
-                  {totalActual > totalEstimated ? "+" : ""}
-                  {formatCurrency(totalActual - totalEstimated)}
-                </span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="flex items-stretch justify-between rounded-xl bg-amber-50 px-3 py-2 dark:bg-amber-900/10">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70 dark:text-amber-400/70">
+              Lista
+            </p>
+            <p className="truncate text-[14px] font-bold tabular-nums text-gray-900 dark:text-white">
+              {formatCurrency(
+                list.status === "verified" || list.status === "completed"
+                  ? totalActual
+                  : totalEstimated
+              )}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-amber-700/70 dark:text-amber-400/70">
+              Carrito
+            </p>
+            <p className="truncate text-[14px] font-bold tabular-nums text-gray-900 dark:text-white">
+              {formatCurrency(
+                list.items
+                  .filter((i) => i.addedToCart)
+                  .reduce(
+                    (sum, i) =>
+                      sum +
+                      lineTotal({
+                        quantity: i.quantity,
+                        price: i.actualPrice ?? i.estimatedPrice,
+                        unit: i.unit,
+                        priceUnitId: i.priceUnitId,
+                        multiplyQuantity: i.multiplyQuantity,
+                      }),
+                    0
+                  )
+              )}
+            </p>
+          </div>
+        </div>
       )}
 
       {/* Action buttons based on status */}
@@ -584,7 +681,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
           </>
         )}
 
-        {list.status === "shopping" && (
+        {isShoppingPhase && (
           <>
             <Button
               onClick={() => setShowItemForm(true)}
@@ -802,6 +899,39 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
                 setConfirmError(null);
               }}
             />
+
+            {/* Descuento TOTAL de la compra (por tienda): el que aplican por el
+                total, no por producto. Fijo o porcentual. */}
+            <div className="space-y-1.5 rounded-xl bg-amber-50/60 p-3 dark:bg-amber-900/10">
+              <Label className="text-[12.5px]">Descuento total de esta compra</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  placeholder="0"
+                  value={totalDiscountValue}
+                  onChange={(e) => setTotalDiscountValue(e.target.value)}
+                  className="h-9 rounded-lg text-right"
+                />
+                <Select
+                  value={totalDiscountType}
+                  onValueChange={(v) => setTotalDiscountType(v as "FIXED" | "PERCENT")}
+                >
+                  <SelectTrigger className="h-9 w-[110px] rounded-lg text-[12px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FIXED">Monto $</SelectItem>
+                    <SelectItem value="PERCENT">Porcentaje %</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-[10.5px] leading-tight text-gray-500">
+                Si te descontaron por el total de la compra, ponlo aquí. Cada tienda
+                lleva su propio descuento.
+              </p>
+            </div>
 
             {confirmError && (
               <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">

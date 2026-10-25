@@ -126,6 +126,13 @@ function getRelatedTables(url: string, tableName: string | null): string[] {
 
   if (tableName === "medications") {
     related.add("medicalOrders");
+    // Confirmar una toma descuenta stock y crea/cierra una ocurrencia.
+    related.add("doseOccurrences");
+  }
+
+  // Cualquier cambio en las tomas afecta la adherencia y el stock mostrado.
+  if (tableName === "doseOccurrences") {
+    related.add("medications");
   }
 
   if (tableName === "transactions") {
@@ -191,6 +198,7 @@ function getTableFromUrl(url: string): string | null {
     "/api/payroll": "payrollGroups",
     "/api/vehicles": "vehicles",
     "/api/medications": "medications",
+    "/api/doses": "doseOccurrences",
     "/api/appointments": "appointments",
     "/api/medical-orders": "medicalOrders",
     "/api/pantry": "pantryItems",

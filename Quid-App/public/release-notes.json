@@ -1,6 +1,19 @@
 {
-  "currentVersion": "1.0.20",
+  "currentVersion": "1.0.22",
   "releases": [
+    {
+      "version": "1.0.22",
+      "date": "2026-10-25",
+      "title": "Quid 1.0.22",
+      "changes": [
+        "Recordatorios de medicación como notificaciones reales del teléfono, con botones Tomar, Omitir y En 5 minutos.",
+        "Sonido de notificación configurable, incluido el selector de tonos del teléfono.",
+        "Lista del día con estados reales (tomada, omitida, no registrada) y ajustes para un solo día.",
+        "Tarjeta de adherencia con racha, omisión vs olvido y retraso medio.",
+        "Pantalla sin conexión con reintento, en lugar de pantalla en blanco al arrancar.",
+        "El bloqueo al volver a la app respeta un tiempo de gracia configurable y el PIN ya está disponible junto a la huella."
+      ]
+    },
     {
       "version": "1.0.20",
       "date": "2026-07-25",

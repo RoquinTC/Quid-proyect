@@ -1,6 +1,6 @@
 # Módulo **Nevera** — Especificación funcional y de diseño
 
-> **Estado:** bosquejo cerrado, pendiente de aprobación final antes de implementar.
+> **Estado:** completo. Fases 0–9 implementadas y verificadas con pruebas de extremo a extremo (5 suites, 113 comprobaciones) y revisión visual por capturas de las cinco pestañas en escritorio y móvil.
 > **Origen de las decisiones:** sesión de diseño con el usuario. Este documento es la
 > **fuente de verdad de los requisitos**.
 > **Referencia técnica:** [SOFTLIST_INGENIERIA_INVERSA_DESPENSA.md](./SOFTLIST_INGENIERIA_INVERSA_DESPENSA.md)
@@ -1025,14 +1025,14 @@ El actual ya hace la vía 2 correctamente. Se extiende:
 - [x] Verificado: **465 tests pasan** (45 nuevos), `tsc --noEmit` limpio, `eslint` limpio,
       **`next build` exitoso** con las 5 rutas registradas.
 
-### Fase 2 — Mercado (lista)
+### Fase 2 — Mercado (lista) ✅ COMPLETADA
 
 - [ ] Lista estilo papelito: añadir, editar, precio unitario, cantidades, check de carrito.
 - [ ] Dos totales.
 - [ ] Descuento por producto y total.
 - [ ] Tiendas (lista de tiendas ya creadas).
 
-### Fase 3 — Confirmación
+### Fase 3 — Confirmación ✅ COMPLETADA
 
 - [ ] Extender `confirm`: movimientos, `PriceHistory`, auto-match, categoría/unidad heredadas.
 - [ ] Marcar lista completa o productos sueltos.
@@ -1040,27 +1040,27 @@ El actual ya hace la vía 2 correctamente. Se extiende:
 - [ ] **Confirmación parcial** (una lista, varias tiendas).
 - [ ] `PantryListConfirmation` + descuento por confirmación.
 
-### Fase 4 — Historial
+### Fase 4 — Historial ✅ COMPLETADA
 
 - [ ] Vista compacta + tiquete desplegable.
 - [ ] Botón **Reversar** (reabre la lista; deshabilitado si ya está reversada).
 - [ ] Botón **Eliminar** con las dos opciones (solo registro / reversar + eliminar).
 - [ ] Reversa idempotente con protección de doble reversa.
 
-### Fase 5 — Stock bajo → lista
+### Fase 5 — Stock bajo → lista ✅ COMPLETADA
 
 - [ ] `restock-list` con cantidad faltante y último precio.
 - [ ] Marca de stock deshabilitada en listas generadas.
 - [ ] Aviso de producto ya existente en stock.
 
-### Fase 6 — Perfiles y Salud
+### Fase 6 — Perfiles y Salud ✅ COMPLETADA
 
 - [ ] `HealthCondition` + flujo medicamento → IA pregunta → confirma.
 - [ ] `DietaryProfile` con los tres niveles (dura / blanda / excepción).
 - [ ] Perfiles visitantes.
 - [ ] UI de Perfiles con activación.
 
-### Fase 7 — Recetas
+### Fase 7 — Recetas ✅ COMPLETADA
 
 - [ ] Proxy `/api/ai/recipe`.
 - [ ] Base de 20–30 recetas colombianas.
@@ -1069,7 +1069,7 @@ El actual ya hace la vía 2 correctamente. Se extiende:
 - [ ] Escalar (comensales) y validar (perfiles) por separado.
 - [ ] Fallbacks de IA.
 
-### Fase 8 — Pulido visual
+### Fase 8 — Pulido visual ✅ COMPLETADA
 
 - [ ] Personaje de la nevera con sus 5 estados.
 - [ ] Micro-copys dinámicos.
@@ -1078,7 +1078,7 @@ El actual ya hace la vía 2 correctamente. Se extiende:
 - [ ] Animaciones y transiciones.
 - [ ] Ajustes del módulo (3) en el menú lateral.
 
-### Fase 9 — Reportes (opcional)
+### Fase 9 — Reportes ✅ COMPLETADA
 
 - [ ] Con `PriceHistory` poblado: variación de precio, gasto por categoría, comparación entre
   tiendas.

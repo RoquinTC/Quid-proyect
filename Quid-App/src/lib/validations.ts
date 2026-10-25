@@ -743,7 +743,63 @@ export const medicationUpdateSchema = z.object({
 export const medicationTakeSchema = z.object({
   quantity: z.number().positive().optional().default(1),
   takenAt: isoDateString.optional(),
+  /** Si se envía, se aplica a esa toma concreta en vez de buscar la del día. */
+  occurrenceId: z.string().min(1).optional(),
 });
+
+// ============================================
+// SALUD — TOMAS (DoseOccurrence)
+// ============================================
+
+/** Acción sobre una toma. `snooze` usa minutos (una sola unidad en todo el módulo). */
+export const doseActionSchema = z.object({
+  action: z.enum(["take", "skip", "snooze", "dismiss", "reopen"]),
+  dose: z.number().positive().optional(),
+  /** Solo para `snooze`: 5, 10 o 15 minutos. */
+  minutes: z.number().int().positive().max(60).optional(),
+  note: z.string().max(500).nullable().optional(),
+  at: isoDateString.optional(),
+});
+
+/** Toma a demanda (PRN): "me tomé una porque me dolía". */
+export const doseAsNeededSchema = z.object({
+  medicationId: z.string().min(1),
+  dose: z.number().positive().optional(),
+  note: z.string().max(500).nullable().optional(),
+  at: isoDateString.optional(),
+});
+
+/** Reposición de stock de un medicamento. */
+export const medicationStockSchema = z.object({
+  amount: z.number().refine((value) => value !== 0, "La cantidad no puede ser 0"),
+  reason: z.enum(["refill", "adjustment", "order_delivery"]).optional(),
+  note: z.string().max(500).nullable().optional(),
+});
+
+/**
+ * Excepción puntual de un día: mover la hora, cambiar la dosis o saltar el día.
+ * No modifica la recurrencia del medicamento.
+ */
+export const doseOverrideSchema = z
+  .object({
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato esperado YYYY-MM-DD"),
+    type: z.enum(["modify_time", "modify_dose", "skip_day"]),
+    times: z
+      .array(z.string().regex(/^\d{1,2}:\d{2}$/, "Hora inválida (HH:mm)"))
+      .min(1)
+      .max(6)
+      .optional(),
+    dose: z.number().positive().max(100).optional(),
+    note: z.string().max(500).nullable().optional(),
+  })
+  .refine((value) => value.type !== "modify_time" || (value.times?.length ?? 0) > 0, {
+    message: "Para mover la hora hay que indicar al menos una",
+    path: ["times"],
+  })
+  .refine((value) => value.type !== "modify_dose" || value.dose != null, {
+    message: "Para cambiar la dosis hay que indicar el valor",
+    path: ["dose"],
+  });
 
 // ============================================
 // APPOINTMENTS
@@ -919,6 +975,13 @@ export const shoppingItemCreateSchema = z.object({
   unit: z.string().optional().default("unit"),
   estimatedPrice: z.number().nullable().optional(),
   pantryItemId: z.string().nullable().optional(),
+  /** Unidad en que la tienda cobra (250 g de algo que se cobra por kg). */
+  priceUnitId: z.string().nullable().optional(),
+  multiplyQuantity: z.boolean().optional(),
+  isStock: z.boolean().optional(),
+  /** Descuento de la tienda en ESTE producto (no el total de la compra). */
+  discountType: z.enum(["FIXED", "PERCENT"]).nullable().optional(),
+  discountValue: z.number().nonnegative().nullable().optional(),
 });
 
 export const shoppingItemUpdateSchema = z.object({
@@ -929,6 +992,10 @@ export const shoppingItemUpdateSchema = z.object({
   actualPrice: z.number().nullable().optional(),
   isPurchased: z.boolean().optional(),
   checked: z.boolean().optional(),
+  addedToCart: z.boolean().optional(),
+  priceUnitId: z.string().nullable().optional(),
+  multiplyQuantity: z.boolean().optional(),
+  isStock: z.boolean().optional(),
 });
 
 export const shoppingGenerateSchema = z.object({
@@ -959,6 +1026,9 @@ export const shoppingListConfirmSchema = z.object({
     )
     .optional(),
   minMode: z.boolean().optional(),
+  /** Descuento TOTAL de esta confirmación (por tienda), fijo o porcentual. */
+  totalDiscountType: z.enum(["FIXED", "PERCENT"]).nullable().optional(),
+  totalDiscountValue: z.number().nonnegative().nullable().optional(),
 });
 
 // ============================================
@@ -1028,6 +1098,10 @@ export const settingsUpdateSchema = z.object({
   lockOnResume: z.boolean().optional(),
   pinEnabled: z.boolean().optional(),
   biometricEnabled: z.boolean().optional(),
+  /** Minutos antes de volver a pedir desbloqueo. -1 = nunca bloquear al volver. */
+  lockGraceMinutes: z.number().int().min(-1).max(1440).optional(),
+  /** Hora (0-23) a la que empieza el día lógico del módulo Salud. */
+  therapyDayStartHour: z.number().int().min(0).max(23).optional(),
 });
 
 export const importSchema = z.object({

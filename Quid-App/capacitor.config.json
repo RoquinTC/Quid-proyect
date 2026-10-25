@@ -4,6 +4,7 @@
   "webDir": "out",
   "server": {
     "url": "https://quid.roquintc.app",
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "errorPath": "offline.html"
   }
 }

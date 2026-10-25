@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Refrigerator, ShoppingCart, ChefHat, ShieldCheck } from "lucide-react";
+import { Refrigerator, ShoppingCart, ChefHat, ShieldCheck, Receipt } from "lucide-react";
 import { useAppStore, type SidebarAction } from "@/lib/store";
 import { NeveraView } from "./nevera-view";
+import { NeveraHistory } from "./nevera-history";
+import { DietaryProfilesView } from "./dietary-profiles-view";
 import { ShoppingListsView } from "./shopping-lists-view";
 import { RecipesView } from "./recipes-view";
 import { HealthProfilesView } from "./health-profiles-view";
@@ -12,13 +14,14 @@ import { PantryItemForm } from "./pantry-item-form";
 import { ShoppingListForm } from "./shopping-list-form";
 import { HealthProfileForm } from "./health-profile-form";
 
-type PantryTab = "fridge" | "shopping" | "recipes" | "health";
+type PantryTab = "fridge" | "shopping" | "recipes" | "health" | "history";
 
 const tabs: { id: PantryTab; label: string; icon: typeof Refrigerator }[] = [
   { id: "fridge", label: "Nevera", icon: Refrigerator },
   { id: "shopping", label: "Mercado", icon: ShoppingCart },
   { id: "recipes", label: "Recetas", icon: ChefHat },
-  { id: "health", label: "Salud", icon: ShieldCheck },
+  { id: "health", label: "Perfiles", icon: ShieldCheck },
+  { id: "history", label: "Historial", icon: Receipt },
 ];
 
 export function PantryPage() {
@@ -101,6 +104,8 @@ export function PantryPage() {
         return <RecipesView />;
       case "health":
         return <HealthProfilesView />;
+      case "history":
+        return <NeveraHistory />;
       default:
         return <NeveraView />;
     }
@@ -109,7 +114,7 @@ export function PantryPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Sub-tab navigation */}
-      <div className="px-4 pt-3 pb-1">
+      <div className="mx-auto w-full max-w-3xl px-4 pt-3 pb-1">
         <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;

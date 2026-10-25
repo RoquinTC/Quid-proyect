@@ -72,6 +72,8 @@ export interface MovementInput {
   sourceListId?: string | null;
   sourceRecipeId?: string | null;
   sourceMealId?: string | null;
+  /** Línea de la lista que originó el movimiento (para reversar exacto). */
+  sourceItemId?: string | null;
   sourceStore?: string | null;
   unitPrice?: number | null;
   confirmationId?: string | null;
@@ -119,6 +121,7 @@ export async function applyMovement(
       sourceListId: input.sourceListId ?? null,
       sourceRecipeId: input.sourceRecipeId ?? null,
       sourceMealId: input.sourceMealId ?? null,
+      sourceItemId: input.sourceItemId ?? null,
       sourceStore: input.sourceStore ?? null,
       unitPrice: input.unitPrice ?? null,
       confirmationId: input.confirmationId ?? null,
@@ -142,8 +145,16 @@ export async function applyMovement(
  *
  * Usa la clave normalizada (la misma de la restricción única) y, si no hay
  * coincidencia exacta, un match por prefijo. Ver `names.ts`.
+ *
+ * IMPORTANTE — debe recibir el cliente de la transacción en curso:
+ * si se llama con el cliente global (`db`) desde dentro de un
+ * `db.$transaction`, la transacción retiene una conexión del pool y esta
+ * consulta pide otra. Con un pool de tamaño 1 (o saturado) eso **se bloquea
+ * hasta el timeout de la transacción**, que es exactamente el síntoma de
+ * "confirmo y se queda pegado".
  */
 export async function findPantryItemByName(
+  client: Prisma.TransactionClient | typeof db,
   userId: string,
   name: string,
   unit?: string | null
@@ -152,7 +163,7 @@ export async function findPantryItemByName(
   if (!nameNormalized) return null;
 
   // 1. Coincidencia exacta por clave normalizada.
-  const exact = await db.pantryItem.findFirst({
+  const exact = await client.pantryItem.findFirst({
     where: {
       userId,
       nameNormalized,
@@ -163,7 +174,7 @@ export async function findPantryItemByName(
   if (exact) return exact;
 
   // 2. Prefijo (el más corto, que es el más específico de los genéricos).
-  const candidates = await db.pantryItem.findMany({
+  const candidates = await client.pantryItem.findMany({
     where: {
       userId,
       nameNormalized: { startsWith: nameNormalized },

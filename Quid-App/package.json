@@ -1,6 +1,6 @@
 {
   "name": "quid-app",
-  "version": "0.2.0",
+  "version": "1.0.22",
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" next dev -p 3000",
@@ -17,7 +17,9 @@
     "db:postgres:push": "prisma db push --schema prisma/schema.postgres.prisma",
     "db:migrate:sqlite-to-postgres": "node scripts/migrate-sqlite-to-postgres.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "version:sync": "node scripts/sync-version.mjs",
+    "prebuild": "node scripts/sync-version.mjs --quiet"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.4",

@@ -48,6 +48,14 @@ export async function PUT(
     if (body.actualPrice !== undefined) updateData.actualPrice = body.actualPrice;
     if (body.isPurchased !== undefined) updateData.isPurchased = body.isPurchased;
     if (body.checked !== undefined) updateData.checked = body.checked;
+    // Unidad de cobro y multiplicador: sin estos dos, editar la cantidad o el
+    // precio de una línea cobrada por kilo vuelve a inflar el importe.
+    if (body.priceUnitId !== undefined) updateData.priceUnitId = body.priceUnitId;
+    if (body.multiplyQuantity !== undefined) updateData.multiplyQuantity = body.multiplyQuantity;
+    if (body.addedToCart !== undefined) updateData.addedToCart = body.addedToCart;
+    if (body.isStock !== undefined) updateData.isStock = body.isStock;
+    if (body.discountType !== undefined) updateData.discountType = body.discountType;
+    if (body.discountValue !== undefined) updateData.discountValue = body.discountValue;
 
     const item = await db.shoppingListItem.update({
       where: { id: itemId },

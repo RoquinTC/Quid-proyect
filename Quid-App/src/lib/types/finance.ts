@@ -440,6 +440,8 @@ export interface SecurityStatus {
   pinEnabled: boolean;
   biometricEnabled: boolean;
   lockOnResume: boolean;
+  /** Minutos antes de volver a pedir desbloqueo. -1 = nunca. */
+  lockGraceMinutes?: number;
   hasCredentials: boolean;
   credentials: AuthCredentialInfo[];
 }

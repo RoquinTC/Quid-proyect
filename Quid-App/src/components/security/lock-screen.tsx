@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAppSession } from "@/lib/use-app-session";
 import { PinPad } from "./pin-pad";
 import { BiometricPrompt } from "./biometric-prompt";
@@ -22,18 +22,69 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
   const [method, setMethod] = useState<AuthMethod>("choose");
   const [pinError, setPinError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  /**
+   * Flags del servidor. No se confía solo en el JWT: si el PIN se activó
+   * después de iniciar sesión, el token sigue diciendo `pinEnabled: false` y la
+   * pantalla terminaba ofreciendo únicamente huella.
+   */
+  const [status, setStatus] = useState<{ pinEnabled: boolean; biometricEnabled: boolean } | null>(
+    null,
+  );
 
-  const pinEnabled = session?.user?.pinEnabled ?? false;
-  const biometricEnabled = session?.user?.biometricEnabled ?? false;
+  const userId = session?.user?.id;
+  const hasCachedPin = Boolean(userId && getCachedPinHash(userId));
 
-  // Android opens the system biometric prompt first. Web keeps PIN as the fast
-  // default because its WebAuthn flow still needs a server challenge.
+  const pinEnabled =
+    status?.pinEnabled ?? (Boolean(session?.user?.pinEnabled) || hasCachedPin);
+  const biometricEnabled =
+    status?.biometricEnabled ?? Boolean(session?.user?.biometricEnabled);
+
   useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await apiFetch<{ pinEnabled?: boolean; biometricEnabled?: boolean }>(
+          "/api/auth/security/status",
+        );
+        if (cancelled) return;
+        setStatus({
+          pinEnabled: Boolean(data.pinEnabled),
+          biometricEnabled: Boolean(data.biometricEnabled),
+        });
+      } catch {
+        // Sin red: queda lo que diga el JWT o el hash cacheado.
+      }
+
+      // Deja el hash del PIN en caché para poder desbloquear sin conexión.
+      try {
+        const settings = await apiFetch<{ pinHash?: string }>("/api/settings");
+        if (!cancelled && settings.pinHash && userId) {
+          cacheOfflinePinHash(userId, settings.pinHash);
+        }
+      } catch {
+        // Sin red o sin permiso: no es crítico aquí.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  // La elección inicial se hace una sola vez; si el usuario cambia a PIN, no se
+  // vuelve a forzar huella cuando llega el estado del servidor.
+  const initialChoiceDone = useRef(false);
+  useEffect(() => {
+    if (initialChoiceDone.current) return;
+    if (!pinEnabled && !biometricEnabled) return;
+    initialChoiceDone.current = true;
+
+    // Android: la huella es el camino más rápido, pero el PIN siempre queda a un toque.
     if (biometricEnabled && isNativeAndroid()) {
       setMethod("biometric");
     } else if (pinEnabled) {
       setMethod("pin");
-    } else if (biometricEnabled) {
+    } else {
       setMethod("biometric");
     }
   }, [pinEnabled, biometricEnabled]);
@@ -70,7 +121,7 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
         setPinError(result.error || "PIN incorrecto");
       }
     } catch {
-      // Online verification failed — try offline verification with cached hash
+      // Sin red o sesión inválida: se intenta con el hash cacheado del PIN.
       if (userId) {
         const cachedHash = getCachedPinHash(userId);
         if (cachedHash) {
@@ -80,10 +131,18 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
               onUnlock();
               return;
             }
+            setPinError("PIN incorrecto");
+            return;
           } catch {
-            // bcrypt comparison failed
+            // La comparación falló: se informa abajo.
           }
         }
+        setPinError(
+          cachedHash
+            ? "No se pudo verificar el PIN. Intenta de nuevo."
+            : "Verifica el PIN una vez con internet para poder usarlo sin conexión.",
+        );
+        return;
       }
       setPinError("Sin conexión. PIN no disponible sin conexión.");
     } finally {

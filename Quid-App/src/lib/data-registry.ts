@@ -192,6 +192,9 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   { model: "HealthCondition", table: "health_conditions", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
   { model: "DietaryProfile", table: "dietary_profiles", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: true, parentRelation: "profile" },
   { model: "HealthAiReport", table: "health_ai_reports", scope: "user", strategy: "excluded", orphanAudit: false, hasUpdatedAt: true, reason: "Es salida regenerable de IA; se recalcula en vez de restaurarse." },
+  { model: "DoseOccurrence", table: "dose_occurrences", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  { model: "MedicationStockEntry", table: "medication_stock_entries", scope: "user", strategy: "both", orphanAudit: false, hasUpdatedAt: false },
+  { model: "DoseOverride", table: "dose_overrides", scope: "user", strategy: "both", orphanAudit: false, hasUpdatedAt: true },
 
   // ── Despensa ────────────────────────────────────────────────────────────
   { model: "PantryItem", table: "pantry_items", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
@@ -296,3 +299,4 @@ export function getOrphanAuditModels(): ModelRegistryEntry[] {
 export function getModelsWithoutUpdatedAt(): ModelRegistryEntry[] {
   return DATA_REGISTRY.filter((entry) => !entry.hasUpdatedAt);
 }
+
