@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.1.2",
+  "currentVersion": "1.1.3",
   "releases": [
+    {
+      "version": "1.1.3",
+      "date": "2026-11-04",
+      "title": "Quid 1.1.3",
+      "changes": [
+        "Formularios de Salud con el mismo lenguaje: secciones con icono, campos con etiqueta y ayuda, interruptores y avisos unificados.",
+        "Las acciones de guardar quedan fijas al pie del dialogo: ya no se pierden en un telefono.",
+        "Los 3 formularios principales (medicamento, cita, orden) usan el kit.",
+        "5 dialogos que no tenian alto maximo ya no se salen de la pantalla."
+      ]
+    },
     {
       "version": "1.1.2",
       "date": "2026-11-04",

@@ -1,12 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { FormActions, FormDialog } from "@/components/layout/form-kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1147,14 +1142,24 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle>
-            {isEditing ? "Editar Medicamento" : "Nuevo Medicamento"}
-          </DialogTitle>
-        </DialogHeader>
-
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEditing ? "Editar medicamento" : "Nuevo medicamento"}
+      description="Dosis, horarios y recordatorios en un solo lugar."
+      icon={Pill}
+      tone="emerald"
+      footer={
+        <FormActions
+          onCancel={() => onOpenChange(false)}
+          submitLabel={isEditing ? "Guardar cambios" : "Agregar medicamento"}
+          submitType="button"
+          onSubmit={handleSubmit}
+          submitting={loading}
+          disabled={!name || isDuplicate}
+        />
+      }
+    >
         <div className="space-y-4 mt-2">
           {/* Name with AI */}
           <div className="space-y-2" ref={medDropdownRef}>
@@ -1645,19 +1650,7 @@ export function MedicationForm({ open, onOpenChange, medication, onSuccess }: Me
             <Switch checked={isActive} onCheckedChange={setIsActive} />
           </div>
 
-          {/* Submit */}
-          <Button
-            onClick={handleSubmit}
-            disabled={loading || !name || isDuplicate}
-            className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-pink-500 hover:from-rose-700 hover:to-pink-600"
-          >
-            {loading ? (
-              <Loader2 className="size-4 animate-spin mr-2" />
-            ) : null}
-            {isEditing ? "Guardar Cambios" : "Agregar Medicamento"}
-          </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+    </FormDialog>
   );
 }

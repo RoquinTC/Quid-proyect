@@ -379,7 +379,7 @@ export function InventoryView() {
 
       {/* Refill Dialog Form */}
       <Dialog open={!!refillMed} onOpenChange={(open) => { if (!open) setRefillMed(null); }}>
-        <DialogContent className="w-[95vw] sm:max-w-md rounded-2xl border-0 p-5 bg-white dark:bg-gray-900 shadow-2xl">
+        <DialogContent className="w-[95vw] sm:max-w-md rounded-2xl border-0 p-5 bg-white dark:bg-gray-900 shadow-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
               <Package className="size-4 text-rose-500" />

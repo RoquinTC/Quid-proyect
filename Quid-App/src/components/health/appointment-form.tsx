@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  FormActions,
+  FormDialog,
+  FormField,
+  FormSection,
+  FormSwitchRow,
+} from "@/components/layout/form-kit";
 import {
   Select,
   SelectContent,
@@ -20,7 +18,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import {
+  Bell,
+  CalendarClock,
+  CalendarDays,
+  FileText,
+  Paperclip,
+  Stethoscope,
+} from "lucide-react";
 import { toast } from "sonner";
 import { hasNativeCalendarEvent, syncNativeAppointment } from "@/lib/native/device-integrations";
 import { isNativeAndroid } from "@/lib/native/biometric";
@@ -217,156 +222,140 @@ export function AppointmentForm({ open, onOpenChange, appointment, onSuccess }: 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl max-h-[90vh] sm:max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-        <DialogHeader>
-          <DialogTitle>
-            {isEditing ? "Editar Cita Médica" : "Nueva Cita Médica"}
-          </DialogTitle>
-        </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEditing ? "Editar cita médica" : "Nueva cita médica"}
+      description="Agenda la cita y adjunta el soporte en el mismo lugar."
+      icon={Stethoscope}
+      tone="violet"
+      footer={
+        <FormActions
+          onCancel={() => onOpenChange(false)}
+          submitLabel={isEditing ? "Guardar cambios" : "Agendar cita"}
+          submitType="button"
+          onSubmit={handleSubmit}
+          submitting={loading}
+          disabled={!dateStr}
+        />
+      }
+    >
+      <FormSection title="Datos de la cita" icon={CalendarDays}>
+        <FormField label="Nombre del doctor" htmlFor="apt-doctor">
+          <Input
+            id="apt-doctor"
+            placeholder="Ej: Dr. García"
+            value={doctorName}
+            onChange={(e) => setDoctorName(e.target.value)}
+            className="rounded-xl"
+          />
+        </FormField>
 
-        <div className="space-y-4 mt-2">
-          {/* Doctor name */}
-          <div className="space-y-2">
-            <Label htmlFor="apt-doctor">Nombre del doctor</Label>
-            <Input
-              id="apt-doctor"
-              placeholder="Ej: Dr. García"
-              value={doctorName}
-              onChange={(e) => setDoctorName(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
+        <FormField label="Especialidad">
+          <Select value={specialty} onValueChange={setSpecialty}>
+            <SelectTrigger className="rounded-xl">
+              <SelectValue placeholder="Seleccionar especialidad" />
+            </SelectTrigger>
+            <SelectContent>
+              {specialtyOptions.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
 
-          {/* Specialty */}
-          <div className="space-y-2">
-            <Label>Especialidad</Label>
-            <Select value={specialty} onValueChange={setSpecialty}>
-              <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Seleccionar especialidad" />
-              </SelectTrigger>
-              <SelectContent>
-                {specialtyOptions.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <FormField label="Ubicación" htmlFor="apt-location">
+          <Input
+            id="apt-location"
+            placeholder="Ej: Clínica del Valle, Consultorio 302"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="rounded-xl"
+          />
+        </FormField>
 
-          {/* Location */}
-          <div className="space-y-2">
-            <Label htmlFor="apt-location">Ubicación</Label>
-            <Input
-              id="apt-location"
-              placeholder="Ej: Clínica del Valle, Consultorio 302"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
+        <FormField label="Fecha y hora" htmlFor="apt-date">
+          <Input
+            id="apt-date"
+            type="datetime-local"
+            value={dateStr}
+            onChange={(e) => setDateStr(e.target.value)}
+            className="rounded-xl"
+          />
+        </FormField>
 
-          {/* Date and time */}
-          <div className="space-y-2">
-            <Label htmlFor="apt-date">Fecha y hora</Label>
-            <Input
-              id="apt-date"
-              type="datetime-local"
-              value={dateStr}
-              onChange={(e) => setDateStr(e.target.value)}
-              className="rounded-xl"
-            />
-          </div>
+        <FormField
+          label="Copago / gasto asociado"
+          htmlFor="apt-copay"
+          hint="Al completar la cita confirmas si hubo copago y escoges la cuenta."
+        >
+          <Input
+            id="apt-copay"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Ej: 12000"
+            value={copayAmount}
+            onChange={(e) => setCopayAmount(e.target.value)}
+            className="rounded-xl"
+          />
+        </FormField>
+      </FormSection>
 
-          {/* Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="apt-notes">Notas</Label>
-            <Textarea
-              id="apt-notes"
-              placeholder="Notas adicionales..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="rounded-xl min-h-[80px] resize-none"
-            />
-          </div>
+      <FormSection title="Recordatorios" icon={Bell}>
+        <FormSwitchRow
+          icon={Bell}
+          label="Recordatorio"
+          description="Notificación antes de la cita"
+          checked={reminderEnabled}
+          onCheckedChange={setReminderEnabled}
+        />
+        {isNativeAndroid() && (
+          <FormSwitchRow
+            icon={CalendarClock}
+            label="Calendario del teléfono"
+            description="Guardar también en tu calendario sincronizado"
+            checked={calendarEnabled}
+            onCheckedChange={setCalendarEnabled}
+            tone="sky"
+          />
+        )}
+      </FormSection>
 
-          <div className="space-y-2">
-            <Label htmlFor="apt-copay">Copago / gasto asociado</Label>
-            <Input
-              id="apt-copay"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Ej: 12000"
-              value={copayAmount}
-              onChange={(e) => setCopayAmount(e.target.value)}
-              className="rounded-xl"
-            />
-            <p className="text-xs text-gray-500">
-              Al completar la cita podrás confirmar si realmente hubo copago, editar el valor y escoger cuenta o tarjeta.
-            </p>
-          </div>
-
-          {/* Reminder */}
-          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-xl">
-            <div>
-              <Label className="text-sm">Recordatorio</Label>
-              <p className="text-xs text-gray-400">
-                Notificación antes de la cita
-              </p>
-            </div>
-            <Switch checked={reminderEnabled} onCheckedChange={setReminderEnabled} />
-          </div>
-
-          {isNativeAndroid() && (
-            <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
-              <div>
-                <Label className="text-sm">Calendario del teléfono</Label>
-                <p className="text-xs text-gray-400">
-                  Guardar también en tu calendario sincronizado
-                </p>
-              </div>
-              <Switch checked={calendarEnabled} onCheckedChange={setCalendarEnabled} />
-            </div>
-          )}
-
-          <div className="space-y-3 rounded-2xl border border-dashed border-rose-200 bg-rose-50/40 p-3 dark:border-rose-900/50 dark:bg-rose-950/10">
-            <div>
-              <Label className="text-sm font-bold">Soporte de la cita</Label>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Adjunta PDF o foto de la orden, historia clínica, indicaciones o resultados relacionados con esta cita.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="apt-support-type" className="text-xs">Tipo de soporte</Label>
-              <select
-                id="apt-support-type"
-                value={supportType}
-                onChange={(e) => setSupportType(e.target.value)}
-                className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-rose-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
-              >
-                {supportTypes.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-            <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
-          </div>
-
-          {/* Submit */}
-          <Button
-            onClick={handleSubmit}
-            disabled={loading || !dateStr}
-            className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-pink-500 hover:from-rose-700 hover:to-pink-600"
+      <FormSection
+        title="Soporte de la cita"
+        icon={Paperclip}
+        hint="Orden, historia clínica o resultados"
+        collapsibleHint="opcional"
+      >
+        <FormField label="Tipo de soporte" htmlFor="apt-support-type">
+          <select
+            id="apt-support-type"
+            value={supportType}
+            onChange={(e) => setSupportType(e.target.value)}
+            className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-emerald-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
           >
-            {loading ? (
-              <Loader2 className="size-4 animate-spin mr-2" />
-            ) : null}
-            {isEditing ? "Guardar Cambios" : "Agendar Cita"}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+            {supportTypes.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </FormField>
+        <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
+      </FormSection>
+
+      <FormSection title="Notas" icon={FileText} collapsibleHint="opcional">
+        <Textarea
+          id="apt-notes"
+          placeholder="Indicaciones, preparación previa, observaciones…"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          className="min-h-[80px] rounded-xl resize-none"
+        />
+      </FormSection>
+    </FormDialog>
   );
 }

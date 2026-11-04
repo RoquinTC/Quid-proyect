@@ -759,7 +759,7 @@ export function AuthorizationsTab() {
 
       {/* DIÁLOGO APROBAR/AUTORIZAR EPS */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5">
+        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar orden EPS</DialogTitle>
             <DialogDescription>
@@ -838,7 +838,7 @@ export function AuthorizationsTab() {
       </Dialog>
 
       <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5">
+        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrar Autorización EPS</DialogTitle>
             <DialogDescription>
@@ -900,7 +900,7 @@ export function AuthorizationsTab() {
 
       {/* DIÁLOGO RENOVAR AUTORIZACIÓN */}
       <Dialog open={showRenewDialog} onOpenChange={setShowRenewDialog}>
-        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5">
+        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Renovar Autorización EPS</DialogTitle>
             <DialogDescription>
