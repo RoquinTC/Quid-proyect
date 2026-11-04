@@ -22,6 +22,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { MedicalAppointment, MedicalOrder, Medication } from "@/lib/types";
 import { HydrationCard } from "@/components/health/hydration/hydration-card";
+import { resolveAuthorizationState } from "@/lib/health/authorization-status";
 import { ActionTile, HealthCard, SectionHeader } from "@/components/health/ui/health-ui";
 import { AdherenceCard } from "@/components/health/adherence-card";
 
@@ -150,9 +151,11 @@ export function HealthSummaryView() {
   const dueAuthorizations = useMemo(
     () =>
       authorizations
-        .filter((auth) => auth.status === "authorized" && auth.expirationDate)
-        .map((auth) => ({ ...auth, daysLeft: daysUntil(new Date(auth.expirationDate!)) }))
-        .filter((auth) => auth.daysLeft <= 7)
+        // Solo lo que de verdad requiere acción: una autorización cuya cita ya
+        // se cumplió no vuelve a alarmar al vencer.
+        .map((auth) => ({ ...auth, state: resolveAuthorizationState(auth) }))
+        .filter((auth) => auth.state.alarm)
+        .map((auth) => ({ ...auth, daysLeft: auth.state.daysLeft ?? 0 }))
         .sort((a, b) => a.daysLeft - b.daysLeft),
     [authorizations],
   );
@@ -204,7 +207,7 @@ export function HealthSummaryView() {
       }));
 
     const authorizationEvents = authorizations
-      .filter((auth) => auth.status === "authorized" && auth.expirationDate)
+      .filter((auth) => auth.expirationDate && resolveAuthorizationState(auth).alarm)
       .map((auth) => ({
         id: `auth-${auth.id}`,
         date: new Date(auth.expirationDate!),

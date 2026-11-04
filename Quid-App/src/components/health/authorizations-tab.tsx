@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { resolveAuthorizationState } from "@/lib/health/authorization-status";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ShieldAlert,
@@ -296,6 +297,15 @@ export function AuthorizationsTab() {
   };
 
   const getStatusBadge = (auth: Authorization) => {
+    // El estado visible sale de la regla de negocio compartida: si la cita ya
+    // se cumplió, la autorización es "Cumplida" y no vuelve a alarmar.
+    const state = resolveAuthorizationState(auth);
+    if (state.view === "fulfilled") {
+      return <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900 rounded-lg text-xs font-semibold px-2 py-0.5">Cumplida</Badge>;
+    }
+    if (state.view === "cancelled") {
+      return <Badge className="bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-semibold px-2 py-0.5">Cancelada</Badge>;
+    }
     if (auth.status === "pending_authorization") {
       return <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-900 rounded-lg text-xs font-semibold px-2 py-0.5">Pendiente EPS</Badge>;
     }
@@ -303,8 +313,8 @@ export function AuthorizationsTab() {
       return <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-900 rounded-lg text-xs font-semibold px-2 py-0.5">Expirado</Badge>;
     }
     // Si está autorizado, verificar si queda poco para expirar
-    const daysLeft = getDaysLeft(auth.expirationDate);
-    if (daysLeft !== null && daysLeft <= 0) {
+    const daysLeft = state.daysLeft;
+    if (state.view === "expired") {
       return <Badge className="bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-200 dark:border-red-900 rounded-lg text-xs font-semibold px-2 py-0.5">Expirado</Badge>;
     }
     if (daysLeft !== null && daysLeft <= 5) {
@@ -316,10 +326,10 @@ export function AuthorizationsTab() {
   const filteredAuthorizations = authorizations.filter((auth) => {
     if (statusFilter === "all") return true;
     if (statusFilter === "scheduled") return Boolean(auth.appointment);
-    if (statusFilter === "expired") {
-      const daysLeft = getDaysLeft(auth.expirationDate);
-      return auth.status === "expired" || (daysLeft !== null && daysLeft <= 0);
-    }
+    const state = resolveAuthorizationState(auth);
+    // "Vencidas" ya no incluye las cumplidas: su fecha es histórica.
+    if (statusFilter === "expired") return state.view === "expired";
+    if (statusFilter === "authorized") return state.view === "available" || state.view === "scheduled";
     return auth.status === statusFilter;
   });
 
@@ -354,10 +364,9 @@ export function AuthorizationsTab() {
               <span className="text-xs text-indigo-200">Vigentes</span>
               <p className="text-sm font-bold">
                 {authorizations.filter((a) => {
-                  if (a.status !== "authorized") return false;
-                  const dl = getDaysLeft(a.expirationDate);
-                  return dl !== null && dl > 0;
-                }).length} autorizadas
+                  const state = resolveAuthorizationState(a);
+                  return state.view === "available";
+                }).length} disponibles
               </p>
             </div>
           </div>

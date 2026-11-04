@@ -1,3 +1,4 @@
+import { resolveAuthorizationState } from "@/lib/health/authorization-status";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -95,14 +96,12 @@ export async function POST(req: NextRequest) {
       const pendingOrders = orders.filter((order) => order.status !== "completed");
       const pendingItems = orders.flatMap((order) => order.items).filter((item) => Number(item.pendingQty) > 0);
       const pendingAuthorizations = authorizations.filter((auth) => auth.status === "pending_authorization");
+      // Misma regla que la interfaz: si la cita se cumplió, la autorización ya
+      // no es un pendiente y Aura no debe sugerir renovarla.
       const expiringAuthorizations = authorizations.filter((auth) => {
-        if (auth.status !== "authorized" || !auth.expirationDate) return false;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const expiration = new Date(auth.expirationDate);
-        expiration.setHours(0, 0, 0, 0);
-        const days = Math.ceil((expiration.getTime() - today.getTime()) / 86400000);
-        return days <= 7;
+        if (!auth.expirationDate) return false;
+        const state = resolveAuthorizationState(auth, new Date());
+        return state.alarm && (state.daysLeft ?? 0) <= 7;
       });
       const upcomingAppointments = appointments.filter((appointment) => {
         const date = new Date(appointment.date);
