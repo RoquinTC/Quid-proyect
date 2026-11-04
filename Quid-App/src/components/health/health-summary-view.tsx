@@ -22,7 +22,11 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { MedicalAppointment, MedicalOrder, Medication } from "@/lib/types";
 import { HydrationCard } from "@/components/health/hydration/hydration-card";
-import { resolveAuthorizationState } from "@/lib/health/authorization-status";
+import {
+  describeAuthorizations,
+  resolveAuthorizationState,
+  summarizeAuthorizations,
+} from "@/lib/health/authorization-status";
 import { ActionTile, HealthCard, SectionHeader } from "@/components/health/ui/health-ui";
 import { AdherenceCard } from "@/components/health/adherence-card";
 
@@ -159,6 +163,15 @@ export function HealthSummaryView() {
         .sort((a, b) => a.daysLeft - b.daysLeft),
     [authorizations],
   );
+
+  /**
+   * Autorizaciones con algo por hacer, separando dos cosas distintas:
+   *  - `pending`: trámite en curso con la EPS (no vence: aún no existe).
+   *  - `expiring`: ya vence o venció sin usarse.
+   *
+   * "Al día" solo se muestra cuando ambas cuentas son cero.
+   */
+  const authorizationCounts = useMemo(() => summarizeAuthorizations(authorizations), [authorizations]);
 
   const pendingItems = useMemo(
     () => orders.flatMap((order) => order.items || []).filter((item) => item.pendingQty > 0),
@@ -435,9 +448,9 @@ export function HealthSummaryView() {
         <ActionTile
           icon={ShieldAlert}
           label="Autorizaciones"
-          meta={dueAuthorizations.length ? `${dueAuthorizations.length} por vencer` : "Al día"}
+          meta={describeAuthorizations(authorizationCounts)}
           tone="sky"
-          alert={dueAuthorizations.some((auth) => auth.daysLeft <= 1)}
+          alert={authorizationCounts.total > 0}
           onClick={() => setHealthSubView("authorizations")}
         />
         <ActionTile

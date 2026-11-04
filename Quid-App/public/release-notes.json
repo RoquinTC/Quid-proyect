@@ -1,6 +1,15 @@
 {
-  "currentVersion": "1.1.4",
+  "currentVersion": "1.1.5",
   "releases": [
+    {
+      "version": "1.1.5",
+      "date": "2026-11-04",
+      "title": "Quid 1.1.5",
+      "changes": [
+        "Autorizaciones en el resumen: 'Al dia' ya no oculta un tramite en curso con la EPS.",
+        "La tarjeta distingue 'en tramite' de 'por vencer' y las suma solo cuando corresponde."
+      ]
+    },
     {
       "version": "1.1.4",
       "date": "2026-11-04",

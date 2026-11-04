@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   daysUntilDate,
+  describeAuthorizations,
+  summarizeAuthorizations,
   needsAttention,
   resolveAuthorizationState,
   type AuthorizationLike,
@@ -125,5 +127,41 @@ describe("otros estados", () => {
 
   it("calcula días completos", () => {
     expect(daysUntilDate(new Date(2026, 10, 10, 23, 0, 0), now)).toBe(7);
+  });
+});
+
+
+describe("resumen del tablero", () => {
+  it("no dice 'Al día' si hay un trámite en curso sin fecha", () => {
+    const summary = summarizeAuthorizations(
+      [auth({ status: "pending_authorization", expirationDate: null })],
+      now,
+    );
+    expect(summary).toEqual({ pending: 1, expiring: 0, total: 1 });
+    expect(describeAuthorizations(summary)).toBe("1 en trámite");
+  });
+
+  it("cuenta solo lo que de verdad requiere acción como 'por vencer'", () => {
+    const summary = summarizeAuthorizations(
+      [
+        auth({ status: "pending_authorization", expirationDate: null }),
+        auth({ expirationDate: iso(2) }),
+        auth({ expirationDate: iso(-1) }),
+        // cumplida: no cuenta aunque esté vencida
+        auth({ expirationDate: iso(-5), appointment: { status: "completed", date: iso(-9) } }),
+      ],
+      now,
+    );
+    expect(summary.pending).toBe(1);
+    expect(summary.expiring).toBe(2);
+    expect(describeAuthorizations(summary)).toBe("1 en trámite · 2 por vencer");
+  });
+
+  it("dice 'Al día' solo cuando no hay nada abierto", () => {
+    const summary = summarizeAuthorizations(
+      [auth({ expirationDate: iso(-5), appointment: { status: "completed", date: iso(-9) } })],
+      now,
+    );
+    expect(describeAuthorizations(summary)).toBe("Al día");
   });
 });
