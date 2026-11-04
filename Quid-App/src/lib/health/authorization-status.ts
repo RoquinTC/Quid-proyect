@@ -41,6 +41,11 @@ export interface AuthorizationState {
   daysLeft: number | null;
   /** ¿Merece una alerta en el resumen? */
   alarm: boolean;
+  /**
+   * La cita se cumplió DESPUÉS del vencimiento. Sigue siendo "cumplida" (el
+   * servicio se prestó), pero conviene saberlo.
+   */
+  outsideValidity: boolean;
   /** Explicación corta para la interfaz. */
   hint: string;
 }
@@ -72,12 +77,22 @@ export function resolveAuthorizationState(
 
   // 1. Cumplida: la cita se atendió. Nada que reclamar.
   if (appointmentStatus === "completed") {
+    const appointmentDate = auth.appointment?.date ? new Date(auth.appointment.date) : null;
+    // Se usó dentro de su vigencia, o se atendió tarde (dato, no alarma).
+    const outsideValidity =
+      appointmentDate !== null &&
+      auth.expirationDate != null &&
+      daysUntilDate(appointmentDate, now) > (daysLeft ?? 0);
+
     return {
       view: "fulfilled",
       label: "Cumplida",
       daysLeft,
       alarm: false,
-      hint: "La cita se atendió: ya no requiere renovación",
+      outsideValidity,
+      hint: outsideValidity
+        ? "La cita se atendió, pero después del vencimiento"
+        : "Se usó dentro de la vigencia: nada que renovar",
     };
   }
 
@@ -88,6 +103,7 @@ export function resolveAuthorizationState(
       label: "Cancelada",
       daysLeft,
       alarm: false,
+      outsideValidity: false,
       hint: "Se canceló; registra una nueva si la necesitas",
     };
   }
@@ -99,6 +115,7 @@ export function resolveAuthorizationState(
       label: "En trámite",
       daysLeft,
       alarm: false,
+      outsideValidity: false,
       hint: "Esperando respuesta de la EPS",
     };
   }
@@ -115,6 +132,7 @@ export function resolveAuthorizationState(
       label: "Programada",
       daysLeft,
       alarm: expiresBeforeAppointment,
+      outsideValidity: false,
       hint: expiresBeforeAppointment
         ? "Vence antes de la cita: hay que renovarla"
         : "Cita programada con esta autorización",
@@ -128,6 +146,7 @@ export function resolveAuthorizationState(
       label: "Vencida",
       daysLeft,
       alarm: true,
+      outsideValidity: false,
       hint: "Venció sin usarse",
     };
   }
@@ -139,6 +158,7 @@ export function resolveAuthorizationState(
     label: "Autorizada",
     daysLeft,
     alarm: expiringSoon,
+    outsideValidity: false,
     hint: expiringSoon
       ? daysLeft === 0
         ? "Vence hoy y no tiene cita"

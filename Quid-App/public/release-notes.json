@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.1.1",
+  "currentVersion": "1.1.2",
   "releases": [
+    {
+      "version": "1.1.2",
+      "date": "2026-11-04",
+      "title": "Quid 1.1.2",
+      "changes": [
+        "Autorizaciones cumplidas: se acabaron los mensajes de 'ya vencio' y 'expirada' en la misma tarjeta.",
+        "Se distingue cumplida dentro de la vigencia de cumplida fuera de vigencia, con nota informativa.",
+        "El boton Renovar y el aviso al agendar solo aparecen cuando la autorizacion vencio sin usarse.",
+        "Ya no se ofrece reprogramar ni desvincular una autorizacion cumplida."
+      ]
+    },
     {
       "version": "1.1.1",
       "date": "2026-11-04",

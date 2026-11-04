@@ -168,9 +168,12 @@ export function AuthorizationsTab() {
 
   const handleSchedule = async () => {
     if (!activeAuth || !aptDate) return;
-    const daysLeft = getDaysLeft(activeAuth.expirationDate);
-    if (daysLeft !== null && daysLeft <= 0) {
-      setScheduleWarning("Esta autorización está vencida. Renueva o registra una nueva autorización antes de programar.");
+    // Solo bloquea si venció SIN usarse: una autorización cuya cita ya se
+    // cumplió no está vencida, ya hizo su trabajo.
+    if (resolveAuthorizationState(activeAuth).view === "expired") {
+      setScheduleWarning(
+        "Esta autorización venció sin usarse. Renueva o registra una nueva antes de programar.",
+      );
       return;
     }
     if (activeAuth.expirationDate) {
@@ -415,15 +418,13 @@ export function AuthorizationsTab() {
                     year: "numeric",
                   })
                 : null;
-              const isExpired = daysLeft !== null && daysLeft <= 0;
-              const isLastValidDay = daysLeft === 0;
+              // Estado derivado: si la cita se cumplió, la fecha es histórica.
+              const state = resolveAuthorizationState(auth);
+              const isFulfilled = state.view === "fulfilled";
+              const isExpired = state.view === "expired";
+              const isLastValidDay = state.view === "available" && daysLeft === 0;
               const isExpanded = expandedId === auth.id;
-              const needsAttention =
-                auth.status === "pending_authorization" ||
-                Boolean(auth.appointment && auth.appointment.status === "scheduled") ||
-                isExpired ||
-                isLastValidDay ||
-                (daysLeft !== null && daysLeft <= 5);
+              const needsAttention = state.alarm;
 
               return (
                 <motion.div
@@ -508,18 +509,26 @@ export function AuthorizationsTab() {
                           )}
                           {daysLeft !== null && (
                             <div className="flex justify-between items-center">
-                              <span className="text-gray-400">Vigencia restante:</span>
-                              <span
-                                className={`font-bold ${
-                                  daysLeft <= 0
-                                    ? "text-red-500"
-                                    : daysLeft <= 5
-                                    ? "text-orange-500"
-                                    : "text-emerald-500"
-                                }`}
-                              >
-                                {daysLeft <= 0 ? "Expirada" : `${daysLeft} días`}
+                              <span className="text-gray-400">
+                                {isFulfilled ? "Vigencia:" : "Vigencia restante:"}
                               </span>
+                              {isFulfilled ? (
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                  Cumplida dentro de la vigencia
+                                </span>
+                              ) : (
+                                <span
+                                  className={`font-bold ${
+                                    state.view === "expired"
+                                      ? "text-red-500"
+                                      : daysLeft <= 5
+                                      ? "text-orange-500"
+                                      : "text-emerald-500"
+                                  }`}
+                                >
+                                  {state.view === "expired" ? "Expirada" : `${daysLeft} días`}
+                                </span>
+                              )}
                             </div>
                           )}
                           {auth.supportUrl && (
@@ -551,6 +560,13 @@ export function AuthorizationsTab() {
                         </div>
                       )}
 
+                      {isFulfilled && state.outsideValidity && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+                          La cita se atendió después de la fecha de vencimiento. La autorización está
+                          cumplida, pero revisa si la EPS objeta el servicio.
+                        </div>
+                      )}
+
                       {needsAttention && isLastValidDay && (
                         <div className="rounded-xl border border-orange-200 bg-orange-50 p-2.5 text-xs text-orange-800 dark:border-orange-900 dark:bg-orange-950/20 dark:text-orange-300">
                           Hoy es el último día de vigencia. Si la entidad no agenda hoy, conviene renovar.
@@ -560,12 +576,17 @@ export function AuthorizationsTab() {
                       {/* Información de cita programada */}
                       {isExpanded && auth.appointment ? (
                         <div className={`mt-2 text-xs p-2.5 rounded-xl border ${
-                          auth.appointment.status === "scheduled"
+                          auth.appointment.status === "scheduled" || auth.appointment.status === "completed"
                             ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300 border-emerald-100/30"
                             : "bg-amber-50 text-amber-800 dark:bg-amber-950/20 dark:text-amber-300 border-amber-100/30"
                         }`}>
                           <p className="font-bold flex items-center gap-1.5 mb-1">
-                            <Calendar className="size-3.5" /> {auth.appointment.status === "scheduled" ? "Cita programada" : "Cita cancelada o no activa"}
+                            <Calendar className="size-3.5" />
+                            {auth.appointment.status === "completed"
+                              ? "Cita cumplida"
+                              : auth.appointment.status === "scheduled"
+                              ? "Cita programada"
+                              : "Cita cancelada o no activa"}
                           </p>
                           <div className="space-y-1 pl-5">
                             {auth.appointment.doctorName && (
@@ -660,7 +681,7 @@ export function AuthorizationsTab() {
                           </Button>
                         )}
 
-                        {auth.status === "authorized" && auth.appointment && (
+                        {auth.status === "authorized" && auth.appointment && !isFulfilled && (
                           <>
                             <Button
                               size="sm"
@@ -689,7 +710,7 @@ export function AuthorizationsTab() {
                           </>
                         )}
 
-                        {(auth.status === "expired" || (daysLeft !== null && daysLeft <= 0)) && (
+                        {state.view === "expired" && (
                           <Button
                             size="sm"
                             className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs h-8"

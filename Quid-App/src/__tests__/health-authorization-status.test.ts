@@ -32,6 +32,25 @@ describe("autorización con cita cumplida", () => {
     expect(needsAttention(auth({ appointment: { status: "completed" } }), now)).toBe(false);
   });
 
+  it("marca cumplida dentro de la vigencia", () => {
+    const state = resolveAuthorizationState(
+      auth({ expirationDate: iso(10), appointment: { status: "completed", date: iso(-2) } }),
+      now,
+    );
+    expect(state.outsideValidity).toBe(false);
+    expect(state.hint).toContain("dentro de la vigencia");
+  });
+
+  it("avisa si la cita se atendió después del vencimiento", () => {
+    const state = resolveAuthorizationState(
+      auth({ expirationDate: iso(-10), appointment: { status: "completed", date: iso(-3) } }),
+      now,
+    );
+    expect(state.view).toBe("fulfilled");
+    expect(state.outsideValidity).toBe(true);
+    expect(state.alarm).toBe(false);
+  });
+
   it("no alarma aunque venza mañana", () => {
     const state = resolveAuthorizationState(
       auth({ expirationDate: iso(1), appointment: { status: "completed", date: iso(-3) } }),
