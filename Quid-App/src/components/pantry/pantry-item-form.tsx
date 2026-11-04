@@ -7,7 +7,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput } from "@/components/ui/currency-input";
@@ -19,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch, toColombiaDateString } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { UnitConverter } from "./unit-converter";
 import { UNITS, convertQuantity } from "@/lib/pantry/units";
@@ -87,6 +96,8 @@ interface PantryItemFormProps {
 
 export function PantryItemForm({ open, onOpenChange, item, onSuccess }: PantryItemFormProps) {
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("other");
   const [quantity, setQuantity] = useState("1");
@@ -142,6 +153,23 @@ export function PantryItemForm({ open, onOpenChange, item, onSuccess }: PantryIt
     if (fromUnit === unit) return numeric;
     const { quantity, converted } = convertQuantity(numeric, fromUnit, unit);
     return converted ? Math.round(quantity * 1000) / 1000 : numeric;
+  };
+
+  /** Baja lógica: sale de la nevera, pero el historial queda intacto. */
+  const handleDelete = async () => {
+    if (!item) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/pantry/${item.id}`, { method: "DELETE" });
+      toast.success("Producto eliminado de la nevera");
+      setConfirmDelete(false);
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo eliminar");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -480,8 +508,53 @@ export function PantryItemForm({ open, onOpenChange, item, onSuccess }: PantryIt
             {loading && <Loader2 className="size-4 animate-spin mr-2" />}
             {isEditing ? "Guardar cambios" : "Agregar a la nevera"}
           </Button>
+
+          {/* Eliminar existía en la API pero no en la interfaz: no había forma
+              de sacar un producto de la nevera. Baja lógica por defecto (el
+              historial y los movimientos se conservan). */}
+          {isEditing && (
+            <Button
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+              variant="ghost"
+              className="h-9 w-full rounded-xl text-[12.5px] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+            >
+              {deleting ? (
+                <Loader2 className="size-3.5 animate-spin mr-1.5" />
+              ) : (
+                <Trash2 className="size-3.5 mr-1.5" />
+              )}
+              Eliminar de la nevera
+            </Button>
+          )}
         </div>
       </DialogContent>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-[15px]">
+              ¿Eliminar {name} de la nevera?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-[12.5px]">
+              Dejará de aparecer en la nevera y en las listas de faltantes. El historial de
+              compras y los movimientos se conservan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              className="rounded-xl bg-red-600 hover:bg-red-700"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

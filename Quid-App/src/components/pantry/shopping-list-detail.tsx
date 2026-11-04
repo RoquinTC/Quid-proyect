@@ -382,6 +382,10 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
     0
   );
   const cartCount = list.items.filter((i) => i.addedToCart).length;
+  // Lo que de verdad se va a confirmar: la selección, no el flag `isPurchased`.
+  // Contar `isPurchased` era el bug de producción: el resumen decía "0 ítems"
+  // mientras el importe salía correcto, porque el dinero venía del carrito.
+  const selectedCount = Object.keys(stockSelection).length;
   const selectedAccount = accounts.find((account) => account.id === paymentAccountId);
   const availableSubAccounts = selectedAccount?.subAccounts || [];
 
@@ -589,7 +593,10 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
               </span>
             )}
 
-            {list.status === "draft" && (
+            {/* Se puede quitar una línea mientras la lista siga abierta. Antes
+                solo aparecía en borrador, así que estando "Comprando" no había
+                forma de eliminar un producto de la lista. */}
+            {list.status !== "completed" && (
               <button
                 onClick={() => handleDeleteItem(item.id)}
                 className="flex size-6 shrink-0 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
@@ -746,7 +753,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
                   </span>
                   <span className="flex items-center gap-2">
                     <span className="text-sm font-medium tabular-nums text-gray-900 dark:text-white">
-                      {list.items.filter((i) => i.isPurchased).length} ítems
+                      {selectedCount} ítems
                     </span>
                     <ChevronDown
                       className={`size-4 text-gray-400 transition-transform ${summaryOpen ? "rotate-180" : ""}`}
@@ -757,7 +764,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
               <CollapsibleContent>
                 <div className="mt-1.5 overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800">
                   {list.items
-                    .filter((i) => i.isPurchased)
+                    .filter((i) => stockSelection[i.id] !== undefined)
                     .map((it) => (
                       <div
                         key={it.id}
@@ -776,7 +783,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
             </Collapsible>
 
             {/* Convertir a stock: what lands in the pantry + min stock seeding */}
-            {list.items.some((i) => i.isPurchased) && (
+            {selectedCount > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between px-1">
                   <span className="text-sm font-medium text-gray-900 dark:text-white">
@@ -793,7 +800,7 @@ export function ShoppingListDetail({ listId, onBack }: ShoppingListDetailProps) 
                 </div>
                 <ul className="overflow-hidden rounded-xl border border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800">
                   {list.items
-                    .filter((i) => i.isPurchased)
+                    .filter((i) => stockSelection[i.id] !== undefined)
                     .map((item) => (
                       <ShoppingListRow
                         key={item.id}

@@ -213,6 +213,43 @@ async function main() {
   await sleep(2500);
   await shot("07-reportes");
 
+  // Diálogo de confirmación: comprueba que el conteo coincide con las filas.
+  // El bug de producción decía "0 ítems" con importe válido.
+  if (process.env.PROBE_CONFIRM) {
+    await evaluate(`[...document.querySelectorAll('button')]
+      .find(b => (b.textContent || '').trim() === 'Mercado')?.click()`);
+    await sleep(2500);
+    await evaluate(`(() => {
+      const b = [...document.querySelectorAll('button')]
+        .find(x => /Mercado de la semana/.test(x.textContent || ''));
+      if (b) { b.click(); return true; }
+      return false;
+    })()`);
+    await sleep(3500);
+    await evaluate(`(() => {
+      const b = [...document.querySelectorAll('button')]
+        .find(x => /^Confirmar/i.test((x.textContent || '').trim()));
+      if (b) { b.click(); return true; }
+      return false;
+    })()`);
+    await sleep(2500);
+    const probe = await evaluate(`(() => {
+      const dialog = document.querySelector('[role=dialog]');
+      if (!dialog) return { dialog: false };
+      const text = dialog.innerText || '';
+      const count = text.match(/(\\d+)\\s+ítems/);
+      const money = text.match(/\\$\\s?[\\d.,]+/);
+      return {
+        dialog: true,
+        itemsLabel: count ? Number(count[1]) : null,
+        rows: dialog.querySelectorAll('li').length,
+        money: money ? money[0] : null,
+      };
+    })()`);
+    console.log("PROBE_CONFIRM:", JSON.stringify(probe));
+    await shot("08-confirmar");
+  }
+
   // ── Móvil (la app es sobre todo móvil) ──
   await send("Emulation.setDeviceMetricsOverride", {
     width: 390,

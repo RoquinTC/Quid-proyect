@@ -213,7 +213,7 @@ export function PendingClaimsTab() {
   return (
     <div className="p-4 space-y-4 pb-safe">
       {/* Tarjeta de Bolsa Virtual */}
-      <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-500 text-white overflow-hidden relative">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-emerald-600 to-teal-500 text-white overflow-hidden relative">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.08),transparent)] pointer-events-none" />
         <CardContent className="p-5 relative z-10">
           <div className="flex items-center gap-2 mb-1">

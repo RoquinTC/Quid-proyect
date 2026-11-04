@@ -93,7 +93,7 @@ export function MedicationDetail({ medication, onBack, onEdit, onDelete }: Medic
       </div>
 
       {/* Main info card */}
-      <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-rose-600 to-pink-500 text-white overflow-hidden relative">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-rose-600 to-pink-500 text-white overflow-hidden relative">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)] pointer-events-none" />
         <CardContent className="p-5 relative z-10">
           <div className="flex items-center gap-3 mb-4">
@@ -120,7 +120,7 @@ export function MedicationDetail({ medication, onBack, onEdit, onDelete }: Medic
       </Card>
 
       {/* Details */}
-      <Card className="border-0 shadow-md rounded-2xl">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800">
         <CardContent className="p-4 space-y-4">
           {/* How to take */}
           {medication.howToTake && (
@@ -207,7 +207,7 @@ export function MedicationDetail({ medication, onBack, onEdit, onDelete }: Medic
       </Card>
 
       {/* History placeholder */}
-      <Card className="border-0 shadow-md rounded-2xl">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800">
         <CardContent className="p-4">
           <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Historial</h4>
           <p className="text-xs text-gray-400 text-center py-4">

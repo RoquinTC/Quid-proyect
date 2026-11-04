@@ -211,7 +211,7 @@ export function InventoryView() {
             className="space-y-3"
           >
             {activeMedications.length === 0 ? (
-              <Card className="border-0 shadow-md rounded-2xl bg-gray-50 dark:bg-gray-900/50">
+              <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
                 <CardContent className="p-8 text-center text-gray-500">
                   <Pill className="size-10 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
                   <p className="text-sm font-semibold">No hay medicamentos activos</p>
@@ -225,7 +225,7 @@ export function InventoryView() {
 
                 return (
                   <motion.div key={med.id} variants={itemVariants}>
-                    <Card className="border-0 shadow-md rounded-2xl bg-white dark:bg-gray-900 hover:shadow-lg transition-all duration-200 overflow-hidden relative border-l-4 border-rose-500">
+                    <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-lg transition-all duration-200 overflow-hidden relative border-l-4 border-rose-500">
                       <CardContent className="p-4 flex items-center justify-between gap-3">
                         <div className="space-y-1 flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
@@ -288,7 +288,7 @@ export function InventoryView() {
             className="space-y-3"
           >
             {activeMedications.length === 0 ? (
-              <Card className="border-0 shadow-md rounded-2xl bg-gray-50 dark:bg-gray-900/50">
+              <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50">
                 <CardContent className="p-8 text-center text-gray-500">
                   <Pill className="size-10 text-gray-300 dark:text-gray-700 mx-auto mb-2" />
                   <p className="text-sm font-semibold">No hay medicamentos activos</p>
@@ -307,7 +307,7 @@ export function InventoryView() {
 
                 return (
                   <motion.div key={med.id} variants={itemVariants}>
-                    <Card className="border-0 shadow-md rounded-2xl bg-white dark:bg-gray-900 hover:shadow-lg transition-all duration-200 overflow-hidden relative">
+                    <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-white dark:bg-gray-900 hover:shadow-lg transition-all duration-200 overflow-hidden relative">
                       <CardContent className="p-4 space-y-2.5">
                         <div className="flex justify-between items-start">
                           <div>

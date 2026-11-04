@@ -115,9 +115,22 @@ export async function POST(req: NextRequest) {
     // ── Guardia de duplicados ──
     const existing = await db.pantryItem.findFirst({
       where: { userId, nameNormalized, unit },
-      select: { id: true, name: true, quantity: true, unit: true },
+      select: { id: true, name: true, quantity: true, unit: true, isActive: true },
     });
     if (existing) {
+      // Si lo habías eliminado (baja lógica) y lo vuelves a dar de alta, se
+      // reactiva en vez de rechazarlo: "lo quité porque no lo iba a comprar",
+      // no es un duplicado, es el mismo producto que vuelve.
+      if (!existing.isActive) {
+        await db.pantryItem.update({
+          where: { id: existing.id },
+          data: { isActive: true },
+        });
+        return NextResponse.json(
+          { id: existing.id, name: existing.name, reactivated: true },
+          { status: 200 }
+        );
+      }
       return NextResponse.json(
         {
           error: "duplicate",

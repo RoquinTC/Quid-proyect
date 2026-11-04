@@ -264,7 +264,7 @@ export function AppointmentsView() {
     >
       {/* Summary card */}
       <motion.div variants={itemVariants}>
-        <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-violet-600 to-purple-500 text-white overflow-hidden relative">
+        <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-emerald-600 to-teal-500 text-white overflow-hidden relative">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)] pointer-events-none" />
           <CardContent className="p-5 relative z-10">
             <div className="flex items-center gap-2 mb-1">
@@ -376,9 +376,9 @@ export function AppointmentsView() {
       {/* Empty state */}
       {filteredAppointments.length === 0 && (
         <motion.div variants={itemVariants}>
-          <Card className="border-0 shadow-md rounded-2xl bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20">
+          <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20">
             <CardContent className="p-8 text-center">
-              <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-500 shadow-lg mb-4">
+              <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-lg mb-4">
                 <Stethoscope className="size-7 text-white" />
               </div>
               <h3 className="font-bold text-gray-900 dark:text-white mb-1">
@@ -392,7 +392,7 @@ export function AppointmentsView() {
                   setEditingAppointment(null);
                   setShowForm(true);
                 }}
-                className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-500"
+                className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500"
               >
                 <Plus className="size-4 mr-1" />
                 Agendar Cita
@@ -1062,7 +1062,7 @@ function CompleteAppointmentDialog({
           </div>
 
           <Button
-            className="w-full rounded-xl bg-gradient-to-r from-rose-600 to-pink-500 hover:from-rose-700 hover:to-pink-600 text-white font-medium py-2.5"
+            className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-pink-500 hover:from-emerald-700 hover:to-pink-600 text-white font-medium py-2.5"
             onClick={handleConfirm}
             disabled={saving || (needsPayment && !hasPaymentSource) || (hasFollowUp && !followUpDate) || (hasAuthorization && authorizations.every((auth) => !auth.specialty.trim()))}
           >
@@ -1127,7 +1127,7 @@ function AppointmentDetail({
       </div>
 
       {/* Main card */}
-      <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-violet-600 to-purple-500 text-white overflow-hidden relative">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-emerald-600 to-teal-500 text-white overflow-hidden relative">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)] pointer-events-none" />
         <CardContent className="p-5 relative z-10">
           <div className="flex items-center gap-3 mb-4">
@@ -1153,7 +1153,7 @@ function AppointmentDetail({
       </Card>
 
       {/* Details */}
-      <Card className="border-0 shadow-md rounded-2xl">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800">
         <CardContent className="p-4 space-y-4">
           {appointment.specialty && (
             <div className="flex items-center gap-3">

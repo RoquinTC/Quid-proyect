@@ -76,7 +76,7 @@ export function MedicalOrdersView() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 space-y-4 pb-safe">
-      <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-cyan-600 to-teal-500 text-white overflow-hidden relative">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-emerald-600 to-teal-500 text-white overflow-hidden relative">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.12),transparent)] pointer-events-none" />
         <CardContent className="p-5 relative z-10">
           <div className="flex items-center gap-2 mb-1">
@@ -123,16 +123,16 @@ export function MedicalOrdersView() {
       </div>
 
       {orders.length === 0 ? (
-        <Card className="border-0 shadow-md rounded-2xl bg-gradient-to-br from-cyan-50 to-teal-50 dark:from-cyan-900/20 dark:to-teal-900/20">
+        <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20">
           <CardContent className="p-8 text-center">
-            <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-500 shadow-lg mb-4">
+            <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 shadow-lg mb-4">
               <ClipboardList className="size-7 text-white" />
             </div>
             <h3 className="font-bold text-gray-900 dark:text-white mb-1">Sin órdenes médicas</h3>
             <p className="text-sm text-gray-500 mb-4">
               Crea órdenes para controlar entregas parciales y pendientes.
             </p>
-            <Button className="rounded-xl bg-gradient-to-r from-cyan-600 to-teal-500" onClick={() => setShowForm(true)}>
+            <Button className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500" onClick={() => setShowForm(true)}>
               <Plus className="size-4 mr-1" />
               Crear Orden
             </Button>
@@ -146,7 +146,7 @@ export function MedicalOrdersView() {
             const isExpanded = expandedId === order.id;
 
             return (
-              <Card key={order.id} className="border-0 shadow-md rounded-2xl">
+              <Card key={order.id} className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800">
                 <CardContent className="p-3 space-y-3">
                   <button
                     type="button"

@@ -146,7 +146,7 @@ export function MedicationsView() {
     >
       {/* Summary card */}
       <motion.div variants={itemVariants}>
-        <Card className="border-0 shadow-lg rounded-2xl bg-gradient-to-br from-rose-600 to-pink-500 text-white overflow-hidden relative">
+        <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-emerald-600 to-pink-500 text-white overflow-hidden relative">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent)] pointer-events-none" />
           <CardContent className="p-5 relative z-10">
             <div className="flex items-center gap-2 mb-1">
@@ -218,7 +218,7 @@ export function MedicationsView() {
                 onClick={() => setHealthMedicationFilter(filter.value as typeof healthMedicationFilter)}
                 className={`h-8 shrink-0 rounded-xl text-xs ${
                   healthMedicationFilter === filter.value
-                    ? "bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/30 dark:text-rose-300"
+                    ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300"
                     : ""
                 }`}
               >
@@ -233,9 +233,9 @@ export function MedicationsView() {
       {/* Medications list */}
       {filteredMedications.length === 0 ? (
         <motion.div variants={itemVariants}>
-          <Card className="border-0 shadow-md rounded-2xl bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20">
+          <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 bg-gradient-to-br from-emerald-50 to-pink-50 dark:from-emerald-900/20 dark:to-pink-900/20">
             <CardContent className="p-8 text-center">
-              <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-rose-500 to-pink-500 shadow-lg mb-4">
+              <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-pink-500 shadow-lg mb-4">
                 <Pill className="size-7 text-white" />
               </div>
               <h3 className="font-bold text-gray-900 dark:text-white mb-1">
@@ -251,7 +251,7 @@ export function MedicationsView() {
                   setEditingMedication(null);
                   setShowForm(true);
                 }}
-                className="rounded-xl bg-gradient-to-r from-rose-600 to-pink-500"
+                className="rounded-xl bg-gradient-to-r from-emerald-600 to-pink-500"
               >
                 <Plus className="size-4 mr-1" />
                 Agregar Medicamento

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Refrigerator, ShoppingCart, ChefHat, ShieldCheck, Receipt } from "lucide-react";
 import { useAppStore, type SidebarAction } from "@/lib/store";
+import { ModuleShell, ModuleTabs, type ModuleTab } from "@/components/layout/module-kit";
 import { NeveraView } from "./nevera-view";
 import { NeveraHistory } from "./nevera-history";
 import { DietaryProfilesView } from "./dietary-profiles-view";
@@ -16,12 +17,12 @@ import { HealthProfileForm } from "./health-profile-form";
 
 type PantryTab = "fridge" | "shopping" | "recipes" | "health" | "history";
 
-const tabs: { id: PantryTab; label: string; icon: typeof Refrigerator }[] = [
-  { id: "fridge", label: "Nevera", icon: Refrigerator },
-  { id: "shopping", label: "Mercado", icon: ShoppingCart },
-  { id: "recipes", label: "Recetas", icon: ChefHat },
-  { id: "health", label: "Perfiles", icon: ShieldCheck },
-  { id: "history", label: "Historial", icon: Receipt },
+const tabs: ModuleTab<PantryTab>[] = [
+  { id: "fridge", label: "Nevera", icon: Refrigerator, primary: true, hint: "Lo que hay en casa" },
+  { id: "shopping", label: "Mercado", icon: ShoppingCart, primary: true, hint: "Listas de compra" },
+  { id: "recipes", label: "Recetas", icon: ChefHat, primary: true, hint: "Qué cocinar hoy" },
+  { id: "health", label: "Perfiles", icon: ShieldCheck, primary: false, hint: "Restricciones alimentarias" },
+  { id: "history", label: "Historial", icon: Receipt, primary: false, hint: "Movimientos de despensa" },
 ];
 
 export function PantryPage() {
@@ -112,53 +113,25 @@ export function PantryPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Sub-tab navigation */}
-      <div className="mx-auto w-full max-w-3xl px-4 pt-3 pb-1">
-        <div className="flex items-center gap-1 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setActiveTab(tab.id);
-                  setPantrySubView(tab.id === "shopping" ? "shopping-lists" : "items");
-                }}
-                className="relative flex items-center justify-center gap-1 flex-1 py-2.5 px-1 rounded-xl text-sm font-medium transition-colors duration-200"
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="pantryTab"
-                    className="absolute inset-0 bg-white dark:bg-gray-700 rounded-xl shadow-sm"
-                    transition={{
-                      type: "spring",
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <Icon
-                  className={`size-3.5 relative z-10 ${
-                    isActive ? "text-amber-600" : "text-gray-400"
-                  }`}
-                />
-                <span
-                  className={`relative z-10 text-[11px] ${
-                    isActive ? "text-gray-900 dark:text-white" : "text-gray-500"
-                  }`}
-                >
-                  {tab.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <>
+      <ModuleShell
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        header={
+          <ModuleTabs
+            title="Despensa"
+            icon={Refrigerator}
+            tone="amber"
+            tabs={tabs}
+            activeId={activeTab}
+            onSelect={(id) => {
+              setActiveTab(id);
+              setPantrySubView(id === "shopping" ? "shopping-lists" : "items");
+            }}
+            layoutId="pantryModuleTab"
+          />
+        }
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -170,7 +143,7 @@ export function PantryPage() {
             {renderContent()}
           </motion.div>
         </AnimatePresence>
-      </div>
+      </ModuleShell>
 
       {/* ─── Sidebar Quick-Action Forms ───────────────────────────── */}
 
@@ -188,6 +161,6 @@ export function PantryPage() {
         open={showHealthProfileForm}
         onOpenChange={setShowHealthProfileForm}
       />
-    </div>
+    </>
   );
 }

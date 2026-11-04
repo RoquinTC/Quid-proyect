@@ -1,9 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppStore, type HealthSubView, type SidebarAction } from "@/lib/store";
-import { motion, AnimatePresence } from "framer-motion";
-import { Activity, ClipboardList, Pill, Stethoscope, Sparkles, Package, ShieldCheck, ShoppingBag } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Activity,
+  ClipboardList,
+  Heart,
+  Package,
+  Pill,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Stethoscope,
+} from "lucide-react";
 import { MedicationsView } from "./medications-view";
 import { AppointmentsView } from "./appointments-view";
 import { MedicalOrdersView } from "./medical-orders-view";
@@ -15,27 +25,35 @@ import { HealthSummaryView } from "./health-summary-view";
 import { MedicationForm } from "./medication-form";
 import { AppointmentForm } from "./appointment-form";
 import { MedicalOrderForm } from "./medical-order-form";
+import { ModuleShell, ModuleTabs, type ModuleTab } from "@/components/layout/module-kit";
 
-const tabs: { id: HealthSubView; label: string; icon: any }[] = [
-  { id: "summary", label: "Resumen", icon: Activity },
-  { id: "medications", label: "Medicamentos", icon: Pill },
-  { id: "appointments", label: "Citas", icon: Stethoscope },
-  { id: "orders", label: "Órdenes", icon: ClipboardList },
-  { id: "authorizations", label: "EPS Autorizaciones", icon: ShieldCheck },
-  { id: "claims", label: "Pendientes Farmacia", icon: ShoppingBag },
-  { id: "profiles", label: "Recomendaciones", icon: Sparkles },
-  { id: "inventory", label: "Inventario", icon: Package },
+const TABS: ModuleTab<HealthSubView>[] = [
+  { id: "summary", label: "Resumen", icon: Activity, primary: true, hint: "Tu día de salud" },
+  { id: "medications", label: "Medicamentos", icon: Pill, primary: true, hint: "Tomas e inventario" },
+  { id: "appointments", label: "Citas", icon: Stethoscope, primary: true, hint: "Agenda médica" },
+  { id: "orders", label: "Órdenes", icon: ClipboardList, primary: false, hint: "Órdenes y entregas" },
+  { id: "authorizations", label: "Autorizaciones", icon: ShieldCheck, primary: false, hint: "Trámites con la EPS" },
+  { id: "claims", label: "Farmacia", icon: ShoppingBag, primary: false, hint: "Pendientes por reclamar" },
+  { id: "profiles", label: "Recomendaciones", icon: Sparkles, primary: false, hint: "Sugerencias de Aura" },
+  { id: "inventory", label: "Inventario", icon: Package, primary: false, hint: "Existencias en casa" },
 ];
 
+const PRIMARY_TABS = TABS.filter((tab) => tab.primary !== false);
+
+/**
+ * Módulo Salud.
+ *
+ * El encabezado, las pestañas y la hoja "Más" viven en `module-kit`, igual que
+ * en Finanzas, Despensa y Transporte: un solo lenguaje visual en toda la app.
+ */
 export function HealthPage() {
   const { healthSubView, setHealthSubView, sidebarAction, setSidebarAction } = useAppStore();
 
-  // Sidebar quick-action forms
   const [showMedicationForm, setShowMedicationForm] = useState(false);
   const [showAppointmentForm, setShowAppointmentForm] = useState(false);
   const [showMedicalOrderForm, setShowMedicalOrderForm] = useState(false);
 
-  // ─── Swipe gesture for tab switching ─────────────────────────
+  // ─── Deslizar entre pestañas primarias ───
   const [touchStart, setTouchStart] = useState<{ x: number; y: number; time: number } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -51,20 +69,20 @@ export function HealthPage() {
 
     if (Math.abs(dx) > 50 && dy < 50 && dt < 500) {
       const target = e.target as HTMLElement;
-      const carouselParent = target.closest('[data-carousel], .overflow-x-auto, .snap-x');
-      if (carouselParent) return;
+      if (target.closest("[data-carousel], .overflow-x-auto, .snap-x")) return;
 
-      const currentIdx = tabs.findIndex((t) => t.id === healthSubView);
-      if (dx < 0 && currentIdx < tabs.length - 1) {
-        setHealthSubView(tabs[currentIdx + 1].id);
+      const currentIdx = PRIMARY_TABS.findIndex((t) => t.id === healthSubView);
+      if (currentIdx === -1) return;
+      if (dx < 0 && currentIdx < PRIMARY_TABS.length - 1) {
+        setHealthSubView(PRIMARY_TABS[currentIdx + 1].id);
       } else if (dx > 0 && currentIdx > 0) {
-        setHealthSubView(tabs[currentIdx - 1].id);
+        setHealthSubView(PRIMARY_TABS[currentIdx - 1].id);
       }
     }
     setTouchStart(null);
   };
 
-  // ─── Listen for sidebar quick-actions ───────────────────────────
+  // ─── Acciones rápidas desde la barra lateral ───
   useEffect(() => {
     if (!sidebarAction) return;
 
@@ -90,6 +108,34 @@ export function HealthPage() {
     }
   }, [sidebarAction, setSidebarAction, setHealthSubView]);
 
+  const action = useMemo(() => {
+    if (healthSubView === "medications") {
+      return (
+        <button
+          type="button"
+          onClick={() => setShowMedicationForm(true)}
+          className="flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm shadow-emerald-600/20 active:scale-95"
+        >
+          <Pill className="size-3.5" />
+          Agregar
+        </button>
+      );
+    }
+    if (healthSubView === "appointments") {
+      return (
+        <button
+          type="button"
+          onClick={() => setShowAppointmentForm(true)}
+          className="flex items-center gap-1 rounded-xl bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm shadow-emerald-600/20 active:scale-95"
+        >
+          <Stethoscope className="size-3.5" />
+          Agendar
+        </button>
+      );
+    }
+    return null;
+  }, [healthSubView]);
+
   const renderContent = () => {
     switch (healthSubView) {
       case "summary":
@@ -114,79 +160,39 @@ export function HealthPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Sticky Sub-tab navigation */}
-      <div className="sticky top-0 z-30 px-4 pt-3 pb-1 bg-white dark:bg-gray-900">
-        <div className="flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-x-auto no-scrollbar">
-          {tabs.map((tab) => {
-            const isActive = healthSubView === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setHealthSubView(tab.id)}
-                className="relative flex items-center justify-center gap-1 shrink-0 min-w-0 py-2 px-2 rounded-xl text-sm font-medium transition-colors duration-200 whitespace-nowrap cursor-pointer"
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="healthTab"
-                    className="absolute inset-0 bg-white dark:bg-gray-700 rounded-xl shadow-sm"
-                    transition={{
-                      type: "spring",
-                      stiffness: 500,
-                      damping: 35,
-                    }}
-                  />
-                )}
-                <Icon
-                  className={`size-3.5 relative z-10 ${
-                    isActive ? "text-rose-600" : "text-gray-400"
-                  }`}
-                />
-                <span
-                  className={`relative z-10 text-xs ${
-                    isActive ? "text-gray-900 dark:text-white" : "text-gray-500"
-                  }`}
-                >
-                  {tab.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+    <>
+      <ModuleShell
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        header={
+          <ModuleTabs
+            title="Salud"
+            icon={Heart}
+            tone="emerald"
+            tabs={TABS}
+            activeId={healthSubView}
+            onSelect={setHealthSubView}
+            layoutId="healthModuleTab"
+            action={action}
+          />
+        }
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={healthSubView}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
           >
             {renderContent()}
           </motion.div>
         </AnimatePresence>
-      </div>
+      </ModuleShell>
 
-      {/* ─── Sidebar Quick-Action Forms ───────────────────────────── */}
-
-      <MedicationForm
-        open={showMedicationForm}
-        onOpenChange={setShowMedicationForm}
-      />
-
-      <AppointmentForm
-        open={showAppointmentForm}
-        onOpenChange={setShowAppointmentForm}
-      />
-
-      <MedicalOrderForm
-        open={showMedicalOrderForm}
-        onOpenChange={setShowMedicalOrderForm}
-      />
-    </div>
+      <MedicationForm open={showMedicationForm} onOpenChange={setShowMedicationForm} />
+      <AppointmentForm open={showAppointmentForm} onOpenChange={setShowAppointmentForm} />
+      <MedicalOrderForm open={showMedicalOrderForm} onOpenChange={setShowMedicalOrderForm} />
+    </>
   );
 }

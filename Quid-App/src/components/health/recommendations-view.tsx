@@ -227,10 +227,10 @@ export function RecommendationsView() {
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden p-5 rounded-3xl border border-rose-500/10 dark:border-rose-500/5 bg-gradient-to-r from-rose-500/5 via-amber-500/5 to-emerald-500/5 shadow-sm"
+        className="relative overflow-hidden p-5 rounded-3xl border border-rose-500/10 dark:border-rose-500/5 bg-gradient-to-r from-emerald-500/5 via-amber-500/5 to-emerald-500/5 shadow-sm"
       >
         <div className="relative z-10 flex gap-4 items-start">
-          <div className="p-3 bg-gradient-to-tr from-rose-500 to-amber-500 rounded-2xl text-white shadow-md shadow-rose-500/10">
+          <div className="p-3 bg-gradient-to-tr from-emerald-500 to-amber-500 rounded-2xl text-white shadow-md shadow-rose-500/10">
             <Sparkles className="size-5" />
           </div>
           <div className="space-y-1 flex-1">

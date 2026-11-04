@@ -326,6 +326,21 @@ export async function POST(
         }
 
         // 3. El stock entra por el ledger, nunca por escritura directa.
+        //
+        // Si el producto estaba eliminado (baja lógica), comprarlo lo reactiva.
+        // Sin esto el stock entraba en una fila invisible: el producto no volvía
+        // a la nevera y el usuario acababa de pagarlo.
+        const target = await tx.pantryItem.findUnique({
+          where: { id: pantryItemId },
+          select: { isActive: true },
+        });
+        if (target && !target.isActive) {
+          await tx.pantryItem.update({
+            where: { id: pantryItemId },
+            data: { isActive: true },
+          });
+        }
+
         await applyMovement(tx, {
           itemId: pantryItemId,
           userId,

@@ -22,6 +22,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { MedicalAppointment, MedicalOrder, Medication } from "@/lib/types";
 import { HydrationCard } from "@/components/health/hydration/hydration-card";
+import { ActionTile, HealthCard, SectionHeader } from "@/components/health/ui/health-ui";
 import { AdherenceCard } from "@/components/health/adherence-card";
 
 interface Authorization {
@@ -252,16 +253,16 @@ export function HealthSummaryView() {
   return (
     <div className="p-4 space-y-3 pb-safe">
       {/* 1. ¿Qué toca ahora? */}
-      <Card className="border-0 rounded-2xl bg-gradient-to-br from-rose-600 via-rose-600 to-violet-600 text-white shadow-lg overflow-hidden">
+      <Card className="border-0 rounded-2xl bg-gradient-to-br from-emerald-600 via-emerald-600 to-teal-600 text-white shadow-lg overflow-hidden">
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-rose-100/80">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-50/80">
                 {greetingFor(today)}
               </p>
               <h2 className="mt-0.5 text-lg font-black leading-tight">Tu día de salud</h2>
             </div>
-            <Stethoscope className="mt-0.5 size-5 shrink-0 text-rose-100/70" />
+            <Stethoscope className="mt-0.5 size-5 shrink-0 text-emerald-100/70" />
           </div>
 
           {/* La acción más urgente, en grande */}
@@ -342,15 +343,14 @@ export function HealthSummaryView() {
       <HydrationCard />
 
       {/* 4. ¿Qué viene? — 7 días, sin ruido */}
-      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800">
-        <CardContent className="p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white">Próximos 7 días</h3>
-              <p className="text-[11px] text-gray-500">Citas, vencimientos y reclamos</p>
-            </div>
-            <CalendarDays className="size-4 text-rose-500" />
-          </div>
+      <HealthCard>
+        <div className="p-4">
+          <SectionHeader
+            icon={CalendarDays}
+            title="Próximos 7 días"
+            hint="Citas, vencimientos y reclamos"
+            tone="violet"
+          />
 
           <div className="grid grid-cols-7 gap-1">
             {week.map((day) => {
@@ -403,12 +403,12 @@ export function HealthSummaryView() {
           ) : (
             <p className="mt-3 text-xs text-gray-400">Nada programado esta semana.</p>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </HealthCard>
 
       {/* 5. ¿A dónde voy? — accesos compactos */}
       <div className="grid grid-cols-2 gap-2">
-        <QuickTile
+        <ActionTile
           icon={Pill}
           label="Medicamentos"
           meta={
@@ -422,44 +422,43 @@ export function HealthSummaryView() {
             setHealthSubView("medications");
           }}
         />
-        <QuickTile
+        <ActionTile
           icon={Stethoscope}
           label="Citas"
-          meta={
-            nextAppointment ? formatDate(nextAppointment.date) : "Sin agendar"
-          }
+          meta={nextAppointment ? formatDate(nextAppointment.date) : "Sin agendar"}
+          tone="violet"
           onClick={() => setHealthSubView("appointments")}
         />
-        <QuickTile
+        <ActionTile
           icon={ShieldAlert}
           label="Autorizaciones"
-          meta={
-            dueAuthorizations.length
-              ? `${dueAuthorizations.length} por vencer`
-              : "Al día"
-          }
+          meta={dueAuthorizations.length ? `${dueAuthorizations.length} por vencer` : "Al día"}
+          tone="sky"
           alert={dueAuthorizations.some((auth) => auth.daysLeft <= 1)}
           onClick={() => setHealthSubView("authorizations")}
         />
-        <QuickTile
+        <ActionTile
           icon={ShoppingBag}
           label="Farmacia"
           meta={`${pendingItems.length} por reclamar`}
+          tone="amber"
           onClick={() => setHealthSubView("claims")}
         />
-        <QuickTile
+        <ActionTile
           icon={ClipboardList}
           label="Órdenes"
           meta={`${orders.filter((order) => order.status !== "completed").length} activas`}
+          tone="sky"
           onClick={() => setHealthSubView("orders")}
         />
-        <QuickTile
+        <ActionTile
           icon={FileClock}
           label="Pendientes"
           meta={`${calendarEvents.filter((event) => {
             const left = daysUntil(event.date);
             return left >= 0 && left <= 7;
           }).length} esta semana`}
+          tone="violet"
           onClick={() => setHealthSubView("summary")}
         />
       </div>
@@ -476,39 +475,3 @@ function HeroStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function QuickTile({
-  icon: Icon,
-  label,
-  meta,
-  alert,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  meta: string;
-  alert?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button onClick={onClick} className="text-left">
-      <Card className="h-full border border-gray-100 shadow-sm rounded-2xl transition hover:shadow-md dark:border-gray-800">
-        <CardContent className="flex items-center gap-2.5 p-3">
-          <div
-            className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
-              alert
-                ? "bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400"
-                : "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-300"
-            }`}
-          >
-            <Icon className="size-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-bold text-gray-900 dark:text-white">{label}</p>
-            <p className="truncate text-[11px] text-gray-500">{meta}</p>
-          </div>
-          <ChevronRight className="size-3.5 shrink-0 text-gray-300" />
-        </CardContent>
-      </Card>
-    </button>
-  );
-}

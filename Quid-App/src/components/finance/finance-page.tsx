@@ -3,6 +3,7 @@
 import { useState, useEffect, Component } from "react";
 import { useAppStore, type FinanceSubView, type SidebarAction } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
+import { ModuleShell, ModuleTabs, type ModuleTab } from "@/components/layout/module-kit";
 import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock } from "lucide-react";
 import { FinanceOverview } from "./finance-overview";
 import { AccountsView } from "./accounts-view";
@@ -66,14 +67,14 @@ class TabErrorBoundary extends Component<{
   }
 }
 
-const tabs: { id: FinanceSubView; label: string; icon: typeof Wallet }[] = [
-  { id: "overview", label: "Resumen", icon: LayoutDashboard },
-  { id: "accounts", label: "Cuentas", icon: Wallet },
-  { id: "budgets", label: "Presupuesto", icon: Receipt },
-  { id: "debts", label: "Deudas", icon: CreditCard },
-  { id: "savings", label: "Ahorros", icon: PiggyBank },
-  { id: "cdts", label: "CDT", icon: Landmark },
-  { id: "recurring", label: "Pagos", icon: Clock },
+const tabs: ModuleTab<FinanceSubView>[] = [
+  { id: "overview", label: "Resumen", icon: LayoutDashboard, primary: true, hint: "Tu mes en una vista" },
+  { id: "accounts", label: "Cuentas", icon: Wallet, primary: true, hint: "Saldos y movimientos" },
+  { id: "budgets", label: "Presupuesto", icon: Receipt, primary: true, hint: "Límites por categoría" },
+  { id: "debts", label: "Deudas", icon: CreditCard, primary: false, hint: "Cuotas y vencimientos" },
+  { id: "savings", label: "Ahorros", icon: PiggyBank, primary: false, hint: "Metas y apartados" },
+  { id: "cdts", label: "CDT", icon: Landmark, primary: false, hint: "Inversiones a plazo" },
+  { id: "recurring", label: "Pagos", icon: Clock, primary: false, hint: "Suscripciones fijas" },
 ];
 
 export function FinancePage() {
@@ -201,56 +202,24 @@ export function FinancePage() {
   const isDetailView = financeSubView === "account-detail" || financeSubView === "debt-detail" || financeSubView === "savings-detail";
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Sticky Sub-tab navigation */}
-      {!isDetailView && (
-        <div className="sticky top-0 z-30 px-4 pt-3 pb-1 bg-white dark:bg-gray-900">
-          <div className="flex items-center gap-0.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-2xl overflow-x-auto no-scrollbar">
-            {tabs.map((tab) => {
-              const isActive = financeSubView === tab.id;
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setFinanceSubView(tab.id)}
-                  className="relative flex items-center justify-center gap-1 shrink-0 min-w-0 py-2 px-2 rounded-xl text-sm font-medium transition-colors duration-200 whitespace-nowrap"
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="financeTab"
-                      className="absolute inset-0 bg-white dark:bg-gray-700 rounded-xl shadow-sm"
-                      transition={{
-                        type: "spring",
-                        stiffness: 500,
-                        damping: 35,
-                      }}
-                    />
-                  )}
-                  <Icon
-                    className={`size-3.5 relative z-10 ${
-                      isActive ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400"
-                    }`}
-                  />
-                  <span
-                    className={`relative z-10 text-xs ${
-                      isActive ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400"
-                    }`}
-                  >
-                    {tab.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Content with swipe detection */}
-      <div
-        className="flex-1 overflow-y-auto"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-      >
+    <>
+      <ModuleShell
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      header={
+        !isDetailView ? (
+          <ModuleTabs
+            title="Finanzas"
+            icon={Wallet}
+            tone="emerald"
+            tabs={tabs}
+            activeId={financeSubView}
+            onSelect={setFinanceSubView}
+            layoutId="financeModuleTab"
+          />
+        ) : null
+      }
+    >
         <AnimatePresence mode="wait">
           <motion.div
             key={financeSubView}
@@ -262,7 +231,7 @@ export function FinancePage() {
             {renderContent()}
           </motion.div>
         </AnimatePresence>
-      </div>
+      </ModuleShell>
 
       {/* ─── Sidebar Quick-Action Forms ───────────────────────────── */}
 
@@ -308,7 +277,7 @@ export function FinancePage() {
           onOpenChange={setShowCategoriesManager}
         />
       )}
-    </div>
+    </>
   );
 }
 

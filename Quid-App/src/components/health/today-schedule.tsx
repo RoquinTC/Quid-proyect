@@ -94,7 +94,7 @@ export function TodaySchedule({ onTaken }: TodayScheduleProps) {
 
   if (loading) {
     return (
-      <Card className="border-0 shadow-md rounded-2xl">
+      <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800">
         <CardContent className="p-4 flex items-center gap-2 text-sm text-gray-400">
           <Loader2 className="size-4 animate-spin" />
           Cargando las tomas de hoy…
@@ -106,7 +106,7 @@ export function TodaySchedule({ onTaken }: TodayScheduleProps) {
   if (items.length === 0) return null;
 
   return (
-    <Card className="border-0 shadow-md rounded-2xl overflow-hidden">
+    <Card className="border border-gray-100 shadow-sm rounded-2xl dark:border-gray-800 overflow-hidden">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
