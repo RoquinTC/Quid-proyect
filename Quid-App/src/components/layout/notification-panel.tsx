@@ -6,13 +6,11 @@ import { apiFetch } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Separator } from "@/components/ui/separator";
 import {
   Bell,
   CheckCircle,
@@ -111,12 +109,65 @@ function getNotificationIcon(type: string, data: Record<string, any> | null) {
 }
 
 // ---------------------------------------------------------------------------
+// Destino
+// ---------------------------------------------------------------------------
+
+/**
+ * A dónde lleva tocar una notificación.
+ *
+ * Antes el toque solo marcaba como leída; ahora además navega al módulo y a la
+ * sub-sección donde está el asunto, que es lo que la persona quiere al tocar.
+ */
+function destinationFor(
+  type: string,
+): { module: "dashboard" | "finance" | "health" | "pantry"; finance?: string; health?: string } | null {
+  switch (type) {
+    case "invitation_received":
+    case "invitation_accepted":
+    case "invitation_rejected":
+    case "shared_transaction":
+    case "member_removed":
+    case "role_changed":
+      return { module: "finance", finance: "accounts" };
+    case "recurring_due":
+    case "recurring_upcoming":
+      return { module: "finance", finance: "recurring" };
+    case "budget_limit":
+      return { module: "finance", finance: "budgets" };
+    case "goal_completed":
+    case "goal_near_completion":
+      return { module: "finance", finance: "savings" };
+    case "yield_ready":
+      return { module: "finance", finance: "cdts" };
+    default:
+      return null;
+  }
+}
+
+/** Agrupa por día: "Hoy", "Ayer" y "Antes". */
+function dayBucket(dateStr: string): "today" | "yesterday" | "older" {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const time = date.getTime();
+  if (time >= startOfToday) return "today";
+  if (time >= startOfToday - 24 * 60 * 60 * 1000) return "yesterday";
+  return "older";
+}
+
+const BUCKET_LABELS: Record<"today" | "yesterday" | "older", string> = {
+  today: "Hoy",
+  yesterday: "Ayer",
+  older: "Antes",
+};
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function NotificationPanel() {
   const { data: session } = useSession();
-  const { addNotification } = useAppStore();
+  const { addNotification, setActiveModule, setFinanceSubView, setHealthSubView } = useAppStore();
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -275,17 +326,36 @@ export function NotificationPanel() {
   };
 
   // ---- Render ----
+  const grouped = (["today", "yesterday", "older"] as const)
+    .map((bucket) => {
+      const items = visibleNotifications.filter((n) => dayBucket(n.createdAt) === bucket);
+      return { bucket, items, unread: items.filter((n) => !n.read).length };
+    })
+    .filter((group) => group.items.length > 0);
+
+  const goTo = (notification: AppNotification) => {
+    const destination = destinationFor(notification.type);
+    if (!destination) {
+      setOpen(false);
+      return;
+    }
+    setActiveModule(destination.module);
+    if (destination.finance) {
+      setFinanceSubView(destination.finance as never);
+    }
+    if (destination.health) {
+      setHealthSubView(destination.health as never);
+    }
+    setOpen(false);
+  };
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative text-white hover:bg-white/20"
-        >
+        <Button variant="ghost" size="icon" className="relative text-white hover:bg-white/20">
           <Bell className="size-5" />
           {unreadCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 size-5 p-0 flex items-center justify-center bg-amber-400 text-emerald-900 text-xs font-bold border-0">
+            <Badge className="absolute -top-1 -right-1 flex size-5 items-center justify-center bg-amber-400 p-0 text-xs text-emerald-900">
               {unreadCount > 99 ? "99+" : unreadCount}
             </Badge>
           )}
@@ -296,153 +366,167 @@ export function NotificationPanel() {
         align="end"
         side="bottom"
         sideOffset={8}
-        className="w-full sm:w-96 max-h-[85vh] overflow-hidden p-0 rounded-xl bg-white text-gray-900 shadow-xl ring-1 ring-black/5 dark:bg-gray-950 dark:text-gray-100 dark:ring-white/10"
+        collisionPadding={12}
+        className="w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl bg-white p-0 text-gray-900 shadow-xl ring-1 ring-black/5 dark:bg-gray-900 dark:text-gray-100"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-          <h3 className="text-sm font-semibold text-foreground">
-            Notificaciones
-          </h3>
-          {unreadCount > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 gap-1 px-2 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
-              onClick={markAllAsRead}
-            >
-              <CheckCheck className="size-3.5" />
-              Marcar todas como leídas
-            </Button>
-          )}
-        </div>
-
-        {/* List */}
-        {loading && visibleNotifications.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="size-6 animate-spin text-emerald-500" />
-          </div>
-        ) : visibleNotifications.length === 0 ? (
-          /* Empty state */
-          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <div className="size-12 rounded-full bg-muted flex items-center justify-center mb-3">
-              <Bell className="size-6 text-muted-foreground" />
+        {/* Todo el panel es una columna: cabecera y pie fijos, lista con scroll */}
+        <div className="flex max-h-[min(80vh,30rem)] flex-col">
+          {/* Cabecera */}
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-100 px-3.5 py-2.5 dark:border-gray-800">
+            <div className="flex min-w-0 items-center gap-2">
+              <Bell className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <h3 className="truncate text-sm font-semibold">Notificaciones</h3>
+              {unreadCount > 0 && (
+                <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {unreadCount}
+                </span>
+              )}
             </div>
-            <p className="text-sm font-medium text-muted-foreground">
-              No hay notificaciones
-            </p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              Te avisaremos cuando haya algo nuevo
-            </p>
+
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={markAllAsRead}
+                aria-label="Marcar todas como leídas"
+                title="Marcar todas como leídas"
+                className="flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-emerald-600 transition-colors hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+              >
+                <CheckCheck className="size-3.5" />
+                <span className="whitespace-nowrap">Leídas</span>
+              </button>
+            )}
           </div>
-        ) : (
-          <ScrollArea className="max-h-72">
-            <div className="flex flex-col">
-              {visibleNotifications.map((notification, idx) => {
-                const { Icon, color, bg } = getNotificationIcon(
-                  notification.type,
-                  notification.data
-                );
-                const invitationId = getInvitationId(notification.data);
-                const isActionLoading = actionLoading[notification.id] ?? false;
-                const isInvitationPending =
-                  notification.type === "invitation_received" &&
-                  !!invitationId;
 
-                return (
-                  <div key={notification.id}>
-                    {idx > 0 && <Separator className="mx-4" />}
-                    <div
-                      className={`flex gap-3 px-4 py-3 transition-colors cursor-pointer hover:bg-accent/50 ${
-                        !notification.read ? "bg-emerald-50/70 dark:bg-emerald-950/30" : ""
-                      }`}
-                      onClick={() => {
-                        if (!notification.read) markAsRead(notification.id);
-                      }}
-                    >
-                      {/* Icon */}
+          {/* Lista con scroll propio */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            {loading && visibleNotifications.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="size-6 animate-spin text-emerald-500" />
+              </div>
+            ) : visibleNotifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+                <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted">
+                  <Bell className="size-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium text-muted-foreground">No hay notificaciones</p>
+                <p className="mt-1 text-xs text-muted-foreground/70">
+                  Te avisaremos cuando haya algo nuevo
+                </p>
+              </div>
+            ) : (
+              grouped.map((group) => (
+                <div key={group.bucket}>
+                  {/* Encabezado de grupo con la cantidad */}
+                  <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-gray-50/95 px-3.5 py-1.5 backdrop-blur dark:bg-gray-800/95">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      {BUCKET_LABELS[group.bucket]}
+                    </span>
+                    <span className="text-[10px] font-semibold text-gray-400">
+                      {group.unread > 0
+                        ? `${group.unread} nueva${group.unread === 1 ? "" : "s"}`
+                        : `${group.items.length}`}
+                    </span>
+                  </div>
+
+                  {group.items.map((notification) => {
+                    const { Icon, color, bg } = getNotificationIcon(notification.type, notification.data);
+                    const invitationId = getInvitationId(notification.data);
+                    const isActionLoading = actionLoading[notification.id] ?? false;
+                    const isInvitationPending =
+                      notification.type === "invitation_received" && !!invitationId;
+
+                    return (
                       <div
-                        className={`size-9 shrink-0 rounded-full ${bg} flex items-center justify-center mt-0.5`}
+                        key={notification.id}
+                        role="button"
+                        tabIndex={0}
+                        className={`flex cursor-pointer gap-3 border-b border-gray-50 px-3.5 py-2.5 transition-colors last:border-b-0 hover:bg-accent/50 dark:border-gray-800/60 ${
+                          !notification.read ? "bg-emerald-50/70 dark:bg-emerald-950/30" : ""
+                        }`}
+                        onClick={() => {
+                          if (!notification.read) markAsRead(notification.id);
+                          goTo(notification);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            if (!notification.read) markAsRead(notification.id);
+                            goTo(notification);
+                          }
+                        }}
                       >
-                        <Icon className={`size-4 ${color}`} />
-                      </div>
+                        <div className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${bg}`}>
+                          <Icon className={`size-3.5 ${color}`} />
+                        </div>
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <p
-                            className={`text-sm leading-snug ${
-                              !notification.read
-                                ? "font-semibold text-foreground"
-                                : "font-medium text-foreground/80"
-                            }`}
-                          >
-                            {notification.title}
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <p
+                              className={`min-w-0 break-words text-[13px] leading-snug ${
+                                !notification.read
+                                  ? "font-semibold text-foreground"
+                                  : "font-medium text-foreground/80"
+                              }`}
+                            >
+                              {notification.title}
+                            </p>
+                            {!notification.read && (
+                              <span className="mt-1.5 size-2 shrink-0 rounded-full bg-emerald-500" />
+                            )}
+                          </div>
+                          <p className="line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                            {notification.message}
                           </p>
-                          {!notification.read && (
-                            <span className="mt-1.5 size-2 shrink-0 rounded-full bg-emerald-500" />
+                          <p className="text-[10px] text-muted-foreground/60">
+                            {formatRelativeTime(notification.createdAt)}
+                          </p>
+
+                          {isInvitationPending && (
+                            <div className="flex gap-2 pt-1">
+                              <Button
+                                size="sm"
+                                className="h-7 bg-emerald-600 px-3 text-xs text-white hover:bg-emerald-700"
+                                disabled={isActionLoading}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  acceptInvitation(notification.id, invitationId!);
+                                }}
+                              >
+                                {isActionLoading ? <Loader2 className="mr-1 size-3 animate-spin" /> : null}
+                                Aceptar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 border-red-200 px-3 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:hover:bg-red-950/30"
+                                disabled={isActionLoading}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  rejectInvitation(notification.id, invitationId!);
+                                }}
+                              >
+                                Rechazar
+                              </Button>
+                            </div>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                          {notification.message}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground/60">
-                          {formatRelativeTime(notification.createdAt)}
-                        </p>
-
-                        {/* Invitation action buttons */}
-                        {isInvitationPending && (
-                          <div className="flex gap-2 pt-1">
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3"
-                              disabled={isActionLoading}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                acceptInvitation(
-                                  notification.id,
-                                  invitationId!
-                                );
-                              }}
-                            >
-                              {isActionLoading ? (
-                                <Loader2 className="size-3 animate-spin mr-1" />
-                              ) : null}
-                              Aceptar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 px-3 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/30"
-                              disabled={isActionLoading}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                rejectInvitation(
-                                  notification.id,
-                                  invitationId!
-                                );
-                              }}
-                            >
-                              Rechazar
-                            </Button>
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        )}
-
-        {/* Footer – only visible when there are visible notifications */}
-        {visibleNotifications.length > 0 && (
-          <div className="border-t border-gray-100 px-4 py-2 dark:border-gray-800">
-            <p className="text-[11px] text-center text-muted-foreground/60">
-              Se actualiza cada 30 segundos
-            </p>
+                    );
+                  })}
+                </div>
+              ))
+            )}
           </div>
-        )}
+
+          {/* Pie fijo */}
+          {visibleNotifications.length > 0 && (
+            <div className="shrink-0 border-t border-gray-100 px-3.5 py-1.5 dark:border-gray-800">
+              <p className="text-center text-[10px] text-muted-foreground/60">
+                Se actualiza cada 30 segundos
+              </p>
+            </div>
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   );
