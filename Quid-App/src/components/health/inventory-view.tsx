@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  FormActions,
+  FormDialog,
+  FormField,
+  FormNotice,
+  FormSection,
+} from "@/components/layout/form-kit";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Pill, Clock, Plus, Layers, Sparkles, Package, AlertTriangle, CheckCircle, Info, RefreshCw, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -378,101 +385,86 @@ export function InventoryView() {
       </AnimatePresence>
 
       {/* Refill Dialog Form */}
-      <Dialog open={!!refillMed} onOpenChange={(open) => { if (!open) setRefillMed(null); }}>
-        <DialogContent className="w-[95vw] sm:max-w-md rounded-2xl border-0 p-5 bg-white dark:bg-gray-900 shadow-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-              <Package className="size-4 text-rose-500" />
-              <span>Adicionar Stock</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs text-gray-500">
-              Registra la cantidad de medicamento que acabas de comprar o reponer para {refillMed?.name}.
-            </DialogDescription>
-          </DialogHeader>
+      <FormDialog
+      open={!!refillMed}
+      onOpenChange={(open) => {
+        if (!open) setRefillMed(null);
+      }}
+      title="Adicionar stock"
+      description={`Registra lo que compraste o repusiste${refillMed?.name ? ` de ${refillMed.name}` : ""}.`}
+      icon={Package}
+      tone="emerald"
+      footer={
+        refillSuccess ? undefined : (
+          <FormActions
+            onCancel={() => setRefillMed(null)}
+            submitLabel="Guardar"
+            submitType="button"
+            onSubmit={handleRefillSubmit}
+            submitting={isSubmitting}
+            disabled={!refillAmount}
+          />
+        )
+      }
+    >
+      {refillSuccess ? (
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="flex flex-col items-center justify-center space-y-2 py-6 text-center"
+        >
+          <div className="flex size-12 items-center justify-center rounded-full bg-emerald-500/10">
+            <CheckCircle className="size-7 animate-bounce text-emerald-500" />
+          </div>
+          <h4 className="text-sm font-bold text-gray-900 dark:text-white">Stock actualizado</h4>
+          <p className="text-xs text-gray-500">El inventario quedó al día.</p>
+        </motion.div>
+      ) : (
+        <>
+          <FormNotice tone="info" icon={Package}>
+            Stock actual: <strong>{refillMed?.stockQuantity ?? 0} {refillMed?.stockUnit || "uds"}</strong>
+          </FormNotice>
 
-          {refillSuccess ? (
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="py-6 flex flex-col items-center justify-center text-center space-y-2"
-            >
-              <div className="size-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                <CheckCircle className="size-7 text-emerald-500 animate-bounce" />
-              </div>
-              <h4 className="font-bold text-sm text-gray-900 dark:text-white">¡Stock Actualizado!</h4>
-              <p className="text-xs text-gray-500">El inventario se ha actualizado correctamente.</p>
-            </motion.div>
-          ) : (
-            <div className="space-y-4 pt-1">
-              <div className="p-3.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-1">
-                <span className="text-[10px] text-gray-400 block font-medium">Stock Actual</span>
-                <span className="font-bold text-sm text-gray-800 dark:text-gray-200">
-                  {refillMed?.stockQuantity ?? 0} {refillMed?.stockUnit || "uds"}
+          <FormSection title="Cantidad" icon={Plus}>
+            <FormField label="Cantidad a adicionar" htmlFor="refill-amount">
+              <div className="flex gap-2">
+                <Input
+                  id="refill-amount"
+                  type="number"
+                  min="1"
+                  value={refillAmount}
+                  onChange={(e) => setRefillAmount(e.target.value)}
+                  className="h-10 rounded-xl border-gray-200 text-sm dark:border-gray-800"
+                  placeholder="Ej: 30"
+                />
+                <span className="flex items-center rounded-xl bg-gray-50 px-2 text-xs font-medium text-gray-500 dark:bg-gray-800">
+                  {refillMed?.stockUnit || "uds"}
                 </span>
               </div>
+            </FormField>
 
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  Cantidad a Adicionar
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    min="1"
-                    value={refillAmount}
-                    onChange={(e) => setRefillAmount(e.target.value)}
-                    className="rounded-xl text-xs h-10 border-gray-200 dark:border-gray-800"
-                    placeholder="Ej: 30"
-                  />
-                  <span className="flex items-center text-xs text-gray-500 font-medium px-2 bg-gray-50 dark:bg-gray-800 rounded-xl">
-                    {refillMed?.stockUnit || "uds"}
-                  </span>
-                </div>
-
-                {/* Quick select presets */}
-                <div className="flex gap-1.5 mt-2">
-                  {["10", "30", "50", "100"].map((p) => (
-                    <Button
-                      key={p}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setRefillAmount(p)}
-                      className={`h-7 px-2.5 text-[10px] font-semibold rounded-lg ${
-                        refillAmount === p
-                          ? "bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-950/20 dark:border-rose-900/30 dark:text-rose-400"
-                          : "border-gray-200 dark:border-gray-800"
-                      }`}
-                    >
-                      +{p}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
+            <div className="flex gap-1.5">
+              {["10", "30", "50", "100"].map((preset) => (
                 <Button
+                  key={preset}
                   type="button"
-                  variant="ghost"
-                  onClick={() => setRefillMed(null)}
-                  className="flex-1 rounded-xl text-xs h-10 border border-gray-100 dark:border-gray-800"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRefillAmount(preset)}
+                  className={`h-7 rounded-lg px-2.5 text-[10px] font-semibold ${
+                    refillAmount === preset
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/30 dark:bg-emerald-950/20 dark:text-emerald-400"
+                      : "border-gray-200 dark:border-gray-800"
+                  }`}
                 >
-                  Cancelar
+                  +{preset}
                 </Button>
-                <Button
-                  type="button"
-                  onClick={handleRefillSubmit}
-                  disabled={isSubmitting || !refillAmount}
-                  className="flex-1 rounded-xl text-xs h-10 bg-rose-600 hover:bg-rose-700 text-white font-semibold flex items-center gap-1.5 cursor-pointer"
-                >
-                  {isSubmitting && <RefreshCw className="size-3 animate-spin" />}
-                  <span>Guardar</span>
-                </Button>
-              </div>
+              ))}
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </FormSection>
+        </>
+      )}
+    </FormDialog>
     </motion.div>
   );
 }

@@ -1,11 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { useDataEvent } from "@/hooks/use-data-event";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card,
+  CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  FormActions,
+  FormDialog,
+  FormField,
+  FormSection,
+  } from "@/components/layout/form-kit";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -13,17 +23,18 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+  } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+  } from "@/components/ui/select";
 import { ReceiptUpload } from "@/components/finance/receipt-upload";
 import { Badge } from "@/components/ui/badge";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion,
+  AnimatePresence } from "framer-motion";
 import {
   ShoppingBag,
   Plus,
@@ -35,6 +46,7 @@ import {
   ExternalLink,
   Package,
   ChevronDown,
+  Paperclip,
 } from "lucide-react";
 
 interface Medication {
@@ -388,122 +400,107 @@ export function PendingClaimsTab() {
       </div>
 
       {/* DIÁLOGO REGISTRAR RECLAMO/ENTREGA DE MEDICAMENTOS */}
-      <Dialog open={showClaimDialog} onOpenChange={setShowClaimDialog}>
-        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Registrar Entrega de Medicamentos</DialogTitle>
-            <DialogDescription>
-              Confirma cuántas unidades te entregaron hoy y asócialas al stock real de tu botiquín en casa.
-            </DialogDescription>
-          </DialogHeader>
+      <FormDialog
+        open={showClaimDialog}
+        onOpenChange={setShowClaimDialog}
+        title="Registrar entrega de medicamentos"
+        description="Confirma cuántas unidades te entregaron y asígnalas al botiquín de casa."
+        icon={ShoppingBag}
+        tone="emerald"
+        footer={
+          <FormActions
+            onCancel={() => setShowClaimDialog(false)}
+            submitLabel="Confirmar entrega"
+            submitType="button"
+            onSubmit={handleSubmitClaim}
+            submitting={submitting}
+          />
+        }
+      >
+        {activeOrder && (
+          <>
+            <FormSection title="Medicamentos por reclamar" icon={Package}>
+              {activeOrder.items
+                .filter((item) => item.pendingQty > 0)
+                .map((item) => {
+                  const claimData = claims[item.id] || { quantityToClaim: 0, medicationId: "" };
+                  return (
+                    <div
+                      key={item.id}
+                      className="space-y-2.5 rounded-xl border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-900/40"
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-gray-800 dark:text-gray-200">{item.name}</span>
+                        <span className="text-gray-400">
+                          Pendientes: {item.pendingQty} {item.unit}
+                        </span>
+                      </div>
 
-          {activeOrder && (
-            <div className="space-y-4 pt-2">
-              <div className="space-y-3">
-                <Label className="text-xs font-semibold text-gray-500">Medicamentos por Reclamar</Label>
-                <div className="space-y-3">
-                  {activeOrder.items
-                    .filter((item) => item.pendingQty > 0)
-                    .map((item) => {
-                      const claimData = claims[item.id] || { quantityToClaim: 0, medicationId: "" };
-                      return (
-                        <div
-                          key={item.id}
-                          className="p-3 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 space-y-2.5"
-                        >
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="font-bold text-gray-800 dark:text-gray-200">
-                              {item.name}
-                            </span>
-                            <span className="text-gray-400">
-                              Pendientes: {item.pendingQty} {item.unit}
-                            </span>
-                          </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <FormField label="Cantidad entregada">
+                          <Input
+                            type="number"
+                            min="0"
+                            max={item.pendingQty}
+                            value={claimData.quantityToClaim}
+                            onChange={(e) =>
+                              handleClaimValueChange(
+                                item.id,
+                                "quantityToClaim",
+                                Math.min(item.pendingQty, Number(e.target.value)),
+                              )
+                            }
+                            className="h-9 rounded-xl text-xs"
+                          />
+                        </FormField>
 
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] text-gray-400">Cantidad Entregada</Label>
-                              <Input
-                                type="number"
-                                min="0"
-                                max={item.pendingQty}
-                                value={claimData.quantityToClaim}
-                                onChange={(e) =>
-                                  handleClaimValueChange(
-                                    item.id,
-                                    "quantityToClaim",
-                                    Math.min(item.pendingQty, Number(e.target.value))
-                                  )
-                                }
-                                className="rounded-xl h-9 text-xs"
-                              />
-                            </div>
+                        <FormField label="Medicamento en botiquín">
+                          <Select
+                            value={claimData.medicationId}
+                            onValueChange={(val) => handleClaimValueChange(item.id, "medicationId", val)}
+                          >
+                            <SelectTrigger className="h-9 rounded-xl text-xs">
+                              <SelectValue placeholder="No asociar stock" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none_unlinked">No asociar a catálogo</SelectItem>
+                              {medications.map((med) => (
+                                <SelectItem key={med.id} value={med.id}>
+                                  {med.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormField>
+                      </div>
+                    </div>
+                  );
+                })}
+            </FormSection>
 
-                            <div className="space-y-1">
-                              <Label className="text-[10px] text-gray-400">Medicamento en Botiquín</Label>
-                              <Select
-                                value={claimData.medicationId}
-                                onValueChange={(val) =>
-                                  handleClaimValueChange(item.id, "medicationId", val)
-                                }
-                              >
-                                <SelectTrigger className="rounded-xl h-9 text-xs">
-                                  <SelectValue placeholder="No asociar stock" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none_unlinked">No asociar a catálogo</SelectItem>
-                                  {medications.map((med) => (
-                                    <SelectItem key={med.id} value={med.id}>
-                                      {med.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+            <FormSection title="Soporte y próximo reclamo" icon={Paperclip} collapsibleHint="opcional">
+              <FormField
+                label="Foto del recibo de pendientes"
+                hint="Recibo firmado o constancia de pendientes de la farmacia."
+              >
+                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-2 dark:border-gray-800 dark:bg-transparent">
+                  <ReceiptUpload value={receiptUrl} onChange={(url) => setReceiptUrl(url)} />
                 </div>
-              </div>
+              </FormField>
 
-              {/* Upload de soporte de pendientes (foto de la farmacia) */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-gray-500">Foto del Soporte / Recibo de Pendiente</Label>
-                <div className="border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl p-2 bg-gray-50/50 dark:bg-transparent">
-                  <ReceiptUpload
-                    value={receiptUrl}
-                    onChange={(url) => setReceiptUrl(url)}
-                  />
-                </div>
-                <p className="text-[10px] text-gray-400">
-                  Sube la foto del recibo firmado o la constancia de pendientes emitida por la farmacia.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="next-claim" className="text-xs text-gray-500">Próxima Fecha de Entrega / Reclamo (Opcional)</Label>
+              <FormField label="Próxima entrega o reclamo" htmlFor="next-claim">
                 <Input
                   id="next-claim"
                   type="date"
                   value={nextClaimDate}
                   onChange={(e) => setNextClaimDate(e.target.value)}
-                  className="rounded-xl h-10 text-sm"
+                  className="h-10 rounded-xl text-sm"
                 />
-              </div>
-
-              <Button
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white rounded-xl h-10 font-medium"
-                onClick={handleSubmitClaim}
-                disabled={submitting}
-              >
-                {submitting ? <Loader2 className="size-4 animate-spin mr-1" /> : <CheckCircle className="size-4 mr-1" />}
-                Confirmar Entrega de Medicamentos
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+              </FormField>
+            </FormSection>
+          </>
+        )}
+      </FormDialog>
     </div>
   );
 }

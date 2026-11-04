@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { FormActions, FormDialog } from "@/components/layout/form-kit";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Trash2 } from "lucide-react";
+import { CalendarClock, Loader2, Trash2 } from "lucide-react";
 
 type OverrideType = "modify_time" | "modify_dose" | "skip_day";
 
@@ -133,16 +134,27 @@ export function DoseOverrideDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm rounded-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-base">Ajustar solo este día</DialogTitle>
-          <DialogDescription className="text-xs">
-            {medicationName} · {day}. El resto del tratamiento no cambia.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Ajustar solo este día"
+      description={`${medicationName} · ${day}. El resto del tratamiento no cambia.`}
+      icon={CalendarClock}
+      tone="amber"
+      footer={
+        <FormActions
+          onCancel={() => onOpenChange(false)}
+          submitLabel="Guardar ajuste"
+          submitType="button"
+          onSubmit={() => void save()}
+          submitting={busy}
+        />
+      }
+    >
+  return (
+    
+      
+        <div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs">¿Qué ajustas?</Label>
             <Select value={type} onValueChange={(value) => setType(value as OverrideType)}>
@@ -229,27 +241,7 @@ export function DoseOverrideDialog({
           )}
 
           {error && <p className="text-xs text-rose-600">{error}</p>}
-        </div>
-
-        <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            className="rounded-xl text-xs"
-            onClick={() => onOpenChange(false)}
-            disabled={busy}
-          >
-            Cancelar
-          </Button>
-          <Button
-            className="rounded-xl text-xs bg-rose-600 hover:bg-rose-700 text-white"
-            onClick={() => void save()}
-            disabled={busy}
-          >
-            {busy && <Loader2 className="size-3.5 mr-1 animate-spin" />}
-            Guardar ajuste
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </FormDialog>
   );
 }

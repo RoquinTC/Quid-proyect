@@ -15,6 +15,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import {
+  FormActions,
+  FormDialog,
+  FormField,
+  FormNotice,
+  FormSection,
+} from "@/components/layout/form-kit";
 import { resolveAuthorizationState } from "@/lib/health/authorization-status";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -36,6 +43,10 @@ import {
   CalendarX,
   ChevronDown,
   ExternalLink,
+  CalendarDays,
+  Paperclip,
+  RefreshCw,
+  Stethoscope,
 } from "lucide-react";
 import { ReceiptUpload } from "@/components/finance/receipt-upload";
 
@@ -758,286 +769,271 @@ export function AuthorizationsTab() {
       </div>
 
       {/* DIÁLOGO APROBAR/AUTORIZAR EPS */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Editar orden EPS</DialogTitle>
-            <DialogDescription>
-              Corrige el servicio, tipo o notas si la remisión quedó mal registrada.
-            </DialogDescription>
-          </DialogHeader>
+      <FormDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        title="Editar orden EPS"
+        description="Corrige el servicio, el tipo o las notas si la remisión quedó mal registrada."
+        icon={ShieldCheck}
+        tone="sky"
+        footer={
+          <FormActions
+            onCancel={() => setShowEditDialog(false)}
+            submitLabel="Guardar cambios"
+            submitType="button"
+            onSubmit={handleEditAuthorization}
+            submitting={submitting}
+            disabled={!activeAuth?.specialty}
+          />
+        }
+      >
+        <FormSection title="Servicio" icon={Stethoscope}>
+          <FormField label="Servicio o especialidad" htmlFor="edit-specialty">
+            <Input
+              id="edit-specialty"
+              value={activeAuth?.specialty || ""}
+              onChange={(event) => {
+                if (!activeAuth) return;
+                setActiveAuth({ ...activeAuth, specialty: event.target.value });
+              }}
+              className="h-10 rounded-xl text-sm"
+            />
+          </FormField>
 
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-specialty" className="text-xs text-gray-500">Servicio o especialidad</Label>
+          <FormField label="Tipo de trámite">
+            <div className="flex gap-2">
+              {[
+                { value: "specialist", label: "Especialista" },
+                { value: "procedure", label: "Examen" },
+                { value: "control", label: "Control" },
+              ].map((type) => (
+                <button
+                  key={type.value}
+                  type="button"
+                  onClick={() => {
+                    if (!activeAuth) return;
+                    setActiveAuth({ ...activeAuth, type: type.value });
+                  }}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                    activeAuth?.type === type.value
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                      : "border-gray-200 text-gray-500 dark:border-gray-800"
+                  }`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </FormField>
+        </FormSection>
+
+        <FormSection title="Notas y soporte" icon={Paperclip} collapsibleHint="opcional">
+          <FormField label="Notas" htmlFor="edit-notes">
+            <Textarea
+              id="edit-notes"
+              value={activeAuth?.notes || ""}
+              onChange={(event) => {
+                if (!activeAuth) return;
+                setActiveAuth({ ...activeAuth, notes: event.target.value });
+              }}
+              className="min-h-[80px] resize-none rounded-xl text-sm"
+            />
+          </FormField>
+          <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
+        </FormSection>
+      </FormDialog>
+
+      <FormDialog
+        open={showApproveDialog}
+        onOpenChange={setShowApproveDialog}
+        title="Registrar autorización EPS"
+        description="Código oficial y fechas de vigencia autorizadas por tu EPS."
+        icon={ShieldCheck}
+        tone="emerald"
+        footer={
+          <FormActions
+            onCancel={() => setShowApproveDialog(false)}
+            submitLabel="Guardar autorización"
+            submitType="button"
+            onSubmit={handleApprove}
+            submitting={submitting}
+            disabled={!authCode || !issueDate}
+          />
+        }
+      >
+        <FormSection title="Datos de la autorización" icon={FileText}>
+          <FormField label="Código de autorización" htmlFor="reg-code">
+            <Input
+              id="reg-code"
+              placeholder="Ej: AUT-928381"
+              value={authCode}
+              onChange={(e) => setAuthCode(e.target.value)}
+              className="h-10 rounded-xl text-sm"
+            />
+          </FormField>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Fecha de expedición" htmlFor="reg-issue">
               <Input
-                id="edit-specialty"
-                value={activeAuth?.specialty || ""}
-                onChange={(event) => {
-                  if (!activeAuth) return;
-                  setActiveAuth({ ...activeAuth, specialty: event.target.value });
-                }}
-                className="rounded-xl h-10 text-sm"
+                id="reg-issue"
+                type="date"
+                value={issueDate}
+                onChange={(e) => setIssueDate(e.target.value)}
+                className="h-10 rounded-xl text-sm"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs text-gray-500">Tipo</Label>
-              <div className="flex gap-2">
-                {[
-                  { value: "specialist", label: "Especialista" },
-                  { value: "procedure", label: "Examen" },
-                  { value: "control", label: "Control" },
-                ].map((type) => (
-                  <button
-                    key={type.value}
-                    type="button"
-                    onClick={() => {
-                      if (!activeAuth) return;
-                      setActiveAuth({ ...activeAuth, type: type.value });
-                    }}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                      activeAuth?.type === type.value
-                        ? "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300"
-                        : "border-gray-200 text-gray-500 dark:border-gray-800"
-                    }`}
-                  >
-                    {type.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-notes" className="text-xs text-gray-500">Notas</Label>
-              <Textarea
-                id="edit-notes"
-                value={activeAuth?.notes || ""}
-                onChange={(event) => {
-                  if (!activeAuth) return;
-                  setActiveAuth({ ...activeAuth, notes: event.target.value });
-                }}
-                className="rounded-xl min-h-[80px] resize-none text-sm"
-              />
-            </div>
-
-            <div className="space-y-2 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 p-3 dark:border-indigo-900/50 dark:bg-indigo-950/10">
-              <Label className="text-xs font-bold text-indigo-700 dark:text-indigo-300">Soporte PDF o foto</Label>
-              <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
-            </div>
-
-            <Button
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 font-medium"
-              onClick={handleEditAuthorization}
-              disabled={submitting || !activeAuth?.specialty}
-            >
-              {submitting ? <Loader2 className="size-4 animate-spin" /> : "Guardar cambios"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Registrar Autorización EPS</DialogTitle>
-            <DialogDescription>
-              Ingresa el código oficial y las fechas de vigencia autorizadas por tu EPS para continuar.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="reg-code" className="text-xs text-gray-500">Código de Autorización</Label>
+            </FormField>
+            <FormField label="Días de validez" htmlFor="reg-validity">
               <Input
-                id="reg-code"
-                placeholder="Ej: AUT-928381"
-                value={authCode}
-                onChange={(e) => setAuthCode(e.target.value)}
-                className="rounded-xl h-10 text-sm"
+                id="reg-validity"
+                type="number"
+                placeholder="30"
+                value={daysOfValidity}
+                onChange={(e) => setDaysOfValidity(e.target.value)}
+                className="h-10 rounded-xl text-sm"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="reg-issue" className="text-xs text-gray-500">Fecha de Expedición</Label>
-                <Input
-                  id="reg-issue"
-                  type="date"
-                  value={issueDate}
-                  onChange={(e) => setIssueDate(e.target.value)}
-                  className="rounded-xl h-10 text-sm"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="reg-validity" className="text-xs text-gray-500">Días de Validez</Label>
-                <Input
-                  id="reg-validity"
-                  type="number"
-                  placeholder="30"
-                  value={daysOfValidity}
-                  onChange={(e) => setDaysOfValidity(e.target.value)}
-                  className="rounded-xl h-10 text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 p-3 dark:border-indigo-900/50 dark:bg-indigo-950/10">
-              <Label className="text-xs font-bold text-indigo-700 dark:text-indigo-300">PDF o foto de la autorización</Label>
-              <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
-            </div>
-
-            <Button
-              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 font-medium"
-              onClick={handleApprove}
-              disabled={submitting || !authCode || !issueDate}
-            >
-              {submitting ? <Loader2 className="size-4 animate-spin" /> : "Guardar Autorización"}
-            </Button>
+            </FormField>
           </div>
-        </DialogContent>
-      </Dialog>
+        </FormSection>
+
+        <FormSection title="Soporte" icon={Paperclip} collapsibleHint="opcional">
+          <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
+        </FormSection>
+      </FormDialog>
 
       {/* DIÁLOGO RENOVAR AUTORIZACIÓN */}
-      <Dialog open={showRenewDialog} onOpenChange={setShowRenewDialog}>
-        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Renovar Autorización EPS</DialogTitle>
-            <DialogDescription>
-              Registra un nuevo trámite de prórroga con un código actualizado. El historial quedará guardado para auditoría.
-            </DialogDescription>
-          </DialogHeader>
+      <FormDialog
+        open={showRenewDialog}
+        onOpenChange={setShowRenewDialog}
+        title="Renovar autorización EPS"
+        description="Registra la prórroga con un código actualizado. El historial queda para auditoría."
+        icon={RefreshCw}
+        tone="amber"
+        footer={
+          <FormActions
+            onCancel={() => setShowRenewDialog(false)}
+            submitLabel="Registrar renovación"
+            submitType="button"
+            onSubmit={handleRenew}
+            submitting={submitting}
+            disabled={!authCode || !issueDate}
+          />
+        }
+      >
+        <FormSection title="Nueva vigencia" icon={CalendarDays}>
+          <FormField label="Nuevo código de autorización" htmlFor="ren-code">
+            <Input
+              id="ren-code"
+              placeholder="Ej: AUT-928381-R1"
+              value={authCode}
+              onChange={(e) => setAuthCode(e.target.value)}
+              className="h-10 rounded-xl text-sm"
+            />
+          </FormField>
 
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="ren-code" className="text-xs text-gray-500">Nuevo Código de Autorización</Label>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Fecha de expedición" htmlFor="ren-issue">
               <Input
-                id="ren-code"
-                placeholder="Ej: AUT-928381-R1"
-                value={authCode}
-                onChange={(e) => setAuthCode(e.target.value)}
-                className="rounded-xl h-10 text-sm"
+                id="ren-issue"
+                type="date"
+                value={issueDate}
+                onChange={(e) => setIssueDate(e.target.value)}
+                className="h-10 rounded-xl text-sm"
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="ren-issue" className="text-xs text-gray-500">Fecha de Nueva Expedición</Label>
-                <Input
-                  id="ren-issue"
-                  type="date"
-                  value={issueDate}
-                  onChange={(e) => setIssueDate(e.target.value)}
-                  className="rounded-xl h-10 text-sm"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ren-validity" className="text-xs text-gray-500">Días de Validez</Label>
-                <Input
-                  id="ren-validity"
-                  type="number"
-                  placeholder="30"
-                  value={daysOfValidity}
-                  onChange={(e) => setDaysOfValidity(e.target.value)}
-                  className="rounded-xl h-10 text-sm"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2 rounded-2xl border border-dashed border-rose-200 bg-rose-50/40 p-3 dark:border-rose-900/50 dark:bg-rose-950/10">
-              <Label className="text-xs font-bold text-rose-700 dark:text-rose-300">PDF o foto de la renovación</Label>
-              <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
-            </div>
-
-            <Button
-              className="w-full bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-10 font-medium"
-              onClick={handleRenew}
-              disabled={submitting || !authCode || !issueDate}
-            >
-              {submitting ? <Loader2 className="size-4 animate-spin" /> : "Registrar Renovación"}
-            </Button>
+            </FormField>
+            <FormField label="Días de validez" htmlFor="ren-validity">
+              <Input
+                id="ren-validity"
+                type="number"
+                placeholder="30"
+                value={daysOfValidity}
+                onChange={(e) => setDaysOfValidity(e.target.value)}
+                className="h-10 rounded-xl text-sm"
+              />
+            </FormField>
           </div>
-        </DialogContent>
-      </Dialog>
+        </FormSection>
+
+        <FormSection title="Soporte de la renovación" icon={Paperclip} collapsibleHint="opcional">
+          <ReceiptUpload value={supportUrl} onChange={setSupportUrl} uploadLabel="Subir soporte" />
+        </FormSection>
+      </FormDialog>
 
       {/* DIÁLOGO AGENDAR CITA CON AUTORIZACIÓN */}
-      <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
-        <DialogContent className="w-[95vw] sm:w-full sm:max-w-md rounded-2xl p-5 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Agendar Cita con Especialista</DialogTitle>
-            <DialogDescription>
-              {activeAuth?.appointment ? "Actualiza la fecha oficial si la entidad reprogramó la cita." : "Asigna la fecha y hora oficial de tu cita médica autorizada."}
-            </DialogDescription>
-          </DialogHeader>
+      <FormDialog
+        open={showScheduleDialog}
+        onOpenChange={setShowScheduleDialog}
+        title="Agendar cita con especialista"
+        description={
+          activeAuth?.appointment
+            ? "Actualiza la fecha si la entidad reprogramó la cita."
+            : "Asigna la fecha y hora oficial de tu cita autorizada."
+        }
+        icon={Stethoscope}
+        tone="violet"
+        footer={
+          <FormActions
+            onCancel={() => setShowScheduleDialog(false)}
+            submitLabel={activeAuth?.appointment ? "Guardar reprogramación" : "Confirmar agendamiento"}
+            submitType="button"
+            onSubmit={handleSchedule}
+            submitting={submitting}
+            disabled={!aptDate}
+          />
+        }
+      >
+        <FormNotice tone="info" icon={ShieldCheck}>
+          Autorización para <strong className="capitalize">{activeAuth?.specialty}</strong>. La cita debe
+          quedar antes del vencimiento.
+        </FormNotice>
 
-          <div className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <Label className="text-xs text-gray-400">Especialidad (De la Autorización)</Label>
-              <div className="text-sm font-semibold capitalize bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
-                {activeAuth?.specialty}
-              </div>
-            </div>
+        <FormSection title="Cita" icon={CalendarDays}>
+          <FormField label="Nombre del doctor" htmlFor="sched-doctor" hint="Opcional">
+            <Input
+              id="sched-doctor"
+              placeholder="Ej: Dr. Fernando Gómez"
+              value={doctorName}
+              onChange={(e) => setDoctorName(e.target.value)}
+              className="h-10 rounded-xl text-sm"
+            />
+          </FormField>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="sched-doctor" className="text-xs text-gray-500">Nombre del Doctor (Opcional)</Label>
-              <Input
-                id="sched-doctor"
-                placeholder="Ej: Dr. Fernando Gómez"
-                value={doctorName}
-                onChange={(e) => setDoctorName(e.target.value)}
-                className="rounded-xl h-10 text-sm"
-              />
-            </div>
+          <FormField label="Fecha y hora" htmlFor="sched-date">
+            <Input
+              id="sched-date"
+              type="datetime-local"
+              value={aptDate}
+              onChange={(e) => setAptDate(e.target.value)}
+              className="h-10 rounded-xl text-sm"
+            />
+          </FormField>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="sched-date" className="text-xs text-gray-500">Fecha y Hora</Label>
-              <Input
-                id="sched-date"
-                type="datetime-local"
-                value={aptDate}
-                onChange={(e) => setAptDate(e.target.value)}
-                className="rounded-xl h-10 text-sm"
-              />
-            </div>
+          <FormField label="Consultorio / ubicación" htmlFor="sched-location" hint="Opcional">
+            <Input
+              id="sched-location"
+              placeholder="Ej: Centro de Especialistas, Consultorio 504"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="h-10 rounded-xl text-sm"
+            />
+          </FormField>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="sched-location" className="text-xs text-gray-500">Consultorio / Ubicación (Opcional)</Label>
-              <Input
-                id="sched-location"
-                placeholder="Ej: Centro de Especialistas, Consultorio 504"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="rounded-xl h-10 text-sm"
-              />
-            </div>
+          <FormField label="Notas de preparación" htmlFor="sched-notes" hint="Opcional">
+            <Textarea
+              id="sched-notes"
+              placeholder="Ej: Ir en ayunas de 8 horas…"
+              value={aptNotes}
+              onChange={(e) => setAptNotes(e.target.value)}
+              className="min-h-[70px] resize-none rounded-xl text-sm"
+            />
+          </FormField>
+        </FormSection>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="sched-notes" className="text-xs text-gray-500">Notas de Preparación (Opcional)</Label>
-              <Textarea
-                id="sched-notes"
-                placeholder="Ej: Ir en ayunas de 8 horas..."
-                value={aptNotes}
-                onChange={(e) => setAptNotes(e.target.value)}
-                className="rounded-xl min-h-[70px] resize-none text-sm"
-              />
-            </div>
-
-            {scheduleWarning && (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300">
-                {scheduleWarning}
-              </div>
-            )}
-
-            <Button
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-10 font-medium"
-              onClick={handleSchedule}
-              disabled={submitting || !aptDate}
-            >
-              {submitting ? <Loader2 className="size-4 animate-spin" /> : activeAuth?.appointment ? "Guardar reprogramación" : "Confirmar agendamiento"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        {scheduleWarning && (
+          <FormNotice tone="danger" icon={AlertTriangle}>
+            {scheduleWarning}
+          </FormNotice>
+        )}
+      </FormDialog>
 
       {/* DIÁLOGO HISTORIAL DE RENOVACIONES */}
       <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
