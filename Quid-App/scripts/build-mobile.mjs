@@ -7,8 +7,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-const apiPath = path.join(rootDir, 'src', 'app', 'api');
-const backupPath = path.join(rootDir, 'api-backup'); // Fuera de src/app para evitar escaneo de rutas de Next.js
+/**
+ * Rutas de servidor que NO pueden existir en una exportación estática.
+ *
+ * Se mueven temporalmente fuera de src/app durante el build y se restauran en
+ * el `finally`. Los respaldos viven fuera de src/app para que Next no las
+ * escanee como rutas.
+ *
+ * - `api`: todas las rutas de API (dependen del servidor).
+ * - `downloads/[file]`: sirve la APK desde el disco del servidor. Es una ruta
+ *   dinámica sin `generateStaticParams`, así que `output: export` la rechaza
+ *   ("export const dynamic / revalidate not configured"). En la app móvil no
+ *   tiene sentido: el APK no se descarga desde sí mismo.
+ */
+const SERVER_ONLY_ROUTES = [
+  {
+    live: path.join(rootDir, 'src', 'app', 'api'),
+    backup: path.join(rootDir, 'api-backup'),
+    label: 'rutas API',
+  },
+  {
+    live: path.join(rootDir, 'src', 'app', 'downloads'),
+    backup: path.join(rootDir, 'downloads-backup'),
+    label: 'descarga de APK',
+  },
+];
+
 const nextPath = path.join(rootDir, '.next');
 
 console.log('🏁 Iniciando proceso de compilación móvil estática...');
@@ -24,19 +48,23 @@ if (fs.existsSync(nextPath)) {
   }
 }
 
-// Autocuración: si la compilación anterior falló y dejó el backup, lo restauramos
-if (fs.existsSync(backupPath) && !fs.existsSync(apiPath)) {
-  console.log('🔄 Detectado respaldo de API residual. Restaurando...');
-  fs.renameSync(backupPath, apiPath);
+// Autocuración: si una compilación anterior falló y dejó respaldos, los restauramos
+for (const route of SERVER_ONLY_ROUTES) {
+  if (fs.existsSync(route.backup) && !fs.existsSync(route.live)) {
+    console.log(`🔄 Detectado respaldo residual de ${route.label}. Restaurando...`);
+    fs.renameSync(route.backup, route.live);
+  }
 }
 
-let apiMoved = false;
+const moved = [];
 
 try {
-  if (fs.existsSync(apiPath)) {
-    console.log('📦 Moviendo temporalmente la carpeta de rutas API fuera de src/app...');
-    fs.renameSync(apiPath, backupPath);
-    apiMoved = true;
+  for (const route of SERVER_ONLY_ROUTES) {
+    if (fs.existsSync(route.live)) {
+      console.log(`📦 Moviendo temporalmente ${route.label} fuera de src/app...`);
+      fs.renameSync(route.live, route.backup);
+      moved.push(route);
+    }
   }
 
   console.log('🚀 Ejecutando Next.js build con STATIC_EXPORT=true usando Webpack...');
@@ -56,9 +84,11 @@ try {
   console.error('❌ Error durante la compilación:', error.message);
   process.exitCode = 1;
 } finally {
-  if (apiMoved && fs.existsSync(backupPath)) {
-    console.log('🔄 Restaurando carpeta de rutas API...');
-    fs.renameSync(backupPath, apiPath);
-    console.log('✅ Estructura del repositorio restaurada.');
+  for (const route of moved) {
+    if (fs.existsSync(route.backup)) {
+      console.log(`🔄 Restaurando ${route.label}...`);
+      fs.renameSync(route.backup, route.live);
+    }
   }
+  console.log('✅ Estructura del repositorio restaurada.');
 }

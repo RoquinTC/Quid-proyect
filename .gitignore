@@ -58,3 +58,7 @@ ollama_data/
 # Analisis REA de APKs de terceros (binarios grandes, no van al repo)
 apks-extracted/
 apks-splits/
+
+# Respaldo temporal de rutas de servidor durante el build movil
+downloads-backup/
+api-backup/
