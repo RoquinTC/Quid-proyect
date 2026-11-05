@@ -121,6 +121,26 @@ jobs:
           fi
           keytool -list -keystore ~/.android/debug.keystore -storepass android | tail -2
 
+      # Capacitor empaqueta el bundle web desde android/app/src/main/assets/public,
+      # que está en android/.gitignore: NO viaja en el checkout. Sin este paso la
+      # APK se compila y firma bien, pero abre en blanco porque no lleva HTML/JS.
+      - name: Compilar bundle web (estático)
+        working-directory: Quid-App
+        run: npm run build:mobile
+
+      # Guarda contra la regresión que dejó releases con APK vacía: si no hay
+      # bundle, se falla aquí y no se publica nada.
+      - name: Verificar bundle web
+        working-directory: Quid-App
+        run: |
+          if [ ! -f android/app/src/main/assets/public/index.html ]; then
+            echo "::error::El bundle web no se generó: la APK quedaría vacía (pantalla en blanco)."
+            exit 1
+          fi
+          echo "bundle web presente:"
+          du -sh android/app/src/main/assets/public
+          find android/app/src/main/assets/public -name "*.js" | wc -l | sed 's/^/  archivos js: /'
+
       - name: Compilar APK (debug)
         working-directory: Quid-App/android
         run: |
