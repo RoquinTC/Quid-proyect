@@ -35,10 +35,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Node 20
+      # Capacitor 8 exige Node >= 22 (su CLI aborta con Node 20:
+      # "[fatal] The Capacitor CLI requires NodeJS >=22.0.0"). Por eso aquí se
+      # usa 22 y no 20: el build web de Next funciona igual en ambas.
+      - name: Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: Quid-App/package-lock.json
 
