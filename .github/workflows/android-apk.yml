@@ -132,7 +132,7 @@ jobs:
         run: npm run build:mobile
 
       # Guarda contra la regresión que dejó releases con APK vacía: si no hay
-      # bundle, se falla aquí y no se publica nada.
+      # bundle ni configuración, se falla aquí y no se publica nada.
       - name: Verificar bundle web
         working-directory: Quid-App
         run: |
@@ -140,9 +140,19 @@ jobs:
             echo "::error::El bundle web no se generó: la APK quedaría vacía (pantalla en blanco)."
             exit 1
           fi
+          # Sin capacitor.config.json, Capacitor usa https://localhost y el
+          # WebView muestra "página web no disponible" aunque el bundle exista.
+          if [ ! -f android/app/src/main/assets/capacitor.config.json ]; then
+            echo "::error::Falta capacitor.config.json: la app intentaría cargar https://localhost."
+            exit 1
+          fi
+          grep -q '"url"' android/app/src/main/assets/capacitor.config.json \
+            || { echo "::error::capacitor.config.json no define server.url"; exit 1; }
           echo "bundle web presente:"
           du -sh android/app/src/main/assets/public
           find android/app/src/main/assets/public -name "*.js" | wc -l | sed 's/^/  archivos js: /'
+          echo "server.url:"
+          grep -A2 '"server"' android/app/src/main/assets/capacitor.config.json | sed 's/^/  /'
 
       - name: Compilar APK (debug)
         working-directory: Quid-App/android
