@@ -474,12 +474,20 @@ export async function POST(
       }
 
       if (payment.isRecurring && payment.frequency !== "one_time") {
-        const nextDate = getNextScheduledDate(payment.scheduledDate, payment.frequency, payment.customDays);
+        // F-28 · La siguiente ocurrencia se construye desde la DEFINICIÓN
+        // (RecurringSeries), no desde la ocurrencia anterior. Si la serie no
+        // existe (datos viejos), se usa la ocurrencia como respaldo.
+        const seriesDef = payment.seriesId
+          ? await tx.recurringSeries.findUnique({ where: { id: payment.seriesId } })
+          : null;
 
-        let nextAmount = payment.amount;
-        if (payment.periodAmounts) {
+        const nextDate = getNextScheduledDate(payment.scheduledDate, payment.frequency, payment.customDays);
+        const defPeriodAmounts = seriesDef?.periodAmounts ?? payment.periodAmounts;
+
+        let nextAmount = seriesDef?.amount ?? payment.amount;
+        if (defPeriodAmounts) {
           try {
-            const dist = JSON.parse(payment.periodAmounts);
+            const dist = JSON.parse(defPeriodAmounts);
             if (Array.isArray(dist) && dist.length > 0) {
               let nextIndex = 0;
               if (payment.frequency === "biweekly" && payment.customDays) {
@@ -499,25 +507,32 @@ export async function POST(
         await tx.recurringPayment.create({
           data: {
             userId: session.user.id,
-            description: payment.description,
+            // F-28 · Campos tomados de la DEFINICIÓN cuando existe.
+            description: seriesDef?.description ?? payment.description,
             amount: nextAmount,
-            type: payment.type,
-            accountId: payment.accountId,
+            type: seriesDef?.type ?? payment.type,
+            accountId: seriesDef?.accountId ?? payment.accountId,
             subAccountId: sourceSubAccountId,
-            debtId: payment.debtId,
-            destinationAccountId: effectiveDestAccountId || payment.destinationAccountId,
+            debtId: seriesDef?.debtId ?? payment.debtId,
+            destinationAccountId:
+              effectiveDestAccountId ||
+              seriesDef?.destinationAccountId ||
+              payment.destinationAccountId,
             destinationSubAccountId: effectiveDestSubAccountId,
-            category: payment.category,
-            subCategory: payment.subCategory,
+            category: seriesDef?.category ?? payment.category,
+            subCategory: seriesDef?.subCategory ?? payment.subCategory,
             scheduledDate: nextDate,
-            frequency: payment.frequency,
-            customDays: payment.customDays,
-            periodAmounts: payment.periodAmounts,
-            notes: payment.notes,
+            frequency: seriesDef?.frequency ?? payment.frequency,
+            customDays: seriesDef?.customDays ?? payment.customDays,
+            periodAmounts: defPeriodAmounts,
+            notes: seriesDef?.notes ?? payment.notes,
             isRecurring: true,
             status: "pending",
             payrollGroupId: payment.payrollGroupId || null,
             savingsGoalId: payment.savingsGoalId || null,
+            // Hereda la identidad de la serie. Fallback al id actual para
+            // ocurrencias antiguas que aún no tienen seriesId.
+            seriesId: payment.seriesId || payment.id,
           },
         });
       }

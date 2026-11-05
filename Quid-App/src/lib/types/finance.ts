@@ -208,6 +208,8 @@ export interface RecurringPayment {
   customDays?: string | null;
   periodAmounts?: string | null;
   payrollGroupId?: string | null;
+  /** Identidad de la serie: todas las ocurrencias de un mismo recurrente la comparten. */
+  seriesId?: string | null;
   // Embedded relations from API
   account?: { id: string; name: string; color: string } | null;
   destinationAccount?: { id: string; name: string; color: string } | null;
@@ -416,6 +418,10 @@ export interface UserSettings {
   id?: string;
   theme: string;
   budgetCutoffDay: number;
+  /** Segundo día de corte (solo en modo `semimonthly`). */
+  budgetCutoffDay2: number;
+  /** `monthly` (un ciclo al mes) o `semimonthly` (dos quincenas). */
+  budgetCycleMode: string;
   respectHolidays: boolean;
   countryCode: string;
   lastBudgetReset?: string | null;

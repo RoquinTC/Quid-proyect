@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { getCancelledDateKeys, isCancelledDate } from '@/lib/recurring/regeneration'
 import { syncSavingsBudget } from '@/lib/savings-budget-sync'
 import { getColombiaTodayString, createColombiaDate } from '@/lib/api'
 import { toNumber } from '@/lib/decimal-serializer'
@@ -132,6 +133,9 @@ export async function PUT(
       const effectiveSourceAccountId = sourceAccountId !== undefined ? sourceAccountId : goal.sourceAccountId
       const effectiveDestAccountId = destinationAccountId !== undefined ? destinationAccountId : goal.destinationAccountId
 
+      // F-29 · Fechas eliminadas a propósito: la regeneración no debe recrearlas.
+      const cancelledKeys = await getCancelledDateKeys(db as any, { savingsGoalId: id });
+
       // Delete all pending recurring payments linked to this goal and recreate them
       await db.recurringPayment.deleteMany({
         where: { savingsGoalId: id, status: 'pending' },
@@ -147,6 +151,8 @@ export async function PUT(
         for (let i = 0; i < 2; i++) {
           const scheduledDate = calculateFirstDateForDay(days[i])
           const amount = amounts[i] || Math.round(monthlyQuota / 2)
+
+          if (isCancelledDate(cancelledKeys, scheduledDate)) continue;
 
           await db.recurringPayment.create({
             data: {
@@ -177,6 +183,8 @@ export async function PUT(
           const scheduledDate = calculateFirstDateForWeek(i + 1, effectiveWeeklyDay)
           const amount = amounts[i] || Math.round(monthlyQuota / 4)
 
+          if (isCancelledDate(cancelledKeys, scheduledDate)) continue;
+
           await db.recurringPayment.create({
             data: {
               userId: session.user.id,
@@ -201,24 +209,27 @@ export async function PUT(
         const effectiveMonthlyDay = monthlyDay !== undefined ? monthlyDay : goal.monthlyDay || 1
         const scheduledDate = calculateFirstDateForDay(effectiveMonthlyDay)
 
-        await db.recurringPayment.create({
-          data: {
-            userId: session.user.id,
-            description: `Aporte meta: ${effectiveName}`,
-            amount: Math.round(monthlyQuota),
-            type: 'transfer',
-            category: 'Ahorros',
-            subCategory: effectiveName,
-            frequency: 'monthly',
-            scheduledDate,
-            accountId: effectiveSourceAccountId || null,
-            destinationAccountId: effectiveDestAccountId || null,
-            customDays: JSON.stringify([effectiveMonthlyDay]),
-            periodAmounts: periodAmounts || goal.periodAmounts || null,
-            savingsGoalId: id,
-            isRecurring: true,
-          },
-        })
+        // F-29 · Si el usuario eliminó esta ocurrencia, no se recrea.
+        if (!isCancelledDate(cancelledKeys, scheduledDate)) {
+          await db.recurringPayment.create({
+            data: {
+              userId: session.user.id,
+              description: `Aporte meta: ${effectiveName}`,
+              amount: Math.round(monthlyQuota),
+              type: 'transfer',
+              category: 'Ahorros',
+              subCategory: effectiveName,
+              frequency: 'monthly',
+              scheduledDate,
+              accountId: effectiveSourceAccountId || null,
+              destinationAccountId: effectiveDestAccountId || null,
+              customDays: JSON.stringify([effectiveMonthlyDay]),
+              periodAmounts: periodAmounts || goal.periodAmounts || null,
+              savingsGoalId: id,
+              isRecurring: true,
+            },
+          })
+        }
       }
     }
 

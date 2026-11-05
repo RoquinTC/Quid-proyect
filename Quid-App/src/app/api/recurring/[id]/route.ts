@@ -242,32 +242,41 @@ export async function PUT(
       if (body.category !== undefined) seriesUpdateData.category = body.category || null;
       if (body.subCategory !== undefined) seriesUpdateData.subCategory = body.subCategory || null;
 
+      // F-28 · La definición también cambia: si no, la próxima ocurrencia nacería
+      // con los datos viejos de la serie.
+      if (existing.seriesId && Object.keys(seriesUpdateData).length > 0) {
+        await db.recurringSeries.updateMany({
+          where: { id: existing.seriesId },
+          data: seriesUpdateData,
+        });
+      }
+
       if (Object.keys(seriesUpdateData).length > 0) {
-        // If this payment belongs to a payroll group, update all future pending in the group
-        if (existing.payrollGroupId) {
+        if (existing.seriesId) {
+          // Camino principal: identidad real de la serie.
           await db.recurringPayment.updateMany({
             where: {
-              payrollGroupId: existing.payrollGroupId,
-              status: "pending",
-              id: { not: id }, // Don't update the one we already updated
-              scheduledDate: { gte: existing.scheduledDate },
-            },
-            data: seriesUpdateData,
-          });
-        } else {
-          // For non-payroll recurring payments, update by matching pattern
-          await db.recurringPayment.updateMany({
-            where: {
-              userId: session.user.id,
-              description: existing.description,
-              type: existing.type,
-              frequency: existing.frequency,
+              seriesId: existing.seriesId,
               status: "pending",
               id: { not: id },
               scheduledDate: { gte: existing.scheduledDate },
             },
             data: seriesUpdateData,
           });
+        } else if (existing.payrollGroupId) {
+          // Ocurrencias antiguas de nómina (sin seriesId).
+          await db.recurringPayment.updateMany({
+            where: {
+              payrollGroupId: existing.payrollGroupId,
+              status: "pending",
+              id: { not: id },
+              scheduledDate: { gte: existing.scheduledDate },
+            },
+            data: seriesUpdateData,
+          });
+        } else {
+          // Sin seriesId: no se propaga a otras filas. Se eliminó el emparejado
+          // por descripción para no modificar pagos distintos con el mismo nombre.
         }
       }
     }
@@ -309,40 +318,58 @@ export async function DELETE(
       );
     }
 
-    // Delete this payment
-    await db.recurringPayment.delete({ where: { id } });
+    // F-29 · Se CANCELA en vez de borrar.
+    // Borrar físicamente hacía que la regeneración de nómina/metas resucitara
+    // la ocurrencia al editar el grupo. Con `cancelled` queda memoria del
+    // borrado (ver lib/recurring/regeneration.ts) y la fila desaparece de la UI.
+    await db.recurringPayment.update({
+      where: { id },
+      data: { status: "cancelled" },
+    });
 
-    // If scope is "series", also delete all future pending payments in the same group
+    // If scope is "series", also delete all future pending payments of the SAME SERIES
     let deletedCount = 1;
     if (scope === "series" && existing.status === "pending") {
-      let whereClause: Record<string, unknown>;
+      // Camino principal: identidad real de la serie. No depende del texto, así
+      // que dos pagos distintos con la misma descripción ya no se afectan.
+      //
+      // Sin seriesId (ocurrencias antiguas) la fila ES su propia serie: no se
+      // propaga a nada. Antes se emparejaba por descripción + tipo + frecuencia,
+      // lo que borraba otros pagos con el mismo nombre. Se eliminó esa heurística
+      // a propósito: es preferible borrar de menos que borrar de más.
+      const whereClause: Record<string, unknown> | null = existing.seriesId
+        ? {
+            seriesId: existing.seriesId,
+            status: "pending",
+            scheduledDate: { gte: existing.scheduledDate },
+          }
+        : existing.payrollGroupId
+          ? {
+              payrollGroupId: existing.payrollGroupId,
+              status: "pending",
+              scheduledDate: { gte: existing.scheduledDate },
+            }
+          : null;
 
-      if (existing.payrollGroupId) {
-        // Delete all future pending payments in the same payroll group
-        whereClause = {
-          payrollGroupId: existing.payrollGroupId,
-          status: "pending",
-          scheduledDate: { gte: existing.scheduledDate },
-        };
-      } else {
-        // For non-payroll recurring payments, delete by matching pattern
-        whereClause = {
-          userId: session.user.id,
-          description: existing.description,
-          type: existing.type,
-          frequency: existing.frequency,
-          status: "pending",
-          scheduledDate: { gte: existing.scheduledDate },
-        };
+      // F-28 · La serie queda inactiva: deja de generar ocurrencias y se puede
+      // distinguir de una serie eliminada por error.
+      if (existing.seriesId) {
+        await db.recurringSeries.updateMany({
+          where: { id: existing.seriesId },
+          data: { active: false },
+        });
       }
 
-      const result = await db.recurringPayment.deleteMany({
-        where: whereClause as any,
-      });
-      deletedCount += result.count;
+      if (whereClause) {
+        const result = await db.recurringPayment.updateMany({
+          where: whereClause as any,
+          data: { status: "cancelled" },
+        });
+        deletedCount += result.count;
+      }
     }
 
-    return NextResponse.json({ success: true, deletedCount });
+    return NextResponse.json({ success: true, deletedCount, cancelled: true });
   } catch (error) {
     console.error("Delete recurring payment error:", error);
     return NextResponse.json(

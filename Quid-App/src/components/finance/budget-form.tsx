@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency, calcPercentage } from "@/lib/api";
+import { ensureCategory } from "@/lib/categories/ensure-category";
 import { Loader2 } from "lucide-react";
 import { SubCategorySelector } from "./subcategory-selector";
 import { Switch } from "@/components/ui/switch";
@@ -151,6 +152,12 @@ export function BudgetForm({ open, onOpenChange, budget, prefilledCategory, exis
   const handleSubmit = async () => {
     const finalCategory = useCustom ? customCategory : category;
     if (!finalCategory || !amount) return;
+
+    // F-43 · Guardar la categoría nueva para que quede seleccionable a futuro.
+    if (useCustom) {
+      await ensureCategory(type === "income" ? "income" : "expense", finalCategory);
+    }
+
     setLoading(true);
     try {
       const data = {

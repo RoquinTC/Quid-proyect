@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCurrentBudgetPeriod, needsBudgetReset } from "@/lib/holidays";
+import { getBudgetPeriod, needsBudgetReset } from "@/lib/holidays";
 import { getColombiaNow } from "@/lib/api";
 
 export async function POST() {
@@ -20,11 +20,7 @@ export async function POST() {
       return NextResponse.json({ error: "Configuración no encontrada" }, { status: 404 });
     }
 
-    const period = getCurrentBudgetPeriod(
-      settings.budgetCutoffDay,
-      settings.respectHolidays,
-      getColombiaNow()
-    );
+    const period = getBudgetPeriod(settings, getColombiaNow());
 
     // Check if reset is actually needed
     if (!needsBudgetReset(settings.lastBudgetReset, period.start)) {

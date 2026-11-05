@@ -154,6 +154,11 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   { model: "Budget", table: "budgets", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
   { model: "Category", table: "custom_categories", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
   { model: "CategoryRule", table: "category_rules", scope: "user", strategy: "both", orphanAudit: false, hasUpdatedAt: true },
+  // F-43 · Grupos de categorías (agrupan por nombre, no por id).
+  { model: "CategoryGroup", table: "category_groups", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  { model: "CategoryGroupMember", table: "category_group_members", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: false, parentRelation: "group" },
+  // F-28 · Definición de pago recurrente (las ocurrencias viven en RecurringPayment).
+  { model: "RecurringSeries", table: "recurring_series", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
 
   // ── Finanzas: deudas ────────────────────────────────────────────────────
   { model: "Debt", table: "debts", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },

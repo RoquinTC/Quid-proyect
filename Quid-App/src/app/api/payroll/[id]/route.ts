@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getCancelledDateKeys, isCancelledDate } from "@/lib/recurring/regeneration";
+import { ensureSeries } from "@/lib/recurring/series";
 import { adjustToBusinessDay, clampDayToMonth } from "@/lib/holidays";
 
 interface ScheduleItem {
@@ -129,6 +131,11 @@ export async function PUT(
 
     // If significant changes were made, regenerate future pending payments
     if (needsRegeneration) {
+      // F-29 · Fechas que el usuario eliminó a propósito. La regeneración NO debe
+      // volver a crearlas: antes, borrar un pago de nómina no quedaba, porque al
+      // editar el grupo se recreaban los 3 meses.
+      const cancelledKeys = await getCancelledDateKeys(db as any, { payrollGroupId: id });
+
       // Delete all existing pending payments for this group
       await db.recurringPayment.deleteMany({
         where: { payrollGroupId: id, status: "pending" },
@@ -139,6 +146,20 @@ export async function PUT(
       if (!updatedGroup) {
         return NextResponse.json({ error: "Nómina no encontrada después de actualizar" }, { status: 404 });
       }
+
+      // F-28 · Asegurar la definición de la serie (id = id del grupo).
+      await ensureSeries(session.user.id, id, {
+        description: updatedGroup.description,
+        amount: JSON.parse(updatedGroup.schedules)?.[0]?.amount || 0,
+        type: "income",
+        accountId: updatedGroup.accountId,
+        subAccountId: updatedGroup.subAccountId || null,
+        category: updatedGroup.category,
+        subCategory: updatedGroup.subCategory || null,
+        frequency: (body.frequency || updatedGroup.frequency) || "monthly",
+        notes: `Nómina - ${body.frequency || updatedGroup.frequency}`,
+        payrollGroupId: id,
+      });
 
       // Parse schedules (use new if provided, otherwise existing)
       const schedules: ScheduleItem[] = newSchedules || JSON.parse(updatedGroup.schedules);
@@ -165,6 +186,8 @@ export async function PUT(
             scheduledDate = adjustToBusinessDay(scheduledDate, direction, true);
           }
 
+          if (isCancelledDate(cancelledKeys, scheduledDate)) continue;
+
           await db.recurringPayment.create({
             data: {
               userId: session.user.id,
@@ -182,6 +205,7 @@ export async function PUT(
               isRecurring: true,
               status: "pending",
               payrollGroupId: id,
+              seriesId: id,
             },
           });
         }
@@ -205,6 +229,8 @@ export async function PUT(
               scheduledDate = adjustToBusinessDay(scheduledDate, direction, true);
             }
 
+            if (isCancelledDate(cancelledKeys, scheduledDate)) continue;
+
             await db.recurringPayment.create({
               data: {
                 userId: session.user.id,
@@ -222,6 +248,7 @@ export async function PUT(
                 isRecurring: true,
                 status: "pending",
                 payrollGroupId: id,
+              seriesId: id,
               },
             });
           }
@@ -246,6 +273,8 @@ export async function PUT(
                 scheduledDate = adjustToBusinessDay(scheduledDate, direction, true);
               }
 
+              if (isCancelledDate(cancelledKeys, scheduledDate)) continue;
+
               await db.recurringPayment.create({
                 data: {
                   userId: session.user.id,
@@ -263,6 +292,7 @@ export async function PUT(
                   isRecurring: true,
                   status: "pending",
                   payrollGroupId: id,
+              seriesId: id,
                 },
               });
             }

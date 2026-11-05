@@ -83,6 +83,11 @@ const modelPlan = [
   ["category", "Category"],
   // Faltaba: reglas automáticas de categorización.
   ["categoryRule", "CategoryRule"],
+  // F-43 · Grupos de categorías (el grupo antes que sus miembros, por la FK).
+  ["categoryGroup", "CategoryGroup"],
+  ["categoryGroupMember", "CategoryGroupMember"],
+  // F-28 · Definición de series recurrentes.
+  ["recurringSeries", "RecurringSeries"],
   ["pushSubscription", "PushSubscription"],
   ["userSettings", "UserSettings"],
   ["storedBackup", "StoredBackup"],

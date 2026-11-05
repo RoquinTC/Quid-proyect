@@ -259,3 +259,128 @@ export function needsBudgetReset(
   if (!lastResetDate) return true;
   return lastResetDate < currentPeriodStart;
 }
+
+// ─────────────────────────────────────────────────────────────
+// F-42 · Ciclo presupuestal configurable (mensual | quincenal)
+// ─────────────────────────────────────────────────────────────
+
+/** Modos soportados de ciclo presupuestal. */
+export type BudgetCycleMode = "monthly" | "semimonthly";
+
+/** Forma mínima de la configuración de ciclo que llega desde UserSettings. */
+export type BudgetCycleSettings = {
+  budgetCutoffDay?: number | null;
+  budgetCutoffDay2?: number | null;
+  budgetCycleMode?: string | null;
+  respectHolidays?: boolean | null;
+};
+
+export type BudgetPeriod = { start: Date; end: Date };
+
+export function parseBudgetCycleMode(value: string | null | undefined): BudgetCycleMode {
+  return value === "semimonthly" ? "semimonthly" : "monthly";
+}
+
+/** Desplaza un mes conservando el día 1 (evita el desborde de fin de mes). */
+function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
+  const d = new Date(year, month + delta, 1);
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+
+/**
+ * Fechas de inicio de ciclo que ARRANCAN dentro de un mes concreto.
+ *
+ * - `monthly`     → 1 fecha (el día de corte).
+ * - `semimonthly` → 2 fechas (día de corte y segundo corte).
+ *
+ * Cada día se ajusta con `calculateCutoffDate`, que ya resuelve los dos casos
+ * que importan:
+ *   1. **Mes corto**: el día 31 en febrero se recorta a 28 (29 en bisiesto) y el
+ *      día 30 en febrero igual; el 31 en abril a 30. Un "31" nunca se desborda
+ *      al mes siguiente.
+ *   2. **Fin de semana / festivo**: si `respectHolidays`, el corte se mueve al
+ *      día hábil anterior.
+ *
+ * Nota: el ajuste por festivo puede mover una fecha al mes anterior (p. ej. el
+ * 1 de enero festivo → 31 de diciembre). Por eso los períodos NO se construyen
+ * mes a mes, sino a partir de la lista global ordenada de inicios (ver
+ * `getBudgetPeriod`): así nunca hay huecos ni solapes, aunque una fecha se
+ * desplace.
+ */
+export function getPeriodStartsForMonth(
+  year: number,
+  month: number,
+  settings: BudgetCycleSettings,
+  respectHolidays: boolean
+): Date[] {
+  const mode = parseBudgetCycleMode(settings.budgetCycleMode);
+  const cutoffDay = settings.budgetCutoffDay ?? 1;
+
+  const rawDays =
+    mode === "semimonthly" ? [cutoffDay, settings.budgetCutoffDay2 ?? 16] : [cutoffDay];
+
+  return rawDays.map((day) => calculateCutoffDate(year, month, day, respectHolidays));
+}
+
+/** Ordena y elimina fechas repetidas (comparando solo el día). */
+function uniqueSortedDays(dates: Date[]): Date[] {
+  const seen = new Set<number>();
+  const out: Date[] = [];
+  for (const d of dates) {
+    const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+  }
+  out.sort((a, b) => a.getTime() - b.getTime());
+  return out;
+}
+
+/**
+ * Período de presupuesto que contiene `referenceDate`, según la configuración.
+ *
+ * Se construye la lista de inicios de los meses anterior, actual y siguiente;
+ * se ordena y se deduplica; el período es `[inicio, siguienteInicio - 1 día]`.
+ * Con esa definición el resultado es **contiguo y sin solapes** por construcción,
+ * incluso cuando un corte se desplaza por festivo o cuando dos cortes caen el
+ * mismo día en un mes corto (en ese caso la quincena degenera a un solo ciclo
+ * ese mes, sin romper nada).
+ *
+ * En modo `monthly` produce exactamente el mismo resultado que
+ * `getCurrentBudgetPeriod` (hay test de regresión).
+ */
+export function getBudgetPeriod(
+  settings: BudgetCycleSettings | null | undefined,
+  referenceDate: Date = new Date()
+): BudgetPeriod {
+  const s = settings ?? {};
+  const respectHolidays = s.respectHolidays ?? true;
+  const ref = referenceDate;
+
+  const y = ref.getFullYear();
+  const m = ref.getMonth();
+
+  const starts: Date[] = [];
+  for (const delta of [-1, 0, 1]) {
+    const { year, month } = shiftMonth(y, m, delta);
+    starts.push(...getPeriodStartsForMonth(year, month, s, respectHolidays));
+  }
+
+  const sorted = uniqueSortedDays(starts);
+
+  // Medianoche local del día de referencia: si el corte es hoy, el período YA
+  // empezó hoy (mismo criterio que getCurrentBudgetPeriod).
+  const refTime = new Date(y, m, ref.getDate()).getTime();
+
+  let index = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].getTime() <= refTime) index = i;
+    else break;
+  }
+
+  const start = sorted[index];
+  const nextStart = sorted[index + 1] ?? addDays(start, 31);
+
+  return { start, end: addDays(nextStart, -1) };
+}
+

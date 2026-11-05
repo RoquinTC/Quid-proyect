@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
-import { getCurrentBudgetPeriod } from "@/lib/holidays";
+import { getBudgetPeriod } from "@/lib/holidays";
 import { toNumber } from "@/lib/decimal-serializer";
 
 const SPANISH_MONTHS = [
@@ -49,7 +49,7 @@ export async function GET() {
       const refDate = new Date(now);
       refDate.setMonth(refDate.getMonth() + i);
       // Normalize to avoid month overflow edge cases (e.g., Jan 31 → Feb 28)
-      const period = getCurrentBudgetPeriod(cutoffDay, respectHolidays, refDate);
+      const period = getBudgetPeriod(settings, refDate);
       periods.push(period);
     }
 

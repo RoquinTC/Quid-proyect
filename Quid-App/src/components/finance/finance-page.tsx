@@ -88,6 +88,10 @@ export function FinancePage() {
   const [showDebtForm, setShowDebtForm] = useState(false);
   const [showCDTForm, setShowCDTForm] = useState(false);
   const [showRecurringForm, setShowRecurringForm] = useState(false);
+  // F-39 · "Pago" abre el mismo formulario pero en frecuencia única (one_time).
+  const [recurringDefaultFrequency, setRecurringDefaultFrequency] = useState<string | undefined>(
+    undefined
+  );
   const [showCategoriesManager, setShowCategoriesManager] = useState(false);
 
   // Swipe gesture state
@@ -123,6 +127,8 @@ export function FinancePage() {
       },
       "create-recurring": () => {
         setFinanceSubView("recurring");
+        // F-39 · Desde el sidebar es un pago recurrente normal.
+        setRecurringDefaultFrequency(undefined);
         setShowRecurringForm(true);
       },
       "manage-categories": () => {
@@ -238,6 +244,15 @@ export function FinancePage() {
       <TransactionForm
         open={showTransactionForm}
         onOpenChange={setShowTransactionForm}
+        onCreatePayment={() => {
+          // F-39 · "Pago" = obligación futura, no gasto ya hecho.
+          // No se crea una transacción: se abre el formulario de pago programado
+          // en modo "único" (RecurringPayment con frequency = one_time), que al
+          // confirmarse genera el gasto como siempre.
+          setShowTransactionForm(false);
+          setRecurringDefaultFrequency("one_time");
+          setShowRecurringForm(true);
+        }}
       />
 
       <AccountForm
@@ -268,6 +283,7 @@ export function FinancePage() {
       <RecurringForm
         open={showRecurringForm}
         onOpenChange={setShowRecurringForm}
+        defaultFrequency={recurringDefaultFrequency}
       />
 
       {/* Categories Manager Dialog */}

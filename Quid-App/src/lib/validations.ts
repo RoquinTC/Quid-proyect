@@ -1092,6 +1092,10 @@ export const payrollUpdateSchema = z.object({
 export const settingsUpdateSchema = z.object({
   theme: z.enum(["light", "dark", "oled", "system"]).optional(),
   budgetCutoffDay: z.number().int().min(1).max(31).optional(),
+  /** Segundo día de corte (solo en modo semimonthly). */
+  budgetCutoffDay2: z.number().int().min(1).max(31).optional(),
+  /** Ciclo del presupuesto: mensual o quincenal. */
+  budgetCycleMode: z.enum(["monthly", "semimonthly"]).optional(),
   respectHolidays: z.boolean().optional(),
   countryCode: z.string().optional(),
   notificationsEnabled: z.boolean().optional(),
@@ -1159,4 +1163,25 @@ export const onboardingSchema = z.object({
   currency: z.string().optional(),
   onboardingCompleted: z.boolean().optional(),
   name: z.string().optional(),
+});
+
+// ── F-43 · Grupos de categorías ──
+export const categoryGroupCreateSchema = z.object({
+  name: z.string().min(1, "El nombre es obligatorio").max(60),
+  type: z.enum(["expense", "income"]).optional().default("expense"),
+  color: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  categories: z.array(z.string().min(1)).max(100).optional().default([]),
+});
+
+export const categoryGroupUpdateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(60).optional(),
+  color: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
+  categories: z.array(z.string().min(1)).max(100).optional(),
+});
+
+export const categoryGroupDeleteSchema = z.object({
+  id: z.string().min(1),
 });

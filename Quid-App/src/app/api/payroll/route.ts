@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { adjustToBusinessDay, clampDayToMonth } from "@/lib/holidays";
 import { verifyEntityOwnership } from "@/lib/auth-guards";
 import { validateBody, payrollCreateSchema } from "@/lib/validations";
+import { ensureSeries } from "@/lib/recurring/series";
 
 interface ScheduleItem {
   day?: number;       // Day of month (1-31) for monthly/biweekly
@@ -104,6 +105,21 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // F-28 · Definición de la serie (id = id del grupo).
+    await ensureSeries(session.user.id, payrollGroup.id, {
+      description: description || "Sueldo",
+      amount: totalAmount,
+      type: "income",
+      accountId: accountId || null,
+      subAccountId: subAccountId || null,
+      category,
+      subCategory: subCategory || null,
+      frequency: frequency || "monthly",
+      notes: `Nómina - ${frequency}`,
+      payrollGroupId: payrollGroup.id,
+    });
+
+
     // Generate recurring payments for the current and next month
     const now = new Date();
     const createdPayments: CreatedRecurringPayment[] = [];
@@ -150,6 +166,8 @@ export async function POST(req: NextRequest) {
             isRecurring: true,
             status: "pending",
             payrollGroupId: payrollGroup.id,
+            // Todas las ocurrencias del grupo comparten serie
+            seriesId: payrollGroup.id,
           },
         });
         createdPayments.push(payment);
@@ -196,6 +214,8 @@ export async function POST(req: NextRequest) {
               isRecurring: true,
               status: "pending",
               payrollGroupId: payrollGroup.id,
+            // Todas las ocurrencias del grupo comparten serie
+            seriesId: payrollGroup.id,
             },
           });
           createdPayments.push(payment);
@@ -245,6 +265,8 @@ export async function POST(req: NextRequest) {
                 isRecurring: true,
                 status: "pending",
                 payrollGroupId: payrollGroup.id,
+            // Todas las ocurrencias del grupo comparten serie
+            seriesId: payrollGroup.id,
               },
             });
             createdPayments.push(payment);

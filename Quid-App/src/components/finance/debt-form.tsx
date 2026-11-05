@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency } from "@/lib/api";
+import { ensureCategory } from "@/lib/categories/ensure-category";
 import { Loader2, Trash2, Pipette, Info, Plus, X, Check } from "lucide-react";
 import type { CategoryData, Account } from "@/lib/types";
 
@@ -222,6 +223,12 @@ export function DebtForm({ open, onOpenChange, onSuccess, editDebt }: DebtFormPr
   const handleSubmit = async () => {
     if (!name || !totalAmount) return;
     if (isLoan && !paymentDate) return; // Need payment day for loans
+
+    // F-43 · Guardar la categoría nueva para que quede seleccionable a futuro.
+    if (useCustom && effectiveCategory?.trim()) {
+      await ensureCategory("expense", effectiveCategory);
+    }
+
     setLoading(true);
     try {
       const payload: Record<string, unknown> = {

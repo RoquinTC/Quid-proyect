@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { apiFetch, formatCurrency, formatDate, toColombiaDateString, getColombiaTodayString } from "@/lib/api";
+import { daysUntilDate, dueLabel } from "@/lib/finance/payment-dates";
+import { UpcomingPayments } from "./upcoming-payments";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
 import { useAppStore } from "@/lib/store";
 import { RecurringForm } from "./recurring-form";
@@ -76,20 +78,11 @@ const typeConfig: Record<string, { label: string; color: string; bgClass: string
 };
 
 function getDaysUntil(dateStr: string): number {
-  const datePart = dateStr.split("T")[0];
-  const [y, m, d] = datePart.split("-").map(Number);
-  const target = new Date(y, m - 1, d);
-  const now = new Date();
-  const todayLocal = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diffMs = target.getTime() - todayLocal.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  return daysUntilDate(dateStr);
 }
 
 function getDaysLabel(days: number): string {
-  if (days < 0) return `Vencido hace ${Math.abs(days)}d`;
-  if (days === 0) return "Hoy";
-  if (days === 1) return "Mañana";
-  return `En ${days}d`;
+  return dueLabel(days);
 }
 
 /** Get the YYYY-MM label for a date string, in Colombia timezone */
@@ -129,6 +122,31 @@ export function RecurringView() {
   const [scopeAction, setScopeAction] = useState<"edit" | "delete">("delete");
   const [scopePayment, setScopePayment] = useState<RecurringPayment | null>(null);
   const [scopeLoading, setScopeLoading] = useState(false);
+
+  /**
+   * F-29 · ¿Este pago tiene otras ocurrencias pendientes en su misma serie?
+   *
+   * Si NO las tiene, "solo este evento" y "toda la serie futura" hacen lo mismo:
+   * solo existe esta fila (las siguientes nacen al confirmar). Mostrar dos
+   * opciones ahí sería una promesa falsa, así que el diálogo muestra una sola.
+   */
+  const scopeHasFutureOccurrences = useMemo(() => {
+    const current = scopePayment;
+    if (!current) return false;
+
+    const currentTime = new Date(current.scheduledDate).getTime();
+
+    return payments.some((p) => {
+      if (p.id === current.id) return false;
+      if (p.status !== "pending") return false;
+      if (new Date(p.scheduledDate).getTime() < currentTime) return false;
+
+      // Misma serie por identidad; o, en ocurrencias antiguas, misma nómina.
+      if (current.seriesId) return p.seriesId === current.seriesId;
+      if (current.payrollGroupId) return p.payrollGroupId === current.payrollGroupId;
+      return false;
+    });
+  }, [payments, scopePayment]);
 
   // Multi-select batch confirm state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -1039,6 +1057,9 @@ export function RecurringView() {
           {/* Feature 2 & Original: List View with multi-select */}
           {viewMode === "list" && (
             <div className="space-y-3">
+              {/* F-06 · Bandeja: vencidos (siempre completos) vs próximos */}
+              <UpcomingPayments payments={payments} onConfirm={handleConfirm} />
+
               <AnimatePresence>
                 {pendingPayments.map((payment) => {
                   const daysUntil = getDaysUntil(payment.scheduledDate);
@@ -1428,10 +1449,59 @@ export function RecurringView() {
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              Este pago pertenece a la nómina <strong>"{scopePayment?.description}"</strong>. ¿Qué deseas hacer?
+              {scopeHasFutureOccurrences ? (
+                <>
+                  <strong>&quot;{scopePayment?.description}&quot;</strong> tiene pagos futuros
+                  pendientes. ¿Qué deseas hacer?
+                </>
+              ) : (
+                <>
+                  ¿Quieres {scopeAction === "delete" ? "eliminar" : "editar"}{" "}
+                  <strong>&quot;{scopePayment?.description}&quot;</strong>?
+                </>
+              )}
             </p>
             <div className="space-y-2">
-              {scopeAction === "delete" ? (
+              {!scopeHasFutureOccurrences ? (
+                /* F-29 · Sin ocurrencias futuras, "solo este" y "toda la serie" son
+                   lo mismo: solo existe esta fila. Se muestra una opción honesta. */
+                <Button
+                  variant="outline"
+                  className={`w-full justify-start rounded-xl h-auto py-3 ${
+                    scopeAction === "delete"
+                      ? "border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"
+                      : "border-blue-200 hover:bg-blue-50 dark:border-blue-800 dark:hover:bg-blue-900/20"
+                  }`}
+                  onClick={async () => {
+                    if (scopeAction === "delete") {
+                      setScopeLoading(true);
+                      await handleDelete(scopePayment!.id, "single");
+                      setScopeLoading(false);
+                    } else {
+                      handleEdit(scopePayment!, "single");
+                    }
+                    setScopeDialogOpen(false);
+                  }}
+                  disabled={scopeLoading}
+                >
+                  <div className="text-left">
+                    <p
+                      className={`font-medium text-sm ${
+                        scopeAction === "delete"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-blue-600 dark:text-blue-400"
+                      }`}
+                    >
+                      {scopeAction === "delete" ? "Eliminar este pago" : "Editar este pago"}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {scopeAction === "delete"
+                        ? "Es la única ocurrencia pendiente: no se generarán más pagos de este recurrente"
+                        : "Solo existe esta ocurrencia pendiente"}
+                    </p>
+                  </div>
+                </Button>
+              ) : scopeAction === "delete" ? (
                 <>
                   <Button
                     variant="outline"
@@ -1462,7 +1532,7 @@ export function RecurringView() {
                   >
                     <div className="text-left">
                       <p className="font-medium text-sm text-red-600 dark:text-red-400">Toda la serie futura</p>
-                      <p className="text-xs text-gray-400">Elimina este y todos los pagos futuros de esta nómina</p>
+                      <p className="text-xs text-gray-400">Elimina este y todos los pagos futuros de esta serie</p>
                     </div>
                   </Button>
                 </>
@@ -1493,7 +1563,7 @@ export function RecurringView() {
                   >
                     <div className="text-left">
                       <p className="font-medium text-sm text-blue-600 dark:text-blue-400">Toda la serie futura</p>
-                      <p className="text-xs text-gray-400">Aplica los cambios a todos los pagos futuros de esta nómina</p>
+                      <p className="text-xs text-gray-400">Aplica los cambios a todos los pagos futuros de esta serie</p>
                     </div>
                   </Button>
                 </>

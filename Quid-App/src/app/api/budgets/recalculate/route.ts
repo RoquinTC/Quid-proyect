@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
-import { getCurrentBudgetPeriod } from "@/lib/holidays";
+import { getBudgetPeriod } from "@/lib/holidays";
 import { syncSavingsBudget } from "@/lib/savings-budget-sync";
 import { toNumber } from "@/lib/decimal-serializer";
 import { createAndPushNotification } from "@/lib/push";
@@ -60,11 +60,7 @@ export async function POST() {
     const respectHolidays = settings?.respectHolidays ?? true;
 
     // Calculate current budget period using the user's cutoff day
-    const { start: periodStart, end: periodEnd } = getCurrentBudgetPeriod(
-      cutoffDay,
-      respectHolidays,
-      getColombiaNow()
-    );
+    const { start: periodStart, end: periodEnd } = getBudgetPeriod(settings, getColombiaNow());
 
     // Consistent date range: same end boundary for both transactions and installments
     const periodEndPlus = new Date(periodEnd.getTime() + 24 * 60 * 60 * 1000);

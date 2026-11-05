@@ -1,6 +1,22 @@
 {
-  "currentVersion": "1.1.6",
+  "currentVersion": "1.1.7",
   "releases": [
+    {
+      "version": "1.1.7",
+      "date": "2026-11-05",
+      "title": "Quid 1.1.7",
+      "changes": [
+        "Fase 0 y Fase 1 de Finanzas",
+        "Safe to Spend con anatomia auditable",
+        "Vencidos vs proximos con totales",
+        "Ciclo mensual y quincenal con meses cortos y bisiestos",
+        "Calculadora y division de cuenta en el monto",
+        "Saldo corrido por cuenta en el historial",
+        "Sugerencia de cuenta por categoria",
+        "Grupos de categorias y categorias propias",
+        "Definicion de serie separada de sus ocurrencias"
+      ]
+    },
     {
       "version": "1.1.6",
       "date": "2026-11-04",

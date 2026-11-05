@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency, getColombiaTodayString, toColombiaDateString } from "@/lib/api";
+import { ensureCategory } from "@/lib/categories/ensure-category";
 import { Loader2, Wallet, Info, AlertTriangle } from "lucide-react";
 import type { Account, CategoryData, Installment } from "@/lib/types";
 
@@ -110,6 +111,11 @@ export function InstallmentForm({ open, onOpenChange, debtId, editInstallment, o
     setLoading(true);
     try {
       const finalCategory = useCustomCategory ? customCategory : category;
+
+      // F-43 · Guardar la categoría nueva para que quede seleccionable a futuro.
+      if (useCustomCategory) {
+        await ensureCategory("expense", finalCategory);
+      }
 
       if (isEditing && editInstallment) {
         // EDIT mode

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,12 +24,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiFetch, formatCurrency, parseLocalDate, getColombiaTodayString, toColombiaDateString } from "@/lib/api";
+import { ensureCategory } from "@/lib/categories/ensure-category";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, ArrowUpRight, ArrowDownRight, Repeat, PiggyBank, Plus, X, Check } from "lucide-react";
+import { Loader2, ArrowUpRight, ArrowDownRight, Repeat, PiggyBank, Plus, X, Check, Sparkles, CalendarClock } from "lucide-react";
 import { ReceiptUpload } from "./receipt-upload";
 import { SubCategorySelector } from "./subcategory-selector";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
+import { evaluateExpression } from "@/lib/parse/expression";
 import type { CategoryData, SubAccount, Account } from "@/lib/types";
 
 const quickAmounts = [10000, 20000, 50000, 100000];
@@ -55,6 +57,12 @@ interface TransactionFormProps {
     receiptUrl?: string | null;
   } | null;
   onSuccess?: () => void | Promise<void>;
+  /**
+   * F-39 · Cuando se provee, el formulario ofrece registrar un "Pago":
+   * una obligación futura que todavía no movió dinero. No crea una
+   * transacción; abre el formulario de pago programado en modo único.
+   */
+  onCreatePayment?: () => void;
 }
 
 export function TransactionForm({
@@ -65,6 +73,7 @@ export function TransactionForm({
   defaultDescription,
   editTransaction,
   onSuccess,
+  onCreatePayment,
 }: TransactionFormProps) {
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -91,6 +100,27 @@ export function TransactionForm({
 
   const isEditing = !!editTransaction;
   const isMobile = useIsMobile();
+
+  // F-03 · El monto acepta aritmética (12000/3, 2500+1800, (1200+800)*2).
+  // Se evalúa de forma segura (sin eval) y el resultado se muestra al usuario
+  // antes de guardar, para que una mala lectura del formato nunca pase inadvertida.
+  const parsedAmount = useMemo(() => evaluateExpression(amount), [amount]);
+
+  /** Añade un token al final del monto (operadores del teclado numérico móvil). */
+  const appendToken = (token: string) => setAmount((prev) => `${prev}${token}`);
+
+  // F-48 · Sugerencia de cuenta por categoría.
+  // Un "cuenta predeterminada" fijo estaría mal la mitad de las veces: el patrón
+  // real es categoría → cuenta (el arriendo sale de una, el mercado de otra).
+  // Se aprende del historial y se marca visualmente como sugerencia.
+  const [suggestion, setSuggestion] = useState<{
+    accountId: string;
+    subAccountId: string | null;
+    count: number;
+  } | null>(null);
+  // Si el usuario toca una cuenta, la sugerencia deja de aplicarse.
+  const [accountTouched, setAccountTouched] = useState(false);
+
   const normalizeSubAccountId = (value: string | null | undefined) =>
     value && value !== "none" && value !== "__none__" ? value : null;
 
@@ -137,13 +167,13 @@ export function TransactionForm({
     try {
       const data = await apiFetch<Account[]>("/api/accounts");
       setAccounts(data);
-      if (!defaultAccountId && !editTransaction && data.length > 0) {
-        setAccountId(data[0].id);
-      }
+      // Antes se preseleccionaba `data[0]` en silencio, lo que registraba el gasto
+      // en la primera cuenta de la lista si el usuario no lo notaba. Ahora no se
+      // preselecciona nada: o lo elige el usuario, o lo sugiere la categoría.
     } catch (error) {
       console.error("Error fetching accounts:", error);
     }
-  }, [defaultAccountId, editTransaction]);
+  }, []);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -170,6 +200,9 @@ export function TransactionForm({
     }
     setUseCustomCategory(false);
     setCustomCategory("");
+    // Cambiar de ingreso a gasto (o al revés) invalida la sugerencia previa.
+    setAccountTouched(false);
+    setSuggestion(null);
   }, [type, editTransaction]);
 
   // When category changes, reset subcategory
@@ -179,8 +212,60 @@ export function TransactionForm({
     }
   }, [category, editTransaction]);
 
+  // F-48 · Pide la sugerencia de cuenta para la categoría/subcategoría elegida.
+  useEffect(() => {
+    if (!open || isEditing || type === "transfer") {
+      setSuggestion(null);
+      return;
+    }
+    const effectiveCategory = useCustomCategory ? customCategory.trim() : category;
+    if (!effectiveCategory) {
+      setSuggestion(null);
+      return;
+    }
+
+    let cancelled = false;
+    const params = new URLSearchParams({ category: effectiveCategory, type });
+    if (subCategory) params.set("subCategory", subCategory);
+
+    apiFetch<{ suggestion: { accountId: string; subAccountId: string | null; count: number } | null }>(
+      `/api/transactions/account-suggestion?${params.toString()}`
+    )
+      .then((res) => {
+        if (!cancelled) setSuggestion(res.suggestion ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggestion(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isEditing, type, category, subCategory, useCustomCategory, customCategory]);
+
+  // F-48 · Aplica la sugerencia mientras el usuario no haya tocado la cuenta.
+  // No es silencioso: la cuenta queda marcada como "Sugerida" en la fila de chips.
+  useEffect(() => {
+    if (isEditing || type === "transfer" || accountTouched) return;
+    if (!suggestion?.accountId) return;
+    if (!accounts.some((a) => a.id === suggestion.accountId)) return;
+
+    setAccountId(suggestion.accountId);
+    if (suggestion.subAccountId) {
+      setSubAccountId(suggestion.subAccountId);
+    }
+  }, [suggestion, accountTouched, isEditing, type, accounts]);
+
   const handleSubmit = async () => {
-    if (!amount || !description) return;
+    if (!description) return;
+    if (!parsedAmount.ok) {
+      toast.error("Monto no válido", { description: parsedAmount.error });
+      return;
+    }
+    if (parsedAmount.value <= 0) {
+      toast.error("El monto debe ser mayor que cero");
+      return;
+    }
     if (type !== "transfer" && !accountId) return;
     if (type === "transfer" && (!accountId || !toAccountId)) return;
     if (isSameTransferTarget) {
@@ -192,6 +277,13 @@ export function TransactionForm({
     setLoading(true);
     try {
       const finalCategory = useCustomCategory ? customCategory : category;
+
+      // F-43 · Si el usuario escribió una categoría nueva, se guarda para que
+      // aparezca en los selectores de aquí en adelante (antes se perdía).
+      if (useCustomCategory && type !== "transfer" && finalCategory?.trim()) {
+        await ensureCategory(type === "income" ? "income" : "expense", finalCategory);
+      }
+
       const sourceSubAccountId = normalizeSubAccountId(subAccountId);
       const destinationSubAccountId = normalizeSubAccountId(toSubAccountId);
       if (isEditing) {
@@ -199,7 +291,7 @@ export function TransactionForm({
           method: "PUT",
           body: JSON.stringify({
             type,
-            amount: parseFloat(amount),
+            amount: parsedAmount.value,
             description,
             accountId: accountId || null,
             subAccountId: sourceSubAccountId,
@@ -219,7 +311,7 @@ export function TransactionForm({
           method: 'POST',
           body: JSON.stringify({
             type,
-            amount: parseFloat(amount),
+            amount: parsedAmount.value,
             description,
             accountId: accountId || null,
             subAccountId: sourceSubAccountId,
@@ -278,70 +370,113 @@ export function TransactionForm({
     setReceiptUrl(null);
     setUseCustomCategory(false);
     setCustomCategory("");
+    // La siguiente transacción vuelve a aceptar sugerencia por categoría.
+    setAccountTouched(false);
+    setSuggestion(null);
   };
 
-  // Build combined account options (accounts + sub-accounts grouped)
-  const renderAccountSelect = (
+  /**
+   * F-48 · Chips de cuenta en lugar de un dropdown.
+   * Con varias cuentas (y bolsillos) el desplegable obliga a abrir, buscar y
+   * desplazarse; un chip es un toque. La cuenta sugerida se marca aparte para
+   * que la preselección sea VISIBLE y no silenciosa.
+   */
+  const renderAccountChips = (
     value: string,
     onChange: (val: string) => void,
-    label: string
+    label: string,
+    suggestedAccountId?: string | null,
+    suggestedSubAccountId?: string | null
   ) => (
     <div className="space-y-2">
       <Label>{label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="rounded-xl">
-          <SelectValue placeholder="Seleccionar cuenta" />
-        </SelectTrigger>
-        <SelectContent>
-          {accounts
-            .map((acc) => (
-              <SelectItem key={acc.id} value={acc.id}>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="size-3 rounded-full shrink-0"
-                    style={{ backgroundColor: acc.color }}
-                  />
-                  <span>{acc.name}</span>
-                  <span className="text-xs text-gray-400 ml-auto">
-                    {formatCurrency(acc.balance)}
-                  </span>
-                </div>
-              </SelectItem>
-            ))}
-        </SelectContent>
-      </Select>
+      {accounts.length === 0 ? (
+        <p className="text-xs text-gray-400">Cargando cuentas…</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {accounts.map((acc) => {
+            const isActive = value === acc.id;
+            const isSuggested = suggestedAccountId === acc.id && !isActive;
+            return (
+              <button
+                key={acc.id}
+                type="button"
+                onClick={() => onChange(acc.id)}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-all ${
+                  isActive
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300"
+                    : isSuggested
+                      ? "border-dashed border-emerald-300 bg-white text-gray-600 dark:border-emerald-800 dark:bg-gray-800 dark:text-gray-300"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                }`}
+                title={isSuggested ? `Sugerida: la usas más para esta categoría` : acc.name}
+              >
+                <span
+                  className="size-2 rounded-full shrink-0"
+                  style={{ backgroundColor: acc.color }}
+                />
+                <span className="max-w-[9rem] truncate">{acc.name}</span>
+                {isSuggested && <Sparkles className="size-3 text-emerald-500" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {suggestedSubAccountId && suggestedAccountId === value && (
+        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
+          <Sparkles className="size-3" />
+          Sugerida según tu historial de esta categoría
+        </p>
+      )}
     </div>
   );
 
-  const renderSubAccountSelect = (
+  const renderSubAccountChips = (
     parentAccountId: string,
     value: string,
     onChange: (val: string) => void,
-    subs: SubAccount[]
+    subs: SubAccount[],
+    suggestedSubAccountId?: string | null
   ) => {
     if (!parentAccountId || subs.length === 0) return null;
     return (
       <div className="space-y-2">
         <Label>Bolsillo (opcional)</Label>
-        <Select value={value} onValueChange={onChange}>
-          <SelectTrigger className="rounded-xl">
-            <SelectValue placeholder="Cuenta principal" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Cuenta principal</SelectItem>
-            {subs.map((sub) => (
-              <SelectItem key={sub.id} value={sub.id}>
-                <div className="flex items-center gap-2">
-                  <PiggyBank className="size-3 text-gray-400" />
-                  <span>{sub.name}</span>
-                  <span className="text-xs text-gray-400 ml-auto">
-                    {formatCurrency(sub.balance)}
-                  </span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onChange("none")}
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-all ${
+              normalizeSubAccountId(value) === null
+                ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300"
+                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            }`}
+          >
+            Cuenta principal
+          </button>
+          {subs.map((sub) => {
+            const isActive = value === sub.id;
+            const isSuggested = suggestedSubAccountId === sub.id && !isActive;
+            return (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => onChange(sub.id)}
+                className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-medium transition-all ${
+                  isActive
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300"
+                    : isSuggested
+                      ? "border-dashed border-emerald-300 bg-white text-gray-600 dark:border-emerald-800 dark:bg-gray-800 dark:text-gray-300"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                }`}
+              >
+                <PiggyBank className="size-3 text-gray-400" />
+                <span className="max-w-[9rem] truncate">{sub.name}</span>
+                {isSuggested && <Sparkles className="size-3 text-emerald-500" />}
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -384,30 +519,117 @@ export function TransactionForm({
         })}
       </div>
 
+      {/* F-39 · Pago = obligación futura, no gasto ya hecho.
+          Va como enlace aparte para no apretar los tres tipos en móvil y
+          porque NO crea una transacción: abre el pago programado. */}
+      {onCreatePayment && !isEditing && (
+        <button
+          type="button"
+          onClick={() => {
+            onOpenChange(false);
+            onCreatePayment();
+          }}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-amber-300 bg-amber-50/60 px-3 py-2 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-100/70 dark:border-amber-800 dark:bg-amber-900/10 dark:text-amber-400 dark:hover:bg-amber-900/20"
+          title="Registra algo que aún tienes que pagar; no afecta tu saldo hasta que lo pagues"
+        >
+          <CalendarClock className="size-3.5" />
+          ¿Un pago que aún no hiciste? Regístralo como pago programado
+        </button>
+      )}
+
       {/* Amount */}
       <div className="space-y-2">
-        <Label>Monto</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label>Monto</Label>
+          {parsedAmount.ok && parsedAmount.isExpression && (
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              = {formatCurrency(parsedAmount.value)}
+            </span>
+          )}
+          {!parsedAmount.ok && amount.trim() !== "" && (
+            <span className="text-xs font-medium text-rose-500">{parsedAmount.error}</span>
+          )}
+        </div>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
             $
           </span>
           <Input
-            type="number"
-            step="0.01"
-            placeholder="0"
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0 o una operación: 12000/3"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="pl-7 text-xl font-bold rounded-xl h-14"
+            className="pl-7 pr-10 text-xl font-bold rounded-xl h-14"
           />
+          {amount !== "" && (
+            <button
+              type="button"
+              onClick={() => setAmount("")}
+              aria-label="Limpiar monto"
+              className="absolute right-2 top-1/2 -translate-y-1/2 size-8 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-center"
+            >
+              <X className="size-4" />
+            </button>
+          )}
         </div>
+
+        {/* Atajos de monto */}
         <div className="flex gap-2">
           {quickAmounts.map((qa) => (
             <button
               key={qa}
+              type="button"
               onClick={() => setAmount(qa.toString())}
               className="flex-1 py-2 bg-gray-50 dark:bg-gray-800 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
               {formatCurrency(qa)}
+            </button>
+          ))}
+        </div>
+
+        {/* Operadores: el teclado numérico del móvil no los trae */}
+        <div className="flex gap-1.5 items-center">
+          <span className="text-[11px] text-gray-400 shrink-0 mr-0.5">Calcular</span>
+          {[
+            { token: "+", label: "+" },
+            { token: "-", label: "−" },
+            { token: "*", label: "×" },
+            { token: "/", label: "÷" },
+            { token: "(", label: "(" },
+            { token: ")", label: ")" },
+          ].map((op) => (
+            <button
+              key={op.token}
+              type="button"
+              onClick={() => appendToken(op.token)}
+              className="flex-1 h-8 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
+              {op.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setAmount((prev) => prev.slice(0, -1))}
+            aria-label="Borrar último"
+            className="flex-1 h-8 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          >
+            ⌫
+          </button>
+        </div>
+
+        {/* Dividir la cuenta entre varios */}
+        <div className="flex gap-1.5 items-center">
+          <span className="text-[11px] text-gray-400 shrink-0 mr-0.5">Dividir entre</span>
+          {[2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => appendToken(`/${n}`)}
+              className="flex-1 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+            >
+              {n}
             </button>
           ))}
         </div>
@@ -427,10 +649,24 @@ export function TransactionForm({
       {/* Account selection */}
       {type === "transfer" ? (
         <>
-          {renderAccountSelect(accountId, setAccountId, "Desde cuenta")}
-          {renderSubAccountSelect(accountId, subAccountId, setSubAccountId, subAccounts)}
-          {renderAccountSelect(toAccountId, setToAccountId, "Hacia cuenta")}
-          {renderSubAccountSelect(toAccountId, toSubAccountId, setToSubAccountId, toSubAccounts)}
+          {renderAccountChips(
+            accountId,
+            (v) => {
+              setAccountId(v);
+              setAccountTouched(true);
+            },
+            "Desde cuenta"
+          )}
+          {renderSubAccountChips(accountId, subAccountId, setSubAccountId, subAccounts)}
+          {renderAccountChips(
+            toAccountId,
+            (v) => {
+              setToAccountId(v);
+              setAccountTouched(true);
+            },
+            "Hacia cuenta"
+          )}
+          {renderSubAccountChips(toAccountId, toSubAccountId, setToSubAccountId, toSubAccounts)}
           {isSameTransferTarget && (
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
               El origen y destino son iguales. Puedes mover de un bolsillo a la cuenta principal, de la cuenta principal a un bolsillo o entre bolsillos distintos.
@@ -439,8 +675,28 @@ export function TransactionForm({
         </>
       ) : (
         <>
-          {renderAccountSelect(accountId, setAccountId, "Cuenta")}
-          {renderSubAccountSelect(accountId, subAccountId, setSubAccountId, subAccounts)}
+          {renderAccountChips(
+            accountId,
+            (v) => {
+              setAccountId(v);
+              setAccountTouched(true);
+              // Al cambiar de cuenta, el bolsillo anterior deja de existir.
+              setSubAccountId("");
+            },
+            "Cuenta",
+            suggestion?.accountId ?? null,
+            suggestion?.subAccountId ?? null
+          )}
+          {renderSubAccountChips(
+            accountId,
+            subAccountId,
+            (v) => {
+              setSubAccountId(v);
+              setAccountTouched(true);
+            },
+            subAccounts,
+            suggestion?.subAccountId ?? null
+          )}
         </>
       )}
 
@@ -553,7 +809,7 @@ export function TransactionForm({
       {/* Submit */}
       <Button
         onClick={handleSubmit}
-        disabled={loading || !amount || !description || (!accountId && type !== "transfer") || (type === "transfer" && (!accountId || !toAccountId || isSameTransferTarget))}
+        disabled={loading || !parsedAmount.ok || parsedAmount.value <= 0 || !description || (!accountId && type !== "transfer") || (type === "transfer" && (!accountId || !toAccountId || isSameTransferTarget))}
         className={`w-full rounded-xl h-12 text-sm font-semibold ${
           type === "income"
             ? "bg-gradient-to-r from-emerald-600 to-teal-500"

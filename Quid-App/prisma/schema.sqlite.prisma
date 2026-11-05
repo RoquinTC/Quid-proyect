@@ -60,6 +60,8 @@ model User {
   fuelPrices          FuelPrice[]
   categories          Category[]
   categoryRules       CategoryRule[]
+  categoryGroups      CategoryGroup[]
+  recurringSeries     RecurringSeries[]
   settings            UserSettings?
   sentInvitations     AccountInvitation[]  @relation("SentInvitations")
   receivedInvitations AccountInvitation[]  @relation("ReceivedInvitations")
@@ -408,6 +410,10 @@ model RecurringPayment {
   customDays              String?   // JSON array de dias personalizados
   periodAmounts           String?   // JSON array de montos por periodo
   payrollGroupId          String?   // Link to payroll group (for salary-type recurring payments)
+  // Identidad de la SERIE: todas las ocurrencias de un mismo pago recurrente
+  // comparten este valor. Se usa para editar/eliminar la serie sin emparejar
+  // por descripción (que borraba otros pagos con el mismo nombre).
+  seriesId                String?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
@@ -419,6 +425,7 @@ model RecurringPayment {
   savingsGoal        SavingsGoal? @relation(fields: [savingsGoalId], references: [id])
   payrollGroup       PayrollGroup? @relation(fields: [payrollGroupId], references: [id], onDelete: Cascade)
 
+  @@index([seriesId])
   @@map("recurring_payments")
 }
 
@@ -1321,6 +1328,8 @@ model UserSettings {
   userId              String    @unique
   theme               String    @default("light") // light, dark, system
   budgetCutoffDay     Int       @default(1) // Day of month (1-31) for budget period start
+  budgetCutoffDay2    Int       @default(16) // Segundo corte (solo modo semanal/quincenal)
+  budgetCycleMode     String    @default("monthly") // monthly | semimonthly
   respectHolidays     Boolean   @default(true) // Consider holidays for business day calculation
   countryCode         String    @default("CO") // For holiday calculations
   lastBudgetReset     DateTime? // When budgets were last reset
@@ -1523,4 +1532,89 @@ model DoseOverride {
   @@unique([medicationId, day, type])
   @@index([userId, day])
   @@map("dose_overrides")
+}
+
+// ============================================
+// FINANCE MODULE - CATEGORY GROUPS (F-43)
+// ============================================
+
+/// Agrupación de categorías para leer el presupuesto en el idioma del usuario.
+/// Ej: "Hogar" = Vivienda + Servicios + Mantenimiento.
+/// Los miembros se guardan por NOMBRE de categoría porque las categorías por
+/// defecto no existen como fila (solo las propias del usuario).
+model CategoryGroup {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  type      String   @default("expense") // expense | income
+  color     String?
+  icon      String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  members CategoryGroupMember[]
+
+  @@unique([userId, type, name])
+  @@index([userId])
+  @@map("category_groups")
+}
+
+model CategoryGroupMember {
+  id           String   @id @default(cuid())
+  groupId      String
+  categoryName String
+  createdAt    DateTime @default(now())
+
+  group CategoryGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, categoryName])
+  @@index([groupId])
+  @@map("category_group_members")
+}
+// ============================================
+// FINANCE MODULE - RECURRING SERIES (F-28)
+// ============================================
+
+/// DEFINICIÓN de un pago recurrente. Las ocurrencias (RecurringPayment) son
+/// instancias con fecha; esta tabla guarda "qué es" el pago (monto, categoría,
+/// cuenta, frecuencia) UNA sola vez.
+///
+/// `RecurringPayment.seriesId` apunta aquí por convención (String, sin FK
+/// declarada a propósito): agregar una FK validaría las 42 filas existentes
+/// durante `prisma db push` y, si alguna quedara huérfana, tumbaría el arranque
+/// del contenedor. La integridad se mantiene en código y se audita con
+/// `orphanAudit` en data-registry.
+model RecurringSeries {
+  id                      String   @id @default(cuid())
+  userId                  String
+  description             String
+  amount                  Decimal
+  type                    String   @default("expense")
+  accountId               String?
+  subAccountId            String?
+  debtId                  String?
+  destinationAccountId    String?
+  destinationSubAccountId String?
+  category                String?
+  subCategory             String?
+  frequency               String   @default("monthly")
+  customDays              String?
+  periodAmounts           String?
+  notes                   String?
+  isRecurring             Boolean  @default(true)
+  /// false = serie terminada (no se generan más ocurrencias).
+  active                  Boolean  @default(true)
+  payrollGroupId          String?
+  savingsGoalId           String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([payrollGroupId])
+  @@index([savingsGoalId])
+  @@map("recurring_series")
 }

@@ -34,9 +34,12 @@ import {
 import { AccountManager } from "@/components/finance/account-manager";
 import { CategoriesManager } from "@/components/finance/categories-manager";
 import { apiFetch } from "@/lib/api";
+import { CategoryGroupsManager } from "@/components/finance/category-groups-manager";
 
 type AppSettings = {
   budgetCutoffDay: number;
+  budgetCutoffDay2: number;
+  budgetCycleMode: string;
   respectHolidays: boolean;
   needsBudgetReset: boolean;
   lastBudgetReset?: string | null;
@@ -188,7 +191,7 @@ export function FinanceSettings({
               <SectionHeader icon={Calendar} iconColor="text-teal-600" iconBg="bg-teal-100 dark:bg-teal-900/30" title="Ciclo y Parámetros Mensuales" />
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4 space-y-3">
-              {/* Día de Corte */}
+              {/* Ciclo del presupuesto */}
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                 <CardContent className="p-3 space-y-3">
                   <div className="flex items-center gap-3">
@@ -196,12 +199,49 @@ export function FinanceSettings({
                       <Calendar className="size-3.5 text-emerald-600 dark:text-emerald-400" />
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-900 dark:text-white">Día de corte del presupuesto</p>
-                      <p className="text-xs text-gray-400">Día de inicio del ciclo financiero</p>
+                      <p className="text-xs font-medium text-gray-900 dark:text-white">Ciclo del presupuesto</p>
+                      <p className="text-xs text-gray-400">Un corte al mes, o dos quincenas</p>
                     </div>
                   </div>
+
+                  {/* Modo: mensual | quincenal */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: "monthly", label: "Mensual", hint: "Un período al mes" },
+                      { value: "semimonthly", label: "Quincenal", hint: "Dos quincenas" },
+                    ].map((opt) => {
+                      const active = (settings.budgetCycleMode || "monthly") === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => updateSetting("budgetCycleMode", opt.value)}
+                          className={`rounded-xl border px-3 py-2 text-left transition-colors ${
+                            active
+                              ? "border-emerald-400 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-900/30"
+                              : "border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/50"
+                          }`}
+                        >
+                          <span
+                            className={`block text-xs font-semibold ${
+                              active
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : "text-gray-700 dark:text-gray-300"
+                            }`}
+                          >
+                            {opt.label}
+                          </span>
+                          <span className="block text-[11px] text-gray-400">{opt.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Primer corte */}
                   <div className="flex items-center gap-3 px-1">
-                    <Label className="text-xs text-gray-500 shrink-0">Día</Label>
+                    <Label className="text-xs text-gray-500 shrink-0">
+                      {settings.budgetCycleMode === "semimonthly" ? "Primer corte" : "Día"}
+                    </Label>
                     <DaySelect
                       value={settings.budgetCutoffDay}
                       onValueChange={(d) => updateSetting("budgetCutoffDay", d)}
@@ -210,6 +250,28 @@ export function FinanceSettings({
                     />
                     <span className="text-[11px] text-gray-400">de cada mes</span>
                   </div>
+
+                  {/* Segundo corte (solo quincenal) */}
+                  {settings.budgetCycleMode === "semimonthly" && (
+                    <div className="flex items-center gap-3 px-1">
+                      <Label className="text-xs text-gray-500 shrink-0">Segundo corte</Label>
+                      <DaySelect
+                        value={settings.budgetCutoffDay2 ?? 16}
+                        onValueChange={(d) => updateSetting("budgetCutoffDay2", d)}
+                        placeholder="Día"
+                        className="w-24 rounded-xl h-9"
+                      />
+                      <span className="text-[11px] text-gray-400">de cada mes</span>
+                    </div>
+                  )}
+
+                  {settings.budgetCycleMode === "semimonthly" && (
+                    <p className="text-[11px] text-gray-400 px-1">
+                      En meses de 28, 29 o 30 días un corte 30 o 31 se ajusta al último día
+                      real del mes. Si los dos cortes coinciden, ese mes se trata como uno solo.
+                    </p>
+                  )}
+
                   {settings.currentPeriod && (
                     <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-xl p-2.5">
                       <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mb-0.5">Período actual activo</p>
@@ -220,6 +282,9 @@ export function FinanceSettings({
                   )}
                 </CardContent>
               </Card>
+
+              {/* F-43 · Grupos de categorías */}
+              <CategoryGroupsManager />
 
               {/* Considerar Días Festivos */}
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">

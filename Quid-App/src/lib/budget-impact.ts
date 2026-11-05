@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
-import { getCurrentBudgetPeriod } from "@/lib/holidays";
+import { getBudgetPeriod } from "@/lib/holidays";
 import { toNumber } from "@/lib/decimal-serializer";
 import type { FinanceLedgerClient } from "@/lib/finance-ledger";
 
@@ -50,14 +50,11 @@ export async function adjustBudgetSpent(params: {
 export async function getUserCurrentBudgetPeriod(userId: string, client: FinanceLedgerClient = db) {
   const settings = await client.userSettings.findUnique({
     where: { userId },
-    select: { budgetCutoffDay: true, respectHolidays: true },
+    select: { budgetCutoffDay: true, budgetCutoffDay2: true, budgetCycleMode: true, respectHolidays: true },
   });
 
-  return getCurrentBudgetPeriod(
-    settings?.budgetCutoffDay || 1,
-    settings?.respectHolidays ?? true,
-    getColombiaNow()
-  );
+  return getBudgetPeriod(settings ?? {}, getColombiaNow());
+
 }
 
 export async function isDateInCurrentBudgetPeriod(userId: string, date: Date, client: FinanceLedgerClient = db) {

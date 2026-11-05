@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCurrentBudgetPeriod, needsBudgetReset } from "@/lib/holidays";
+import { getBudgetPeriod, needsBudgetReset } from "@/lib/holidays";
 import { validateBody, settingsUpdateSchema } from "@/lib/validations";
 import { getColombiaNow } from "@/lib/api";
 import { isAdminEmail } from "@/lib/admin";
@@ -31,12 +31,9 @@ export async function GET() {
       });
     }
 
-    // Calculate current budget period info using Colombia time
-    const period = getCurrentBudgetPeriod(
-      settings.budgetCutoffDay,
-      settings.respectHolidays,
-      getColombiaNow()
-    );
+    // Calculate current budget period info using Colombia time.
+    // getBudgetPeriod respeta budgetCycleMode (monthly | semimonthly).
+    const period = getBudgetPeriod(settings, getColombiaNow());
     const needsReset = needsBudgetReset(settings.lastBudgetReset, period.start);
 
     // Fetch user info for telegramId
@@ -79,6 +76,8 @@ export async function PUT(req: NextRequest) {
     const {
       theme,
       budgetCutoffDay,
+      budgetCutoffDay2,
+      budgetCycleMode,
       respectHolidays,
       countryCode,
       notificationsEnabled,
@@ -97,6 +96,36 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    // Validate second cutoff day (only used in semimonthly mode)
+    if (budgetCutoffDay2 !== undefined && (budgetCutoffDay2 < 1 || budgetCutoffDay2 > 31)) {
+      return NextResponse.json(
+        { error: "El segundo día de corte debe estar entre 1 y 31" },
+        { status: 400 }
+      );
+    }
+
+    // Validate cycle mode
+    if (budgetCycleMode !== undefined && !["monthly", "semimonthly"].includes(budgetCycleMode)) {
+      return NextResponse.json(
+        { error: "El ciclo presupuestal debe ser 'monthly' o 'semimonthly'" },
+        { status: 400 }
+      );
+    }
+
+    // A semimonthly cycle needs two different anchor days, otherwise one of the
+    // two halves would be empty.
+    if (
+      budgetCycleMode === "semimonthly" &&
+      budgetCutoffDay !== undefined &&
+      budgetCutoffDay2 !== undefined &&
+      budgetCutoffDay === budgetCutoffDay2
+    ) {
+      return NextResponse.json(
+        { error: "En modo quincenal los dos días de corte deben ser distintos" },
+        { status: 400 }
+      );
+    }
+
     // Validate theme
     if (theme && !["light", "dark", "oled", "system"].includes(theme)) {
       return NextResponse.json(
@@ -108,6 +137,8 @@ export async function PUT(req: NextRequest) {
     const data: Record<string, unknown> = {};
     if (theme !== undefined) data.theme = theme;
     if (budgetCutoffDay !== undefined) data.budgetCutoffDay = budgetCutoffDay;
+    if (budgetCutoffDay2 !== undefined) data.budgetCutoffDay2 = budgetCutoffDay2;
+    if (budgetCycleMode !== undefined) data.budgetCycleMode = budgetCycleMode;
     if (respectHolidays !== undefined) data.respectHolidays = respectHolidays;
     if (countryCode !== undefined) data.countryCode = countryCode;
     if (notificationsEnabled !== undefined) data.notificationsEnabled = notificationsEnabled;
@@ -127,11 +158,7 @@ export async function PUT(req: NextRequest) {
     });
 
     // Calculate updated period info using Colombia time
-    const period = getCurrentBudgetPeriod(
-      settings.budgetCutoffDay,
-      settings.respectHolidays,
-      getColombiaNow()
-    );
+    const period = getBudgetPeriod(settings, getColombiaNow());
     const needsReset = needsBudgetReset(settings.lastBudgetReset, period.start);
 
     return NextResponse.json({

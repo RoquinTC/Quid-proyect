@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
-import { getCurrentBudgetPeriod } from "@/lib/holidays";
+import { getBudgetPeriod } from "@/lib/holidays";
 import { serializeDecimals } from "@/lib/decimal-serializer";
 
 /**
@@ -26,11 +26,9 @@ export async function GET() {
     const cutoffDay = settings?.budgetCutoffDay || 1;
     const respectHolidays = settings?.respectHolidays ?? true;
 
-    const { start: periodStart, end: periodEnd } = getCurrentBudgetPeriod(
-      cutoffDay,
-      respectHolidays,
-      getColombiaNow()
-    );
+    // getBudgetPeriod respeta el modo de ciclo (mensual | quincenal)
+    const { start: periodStart, end: periodEnd } = getBudgetPeriod(settings, getColombiaNow());
+
 
     const periodEndPlus = new Date(periodEnd.getTime() + 24 * 60 * 60 * 1000);
 

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { verifyEntityMutationAccess } from "@/lib/auth-guards";
 import { validateBody, recurringCreateSchema } from "@/lib/validations";
 import type { Prisma } from "@prisma/client";
+import { createSeries } from "@/lib/recurring/series";
 
 type DestinationAccount =
   | Prisma.AccountGetPayload<{
@@ -178,6 +179,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // F-28 · La definición vive en RecurringSeries; la ocurrencia solo la apunta.
+    const seriesId = await createSeries(session.user.id, {
+      description,
+      amount,
+      type: type || "expense",
+      accountId: accountId || null,
+      subAccountId: sourceSubAccountId,
+      debtId: debtId || null,
+      destinationAccountId: destinationAccountId || null,
+      destinationSubAccountId,
+      category: category || null,
+      subCategory: subCategory || null,
+      frequency: frequency || "monthly",
+      notes: notes || null,
+      isRecurring: isRecurring !== undefined ? isRecurring : true,
+    });
+
     const recurringPayment = await db.recurringPayment.create({
       data: {
         userId: session.user.id,
@@ -196,6 +214,10 @@ export async function POST(req: NextRequest) {
         notes: notes || null,
         isRecurring: isRecurring !== undefined ? isRecurring : true,
         status: "pending",
+        // Identidad de la serie: esta ocurrencia y todas las futuras que genere
+        // al confirmarse compartirán este valor. Antes se emparejaba por
+        // descripción, lo que borraba otros pagos con el mismo nombre.
+        seriesId,
       },
       include: {
         account: {

@@ -54,3 +54,7 @@ ollama_data/
 
 # APK publicadas (se suben al servidor, no al repo)
 /downloads/
+
+# Analisis REA de APKs de terceros (binarios grandes, no van al repo)
+apks-extracted/
+apks-splits/

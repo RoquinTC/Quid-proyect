@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { apiFetch, formatCurrency, formatDate, toColombiaDateString } from "@/lib/api";
+import { ensureCategory } from "@/lib/categories/ensure-category";
 import {
   Loader2,
   Calendar,
@@ -91,6 +92,12 @@ interface RecurringFormProps {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
   editingPayment?: RecurringPaymentData | null;
+  /**
+   * F-39 · Frecuencia con la que arranca el formulario al crear.
+   * Se usa `"one_time"` cuando el usuario elige "Pago" en el formulario de
+   * transacción: es un pago único que todavía no ha hecho.
+   */
+  defaultFrequency?: string;
 }
 
 export function RecurringForm({
@@ -98,6 +105,7 @@ export function RecurringForm({
   onOpenChange,
   onSuccess,
   editingPayment,
+  defaultFrequency,
 }: RecurringFormProps) {
   const isEditing = !!editingPayment;
 
@@ -227,6 +235,22 @@ export function RecurringForm({
       resetForm();
     }
   }, [editingPayment, open]);
+
+  // F-39 · Al abrir para CREAR, respetar la frecuencia pedida por el llamador
+  // (p. ej. "one_time" cuando viene de "Pago"). Al editar no se toca.
+  useEffect(() => {
+    if (open && !editingPayment) {
+      const initialFrequency = defaultFrequency || "monthly";
+      setFrequency(initialFrequency);
+      // Un pago único necesita fecha de vencimiento; se precarga hoy para que
+      // el usuario solo tenga que ajustarla, no inventarla desde cero.
+      if (initialFrequency === "one_time") {
+        setScheduledDate((prev) => prev || toColombiaDateString(new Date()));
+      }
+    }
+    // scheduledDate no va en deps a propósito: pisaría lo que el usuario elija.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingPayment, defaultFrequency]);
 
   // When category changes, reset subcategory
   useEffect(() => {
@@ -391,7 +415,8 @@ export function RecurringForm({
       category: paymentType !== "transfer" ? (finalCategory || null) : null,
       subCategory: paymentType !== "transfer" ? (subCategory || null) : null,
       notes: notes || null,
-      isRecurring,
+      // F-39 · Un pago único nunca es "recurrente", independientemente del switch.
+      isRecurring: frequency === "one_time" ? false : isRecurring,
     };
   };
 
@@ -439,6 +464,11 @@ export function RecurringForm({
 
     setLoading(true);
     try {
+      // F-43 · Guardar la categoría nueva para que quede seleccionable a futuro.
+      if (useCustomCategory && paymentType !== "transfer") {
+        await ensureCategory(paymentType === "income" ? "income" : "expense", customCategory);
+      }
+
       if (frequency === "biweekly") {
         // Create two separate recurring payment records
         const date1 = computeNextDate(biweeklyDay1);
@@ -509,7 +539,11 @@ export function RecurringForm({
       <DialogContent className="sm:max-w-md rounded-2xl" scrollable>
         <DialogHeader className="px-6 pt-6 pb-2">
           <DialogTitle>
-            {isEditing ? "Editar Pago Recurrente" : "Nuevo Pago Recurrente"}
+            {isEditing
+              ? "Editar Pago Recurrente"
+              : frequency === "one_time"
+                ? "Nuevo Pago Programado"
+                : "Nuevo Pago Recurrente"}
           </DialogTitle>
         </DialogHeader>
         <DialogBody className="space-y-4">
@@ -1060,22 +1094,24 @@ export function RecurringForm({
             </>
           )}
 
-          {/* Is Recurring Switch */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label className="flex items-center gap-1.5">
-                <Repeat className="size-3.5" />
-                Recurrente
-              </Label>
-              <p className="text-xs text-gray-400">
-                Se generará el siguiente pago automáticamente
-              </p>
+          {/* Is Recurring Switch — oculto en pago único (F-39) */}
+          {frequency !== "one_time" && (
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="flex items-center gap-1.5">
+                  <Repeat className="size-3.5" />
+                  Recurrente
+                </Label>
+                <p className="text-xs text-gray-400">
+                  Se generará el siguiente pago automáticamente
+                </p>
+              </div>
+              <Switch
+                checked={isRecurring}
+                onCheckedChange={setIsRecurring}
+              />
             </div>
-            <Switch
-              checked={isRecurring}
-              onCheckedChange={setIsRecurring}
-            />
-          </div>
+          )}
 
           {/* Notes */}
           <div className="space-y-2">

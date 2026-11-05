@@ -51,6 +51,7 @@ import {
 } from "recharts";
 import type { Account, SubAccount, Transaction, Budget, Debt, RecurringPayment, MonthlyData, MonthlySummaryResponse } from "@/lib/types";
 import { ExpenseHeatmap } from "./expense-heatmap";
+import { SafeToSpendCard } from "./safe-to-spend-card";
 import { WaterfallChart } from "./waterfall-chart";
 import { HealthScoreWidget } from "./health-score-widget";
 
@@ -832,6 +833,11 @@ export function FinanceOverview() {
         {/* ============================================================ */}
         {/* DYNAMIC WIDGETS */}
         {/* ============================================================ */}
+        {/* F-05 · Safe to Spend: siempre visible, no es un widget opcional */}
+        <motion.div variants={itemVariants} className="mb-4">
+          <SafeToSpendCard />
+        </motion.div>
+
         <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
         {visibleWidgets.map((w) => {
           switch (w.id) {

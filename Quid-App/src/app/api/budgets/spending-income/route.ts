@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getColombiaNow } from "@/lib/api";
-import { getCurrentBudgetPeriod } from "@/lib/holidays";
+import { getBudgetPeriod } from "@/lib/holidays";
 import { toNumber } from "@/lib/decimal-serializer";
 
 /**
@@ -50,11 +50,7 @@ export async function GET(req: NextRequest) {
       referenceDate.setMonth(referenceDate.getMonth() + periodOffset);
     }
 
-    const { start: periodStart, end: periodEnd } = getCurrentBudgetPeriod(
-      cutoffDay,
-      respectHolidays,
-      referenceDate
-    );
+    const { start: periodStart, end: periodEnd } = getBudgetPeriod(settings, referenceDate);
 
     // ── Source 1: Transactions ──
     // Get all non-transfer transactions within the period

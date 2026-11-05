@@ -62,6 +62,7 @@ import {
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import type { Transaction, SubAccount, Account, CategoryData, UserSettings } from "@/lib/types";
+import { computeRunningBalances } from "@/lib/finance/running-balance";
 import { CategoryBreakdown } from "./category-breakdown";
 import { TransactionNotes, parseCcPaymentDetails, isCcPaymentNotes } from "./transaction-notes";
 
@@ -253,6 +254,14 @@ export function TransactionList({ accountId }: TransactionListProps) {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterMinAmount, setFilterMinAmount] = useState("");
   const [filterMaxAmount, setFilterMaxAmount] = useState("");
+
+  // F-45 · Saldo corrido por cuenta.
+  // Se calcula sobre la lista completa (no la filtrada) para que el saldo de cada
+  // fila sea siempre el real, aunque el usuario filtre o busque.
+  const runningBalances = useMemo(
+    () => computeRunningBalances(transactions, accounts),
+    [transactions, accounts]
+  );
 
   // Edit form state
   const [editType, setEditType] = useState<string>("expense");
@@ -855,13 +864,23 @@ export function TransactionList({ accountId }: TransactionListProps) {
                               </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0 ml-2">
-                              <span
-                                className="text-sm font-bold"
-                                style={{ color: config.color }}
-                              >
-                                {tx.type === "income" ? "+" : tx.type === "transfer" ? "↔" : "-"}
-                                {formatCurrency(Math.abs(tx.amount))}
-                              </span>
+                              <div className="flex flex-col items-end">
+                                <span
+                                  className="text-sm font-bold leading-tight"
+                                  style={{ color: config.color }}
+                                >
+                                  {tx.type === "income" ? "+" : tx.type === "transfer" ? "↔" : "-"}
+                                  {formatCurrency(Math.abs(tx.amount))}
+                                </span>
+                                {runningBalances.has(tx.id) && (
+                                  <span
+                                    className="text-[10px] leading-none mt-1 text-gray-400 tabular-nums"
+                                    title="Saldo de la cuenta después de este movimiento"
+                                  >
+                                    {formatCurrency(runningBalances.get(tx.id) as number)}
+                                  </span>
+                                )}
+                              </div>
                               <motion.div
                                 animate={{ rotate: isExpanded ? 180 : 0 }}
                                 transition={{ duration: 0.2 }}
