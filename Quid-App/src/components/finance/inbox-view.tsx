@@ -43,6 +43,15 @@ type InboxItem = {
   status: string;
   /** "retiro_efectivo" cuando el retiro en cajero pasó la plata a efectivo. */
   notes: string | null;
+  /** Movimiento ya registrado que parece ser el mismo (F-49b). */
+  possibleMatch: {
+    id: string;
+    amount: number;
+    date: string;
+    description: string;
+    confidence: "high" | "medium" | "low";
+    daysApart: number;
+  } | null;
   receivedAt: string;
 };
 
@@ -219,11 +228,15 @@ export function InboxView() {
       setReadingSms(false);
     }
   };
-  const mark = async (item: InboxItem, status: "accepted" | "dismissed") => {
+  const mark = async (
+    item: InboxItem,
+    status: "accepted" | "dismissed",
+    transactionId?: string
+  ) => {
     try {
       await apiFetch("/api/inbox", {
         method: "PATCH",
-        body: JSON.stringify({ id: item.id, status }),
+        body: JSON.stringify({ id: item.id, status, ...(transactionId ? { transactionId } : {}) }),
       });
       await load();
     } catch {
@@ -374,23 +387,76 @@ export function InboxView() {
                     </p>
                   )}
 
+                  {/* F-49b · Aviso de posible duplicado: los SMS son de días
+                      atrás y el movimiento puede estar registrado ya. Nunca se
+                      descarta solo; decide el usuario. */}
+                  {item.possibleMatch && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-950/20 p-2">
+                      <div className="flex items-start gap-1.5">
+                        <AlertTriangle className="size-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                            Parece ya registrado
+                          </p>
+                          <p className="text-[10px] text-amber-700 dark:text-amber-400 truncate">
+                            {item.possibleMatch.description} ·{" "}
+                            {new Date(item.possibleMatch.date).toLocaleDateString("es-CO", {
+                              day: "numeric",
+                              month: "short",
+                              timeZone: "America/Bogota",
+                            })}{" "}
+                            · {formatCurrency(item.possibleMatch.amount)}
+                            {item.possibleMatch.daysApart > 0 &&
+                              ` (${item.possibleMatch.daysApart} día${
+                                item.possibleMatch.daysApart === 1 ? "" : "s"
+                              } de diferencia)`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      onClick={() => openAccept(item)}
-                      className="flex-1 h-8 rounded-lg text-[11px]"
-                    >
-                      <Check className="size-3 mr-1" />
-                      Registrar movimiento
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => mark(item, "dismissed")}
-                      className="h-8 rounded-lg text-[11px] px-3"
-                    >
-                      <X className="size-3" />
-                    </Button>
+                    {item.possibleMatch ? (
+                      <>
+                        <Button
+                          type="button"
+                          onClick={() => mark(item, "accepted", item.possibleMatch!.id)}
+                          className="flex-1 h-8 rounded-lg text-[11px]"
+                        >
+                          <Check className="size-3 mr-1" />
+                          Ya está registrado
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => openAccept(item)}
+                          className="h-8 rounded-lg text-[11px] px-3"
+                          title="Registrar de todos modos"
+                        >
+                          Registrar igual
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          onClick={() => openAccept(item)}
+                          className="flex-1 h-8 rounded-lg text-[11px]"
+                        >
+                          <Check className="size-3 mr-1" />
+                          Registrar movimiento
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => mark(item, "dismissed")}
+                          className="h-8 rounded-lg text-[11px] px-3"
+                        >
+                          <X className="size-3" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>

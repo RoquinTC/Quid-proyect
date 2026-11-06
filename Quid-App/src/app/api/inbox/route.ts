@@ -10,6 +10,7 @@ import {
 } from "@/lib/validations";
 import { parseCapture } from "@/lib/inbox/parse";
 import { classifyCapture, isMovement } from "@/lib/inbox/classify";
+import { findDuplicate } from "@/lib/inbox/duplicate";
 import { toNumber } from "@/lib/decimal-serializer";
 
 /**
@@ -78,8 +79,17 @@ export async function GET(req: NextRequest) {
       where: { userId: session.user.id, status: "pending" },
     });
 
+    // F-49b · ¿Alguna captura corresponde a un movimiento ya registrado?
+    // Los SMS son de días atrás y esos movimientos suelen estar anotados a
+    // mano; aceptarlos otra vez duplicaría el gasto. Se busca en una ventana
+    // de fechas alrededor de las capturas, en una sola consulta.
+    const matches = await findExistingMovements(session.user.id, items);
+
     return NextResponse.json({
-      items: items.map((i) => serialize(i as InboxRow)),
+      items: items.map((i) => ({
+        ...serialize(i as InboxRow),
+        possibleMatch: matches.get(i.id) ?? null,
+      })),
       pendingCount,
     });
   } catch (error) {
@@ -228,4 +238,52 @@ export async function DELETE(req: NextRequest) {
     console.error("Delete inbox item error:", error);
     return NextResponse.json({ error: "Error al eliminar la captura" }, { status: 500 });
   }
+}
+
+/** Ventana en días alrededor de la captura para buscar el movimiento. */
+const MATCH_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Busca, para cada captura pendiente, un movimiento ya registrado con el
+ * mismo monto y fecha cercana. Una sola consulta cubre todas las capturas.
+ */
+async function findExistingMovements(
+  userId: string,
+  items: Array<{ id: string; parsedAmount: unknown; parsedType: string | null; parsedDate: Date | null; receivedAt: Date }>
+): Promise<Map<string, ReturnType<typeof findDuplicate>>> {
+  const result = new Map<string, ReturnType<typeof findDuplicate>>();
+  if (items.length === 0) return result;
+
+  const times = items.map((item) => (item.parsedDate ?? item.receivedAt).getTime());
+  const from = new Date(Math.min(...times) - MATCH_WINDOW_MS);
+  const to = new Date(Math.max(...times) + MATCH_WINDOW_MS);
+
+  const transactions = await db.transaction.findMany({
+    where: { userId, date: { gte: from, lte: to } },
+    select: { id: true, amount: true, date: true, type: true, description: true },
+    orderBy: { date: "desc" },
+  });
+
+  const candidates = transactions.map((t) => ({
+    id: t.id,
+    amount: toNumber(t.amount),
+    date: t.date.toISOString(),
+    type: t.type,
+    description: t.description,
+  }));
+
+  for (const item of items) {
+    const match = findDuplicate(
+      {
+        parsedAmount: item.parsedAmount === null ? null : toNumber(item.parsedAmount as never),
+        parsedType: item.parsedType,
+        parsedDate: (item.parsedDate ?? item.receivedAt).toISOString(),
+      },
+      candidates,
+      item.parsedDate ?? item.receivedAt
+    );
+    if (match) result.set(item.id, match);
+  }
+
+  return result;
 }
