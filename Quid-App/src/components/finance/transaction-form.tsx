@@ -65,6 +65,11 @@ interface TransactionFormProps {
     amount?: string;
     category?: string;
     date?: string;
+    /**
+     * Cuenta destino de una transferencia. Se usa en el retiro en cajero:
+     * la plata no se gasta, pasa a la cuenta de efectivo.
+     */
+    toAccountId?: string;
   } | null;
   /**
    * F-39 · Cuando se provee, el formulario ofrece registrar un "Pago":
@@ -228,6 +233,9 @@ export function TransactionForm({
     if (prefill.amount) setAmount(prefill.amount);
     if (prefill.category) setCategory(prefill.category);
     if (prefill.date) setDate(prefill.date);
+    // Retiro en cajero: la cuenta destino es la de efectivo (por tipo, no por
+    // nombre: puede llamarse "Moneditas").
+    if (prefill.toAccountId) setToAccountId(prefill.toAccountId);
   }, [open, prefill, editTransaction]);
   // F-48 · Pide la sugerencia de cuenta para la categoría/subcategoría elegida.
   useEffect(() => {

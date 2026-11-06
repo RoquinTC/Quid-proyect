@@ -88,6 +88,10 @@ export function InboxView() {
   const [saving, setSaving] = useState(false);
   const [readingSms, setReadingSms] = useState(false);
 
+  // Cuenta de efectivo del usuario, detectada por TIPO (no por nombre: puede
+  // llamarse "Moneditas"). Es el destino natural de un retiro en cajero.
+  const [cashAccountId, setCashAccountId] = useState<string | null>(null);
+
   // Captura nueva
   const [rawText, setRawText] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -111,6 +115,17 @@ export function InboxView() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Se busca la cuenta de efectivo por tipo, no por nombre: el usuario puede
+  // llamarla "Moneditas", "Plata en mano" o como quiera. Solo hay una.
+  useEffect(() => {
+    apiFetch<Array<{ id: string; type: string }>>("/api/accounts")
+      .then((accounts) => {
+        const cash = (accounts || []).find((account) => account.type === "cash");
+        setCashAccountId(cash?.id ?? null);
+      })
+      .catch(() => setCashAccountId(null));
+  }, []);
 
   const handleCapture = async () => {
     const text = rawText.trim();
@@ -404,6 +419,11 @@ export function InboxView() {
             ? {
                 amount: accepting.parsedAmount !== null ? String(accepting.parsedAmount) : undefined,
                 date: toDateInput(accepting.parsedDate),
+                // Retiro en cajero → la plata pasa a la cuenta de efectivo.
+                toAccountId:
+                  accepting.notes === "retiro_efectivo" && cashAccountId
+                    ? cashAccountId
+                    : undefined,
               }
             : null
         }
