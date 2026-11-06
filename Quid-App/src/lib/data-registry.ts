@@ -161,6 +161,8 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   { model: "RecurringSeries", table: "recurring_series", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
   // F-49 · Bandeja de capturas pendientes de clasificar.
   { model: "InboxItem", table: "inbox_items", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  // F-36 · Reglas de clasificación automática de capturas.
+  { model: "InboxRule", table: "inbox_rules", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
 
   // ── Finanzas: deudas ────────────────────────────────────────────────────
   { model: "Debt", table: "debts", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },

@@ -11,6 +11,7 @@ import {
 import { parseCapture } from "@/lib/inbox/parse";
 import { classifyCapture, isMovement } from "@/lib/inbox/classify";
 import { findDuplicate } from "@/lib/inbox/duplicate";
+import { findRuleFor } from "@/lib/inbox/rules";
 import { toNumber } from "@/lib/decimal-serializer";
 
 /**
@@ -85,10 +86,17 @@ export async function GET(req: NextRequest) {
     // de fechas alrededor de las capturas, en una sola consulta.
     const matches = await findExistingMovements(session.user.id, items);
 
+    // F-36 · Reglas: proponen categoría, cuenta y tipo según el texto.
+    const rules = await db.inboxRule.findMany({
+      where: { userId: session.user.id, active: true },
+      orderBy: [{ priority: "asc" }, { createdAt: "desc" }],
+    });
+
     return NextResponse.json({
       items: items.map((i) => ({
         ...serialize(i as InboxRow),
         possibleMatch: matches.get(i.id) ?? null,
+        suggestedRule: findRuleFor(i.rawText, rules),
       })),
       pendingCount,
     });

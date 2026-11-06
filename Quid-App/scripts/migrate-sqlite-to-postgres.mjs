@@ -90,6 +90,8 @@ const modelPlan = [
   ["recurringSeries", "RecurringSeries"],
   // F-49 · Bandeja de entrada.
   ["inboxItem", "InboxItem"],
+  // F-36 · Reglas de captura.
+  ["inboxRule", "InboxRule"],
   ["pushSubscription", "PushSubscription"],
   ["userSettings", "UserSettings"],
   ["storedBackup", "StoredBackup"],

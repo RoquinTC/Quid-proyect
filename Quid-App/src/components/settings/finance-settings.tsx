@@ -36,6 +36,7 @@ import { AccountManager } from "@/components/finance/account-manager";
 import { CategoriesManager } from "@/components/finance/categories-manager";
 import { apiFetch } from "@/lib/api";
 import { CategoryGroupsManager } from "@/components/finance/category-groups-manager";
+import { InboxRulesManager } from "@/components/finance/inbox-rules-manager";
 
 type AppSettings = {
   budgetCutoffDay: number;
@@ -313,6 +314,8 @@ export function FinanceSettings({
                   </p>
                 </CardContent>
               </Card>
+              {/* F-36 · Reglas de captura (solo tienen sentido con la bandeja activa) */}
+              {settings.smsCaptureEnabled && <InboxRulesManager />}
               {/* Considerar Días Festivos */}
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                 <CardContent className="p-3">

@@ -55,6 +55,15 @@ type InboxItem = {
     origin?: "transaction" | "recurring";
     status?: string;
   } | null;
+  /** F-36 · Regla que aplica a este mensaje (propone categoría/cuenta/tipo). */
+  suggestedRule: {
+    id: string;
+    name: string;
+    category: string | null;
+    subCategory: string | null;
+    accountId: string | null;
+    type: string | null;
+  } | null;
   receivedAt: string;
 };
 
@@ -419,6 +428,12 @@ export function InboxView() {
                         {formatCaptureDate(item)}
                         {typeLabel(item)}
                       </p>
+                      {item.suggestedRule && (
+                        <p className="text-[10px] text-indigo-500 dark:text-indigo-400 mt-0.5 truncate">
+                          Regla «{item.suggestedRule.name}»
+                          {item.suggestedRule.category ? ` → ${item.suggestedRule.category}` : ""}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <p
@@ -533,6 +548,7 @@ export function InboxView() {
           setFormOpen(o);
           if (!o) setAccepting(null);
         }}
+        defaultAccountId={accepting?.suggestedRule?.accountId ?? undefined}
         defaultDescription={
           accepting
             ? accepting.notes === "retiro_efectivo"
@@ -540,11 +556,12 @@ export function InboxView() {
               : (accepting.parsedMerchant || accepting.rawText).slice(0, 120)
             : undefined
         }
-        defaultType={accepting?.parsedType || "expense"}
+        defaultType={accepting?.suggestedRule?.type || accepting?.parsedType || "expense"}
         prefill={
           accepting
             ? {
                 amount: accepting.parsedAmount !== null ? String(accepting.parsedAmount) : undefined,
+                category: accepting.suggestedRule?.category ?? undefined,
                 date: toDateInput(accepting.parsedDate),
                 // Retiro en cajero → la plata pasa a la cuenta de efectivo.
                 toAccountId:

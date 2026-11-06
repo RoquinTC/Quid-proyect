@@ -63,6 +63,7 @@ model User {
   categoryGroups      CategoryGroup[]
   recurringSeries     RecurringSeries[]
   inboxItems          InboxItem[]
+  inboxRules          InboxRule[]
   settings            UserSettings?
   sentInvitations     AccountInvitation[]  @relation("SentInvitations")
   receivedInvitations AccountInvitation[]  @relation("ReceivedInvitations")
@@ -1656,4 +1657,38 @@ model InboxItem {
 
   @@index([userId, status])
   @@map("inbox_items")
+}
+// ============================================
+// FINANZAS - REGLAS DE CAPTURA (F-36)
+// ============================================
+
+/// Regla de clasificación para la bandeja de entrada.
+/// Si el texto del mensaje contiene `contains` (sin distinguir mayúsculas ni
+/// tildes), la captura propone la categoría, la cuenta y el tipo indicados.
+/// Sirve para no clasificar una por una las capturas que se repiten: el
+/// arriendo, la tarjeta, el banco X.
+model InboxRule {
+  id          String   @id @default(cuid())
+  userId      String
+  /// Nombre visible de la regla ("Arriendo", "LuloBank").
+  name        String
+  /// Texto a buscar dentro del mensaje.
+  contains    String
+  /// Qué aplica cuando coincide (null = no toca ese campo).
+  category    String?
+  subCategory String?
+  accountId   String?
+  /// expense | income | transfer
+  type        String?
+  /// Menor número gana cuando varias reglas coinciden.
+  priority    Int      @default(0)
+  active      Boolean  @default(true)
+  hitCount    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active, priority])
+  @@map("inbox_rules")
 }

@@ -1209,3 +1209,22 @@ export const inboxUpdateSchema = z.object({
 export const inboxDeleteSchema = z.object({
   id: z.string().min(1),
 });
+// ── F-36 · Reglas de captura ──
+export const inboxRuleCreateSchema = z.object({
+  name: z.string().min(1).max(80),
+  contains: z.string().min(2, "El texto a buscar es muy corto").max(120),
+  category: z.string().max(80).optional().nullable(),
+  subCategory: z.string().max(80).optional().nullable(),
+  accountId: z.string().min(1).optional().nullable(),
+  type: z.enum(["expense", "income", "transfer"]).optional().nullable(),
+  priority: z.number().int().min(0).max(999).optional(),
+  active: z.boolean().optional(),
+});
+
+export const inboxRuleUpdateSchema = inboxRuleCreateSchema.partial().extend({
+  id: z.string().min(1),
+});
+
+export const inboxRuleDeleteSchema = z.object({
+  id: z.string().min(1),
+});
