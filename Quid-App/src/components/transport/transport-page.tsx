@@ -2074,40 +2074,14 @@ function ReminderBoard({
     };
   });
 
-  const maintenanceItems: ReminderBoardItem[] = (vehicle.maintenanceRecords || [])
-    .filter((record) => record.reminderEnabled && (record.nextDueKm || record.nextDueDate))
-    .map((record) => {
-      const kmRemaining = record.nextDueKm ? record.nextDueKm - vehicle.currentKm : null;
-      const daysUntil = record.nextDueDate
-        ? Math.ceil((new Date(record.nextDueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-        : null;
-      const isOverdue = (kmRemaining !== null && kmRemaining <= 0) || (daysUntil !== null && daysUntil <= 0);
-      const isSoon = !isOverdue && ((kmRemaining !== null && kmRemaining <= 500) || (daysUntil !== null && daysUntil <= 15));
-      const detailParts = [
-        kmRemaining !== null
-          ? kmRemaining <= 0
-            ? "Kilometraje cumplido"
-            : `${Math.round(kmRemaining).toLocaleString("es-CO")} km restantes`
-          : null,
-        daysUntil !== null
-          ? daysUntil <= 0
-            ? "Fecha cumplida"
-            : `${daysUntil} días`
-          : null,
-        daysUntil === null ? projectKm(record.nextDueKm, kmRemaining) : null,
-      ].filter(Boolean);
-
-      return {
-        id: `maintenance-${record.id}`,
-        kind: "maintenance",
-        title: maintTypeLabels[record.type] || "Mantenimiento",
-        subtitle: record.description || "Recordatorio desde mantenimiento",
-        detail: detailParts.join(" · ") || "Programado",
-        status: isOverdue ? "overdue" : isSoon ? "soon" : "ok",
-        recordId: record.id,
-        maintType: record.type,
-      };
-    });
+  // The board deliberately does NOT read maintenance records.
+  //
+  // A record keeps the next-due it computed when it was registered, so every
+  // older record kept showing a stale, already-passed target: one vehicle listed
+  // the same oil change three times (May, June and July) all overdue. The pending
+  // obligation already lives in vehicle_reminders, written at registration, so
+  // reading records too displayed one thing twice and history as if it were due.
+  // Records remain history in the maintenance tab, where they belong.
 
   const documentItems: ReminderBoardItem[] = (vehicle.documents || [])
     .filter((document) => document.reminderEnabled)
@@ -2127,7 +2101,7 @@ function ReminderBoard({
       };
     });
 
-  const items = [...customItems, ...maintenanceItems, ...documentItems].sort((a, b) => {
+  const items = [...customItems, ...documentItems].sort((a, b) => {
     const order = { overdue: 0, soon: 1, ok: 2, done: 3 } as const;
     return order[a.status] - order[b.status];
   });
