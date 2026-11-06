@@ -46,9 +46,16 @@ function norm(text: string): string {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-/** ¿El texto trae un enlace? Señal fuerte de publicidad o estafa. */
+/**
+ * ¿El texto trae un enlace? Señal fuerte de publicidad o estafa.
+ *
+ * Se quitan antes las direcciones de correo: "facturas@movistar.co" parece un
+ * dominio con `.co` y hacía que una factura legítima se descartara como
+ * publicidad.
+ */
 function hasLink(text: string): boolean {
-  return /https?:\/\/|www\.|\b\w+\.(com|co|net|org)\b|bit\.ly|t\.me\/|wa\.me\//i.test(text);
+  const withoutEmails = text.replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, " ");
+  return /https?:\/\/|www\.|\b\w+\.(com|co|net|org)\b|bit\.ly|t\.me\/|wa\.me\//i.test(withoutEmails);
 }
 
 /**
@@ -240,16 +247,7 @@ export function classifyCapture(rawText: string): Classification {
     return { kind: "noise", reason: "Publicidad o promoción", noiseReason: "promo" };
   }
 
-  // 6. Un enlace sin verbo de operación es publicidad o intento de engaño.
-  if (hasLink(text)) {
-    return {
-      kind: "noise",
-      reason: "Mensaje con enlace que no reporta una operación",
-      noiseReason: "promo",
-    };
-  }
-
-  // 7. Marcadores de operación sin verbo conjugado.
+  // 6. Marcadores de operación sin verbo conjugado.
   if (matches(INCOME_PATTERNS, text)) {
     return { kind: "income", reason: "Ingreso detectado" };
   }
@@ -258,6 +256,17 @@ export function classifyCapture(rawText: string): Classification {
   }
   if (matches(EXPENSE_PATTERNS, text)) {
     return { kind: "expense", reason: "Compra o pago" };
+  }
+
+  // 7. Un enlace sin ningún marcador de operación es publicidad o engaño.
+  // Va después de los marcadores para no descartar una factura con su enlace
+  // de pago.
+  if (hasLink(text)) {
+    return {
+      kind: "noise",
+      reason: "Mensaje con enlace que no reporta una operación",
+      noiseReason: "promo",
+    };
   }
 
   // 8. Sin señal reconocible: se conserva, pero marcado para revisión.

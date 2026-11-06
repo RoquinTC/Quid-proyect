@@ -126,6 +126,25 @@ describe("gastos", () => {
   });
 });
 
+describe("correo del banco (F-22)", () => {
+  it("una factura con enlace de pago sigue siendo gasto", () => {
+    // El remitente "facturas@movistar.co" no debe leerse como enlace.
+    const r = classifyCapture(
+      "Factura Movistar octubre\nDe: facturas@movistar.co\nTu factura por $167.489 vence el 26/11. Paga en https://movistar.co/pago"
+    );
+    expect(r.kind).toBe("expense");
+  });
+
+  it("una dirección de correo sola no convierte el mensaje en publicidad", () => {
+    const r = classifyCapture("Cobro de seguro\nDe: avisos@bancolombia.com\nSe cobró el seguro por $289.900");
+    expect(r.kind).toBe("expense");
+  });
+
+  it("un enlace sin ningún dato de operación sí se descarta", () => {
+    const r = classifyCapture("Descubre nuestros beneficios en https://ejemplo.com/beneficios");
+    expect(r.kind).toBe("noise");
+  });
+});
 describe("casos límite", () => {
   it("un mensaje sin señales se conserva como gasto para revisar", () => {
     const r = classifyCapture("Movimiento por $12.000");
