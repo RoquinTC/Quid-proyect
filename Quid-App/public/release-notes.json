@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.11",
+  "currentVersion": "1.1.12",
   "releases": [
+    {
+      "version": "1.1.12",
+      "date": "2026-11-06",
+      "title": "Quid 1.1.12",
+      "changes": [
+        "La bandeja muestra la fecha real del SMS, no Hoy",
+        "Las capturas ya registradas se ocultan por defecto",
+        "Tambien compara contra pagos recurrentes y programados"
+      ]
+    },
     {
       "version": "1.1.11",
       "date": "2026-11-06",

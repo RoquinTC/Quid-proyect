@@ -130,7 +130,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const parsed = parseCapture(cleanText);
+    // Fecha real del mensaje: es la que se muestra y la que sirve de
+    // referencia para fechas sin año ("04/11" pertenece a ese año).
+    const capturedAt = body.capturedAt ? new Date(body.capturedAt) : new Date();
+    const reference = Number.isNaN(capturedAt.getTime()) ? new Date() : capturedAt;
+
+    const parsed = parseCapture(cleanText, reference);
 
     // Evita duplicados al releer los SMS: si ese texto ya se capturó (aunque
     // se haya aceptado o descartado), no se vuelve a crear.
@@ -155,6 +160,9 @@ export async function POST(req: NextRequest) {
         // Marca el retiro en cajero: el dinero pasó a efectivo.
         notes: classification.cashWithdrawal ? "retiro_efectivo" : null,
         status: "pending",
+        // Fecha real del mensaje, no la de captura: un SMS de la semana
+        // pasada no debe aparecer como "Hoy".
+        receivedAt: reference,
       },
     });
 
@@ -258,19 +266,57 @@ async function findExistingMovements(
   const from = new Date(Math.min(...times) - MATCH_WINDOW_MS);
   const to = new Date(Math.max(...times) + MATCH_WINDOW_MS);
 
-  const transactions = await db.transaction.findMany({
-    where: { userId, date: { gte: from, lte: to } },
-    select: { id: true, amount: true, date: true, type: true, description: true },
-    orderBy: { date: "desc" },
-  });
+  // Se comparan dos fuentes: los movimientos ya registrados y los pagos
+  // recurrentes (los confirmados ya movieron dinero; los programados lo van a
+  // mover, así que aceptar el SMS también duplicaría).
+  const [transactions, recurring] = await Promise.all([
+    db.transaction.findMany({
+      where: { userId, date: { gte: from, lte: to } },
+      select: { id: true, amount: true, date: true, type: true, description: true },
+      orderBy: { date: "desc" },
+    }),
+    db.recurringPayment.findMany({
+      where: {
+        userId,
+        status: { in: ["pending", "confirmed"] },
+        OR: [
+          { scheduledDate: { gte: from, lte: to } },
+          { confirmedDate: { gte: from, lte: to } },
+        ],
+      },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        actualAmount: true,
+        type: true,
+        scheduledDate: true,
+        confirmedDate: true,
+        status: true,
+      },
+    }),
+  ]);
 
-  const candidates = transactions.map((t) => ({
-    id: t.id,
-    amount: toNumber(t.amount),
-    date: t.date.toISOString(),
-    type: t.type,
-    description: t.description,
-  }));
+  const candidates = [
+    ...transactions.map((t) => ({
+      id: t.id,
+      amount: toNumber(t.amount),
+      date: t.date.toISOString(),
+      type: t.type,
+      description: t.description,
+      origin: "transaction" as const,
+      status: "confirmed",
+    })),
+    ...recurring.map((r) => ({
+      id: r.id,
+      amount: toNumber(r.actualAmount ?? r.amount),
+      date: (r.confirmedDate ?? r.scheduledDate).toISOString(),
+      type: r.type,
+      description: r.description,
+      origin: "recurring" as const,
+      status: r.status,
+    })),
+  ];
 
   for (const item of items) {
     const match = findDuplicate(

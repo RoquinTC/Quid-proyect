@@ -1191,6 +1191,12 @@ export const categoryGroupDeleteSchema = z.object({
 export const inboxCreateSchema = z.object({
   rawText: z.string().min(1, "El texto es obligatorio").max(4000),
   source: z.enum(["sms", "email", "voice", "notification", "manual"]).optional().default("manual"),
+  /**
+   * Fecha real del mensaje (ISO o milisegundos). Los SMS llegan con días de
+   * antigüedad: sin esto la bandeja mostraba "Hoy" en mensajes de la semana
+   * pasada y las fechas sin año se resolvían contra el día equivocado.
+   */
+  capturedAt: z.union([z.string(), z.number()]).optional().nullable(),
 });
 
 export const inboxUpdateSchema = z.object({

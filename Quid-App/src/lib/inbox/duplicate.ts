@@ -24,6 +24,10 @@ export type MatchableTransaction = {
   date: string; // ISO
   type: string;
   description: string;
+  /** De dónde salió el movimiento: una transacción o un pago recurrente. */
+  origin?: "transaction" | "recurring";
+  /** En recurrentes: pending (programado) o confirmed (ya pagado). */
+  status?: string;
 };
 
 export type MatchableCapture = {

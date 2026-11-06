@@ -51,6 +51,9 @@ type InboxItem = {
     description: string;
     confidence: "high" | "medium" | "low";
     daysApart: number;
+    /** Si el candidato es un pago recurrente y en qué estado está. */
+    origin?: "transaction" | "recurring";
+    status?: string;
   } | null;
   receivedAt: string;
 };
@@ -65,6 +68,34 @@ const SOURCE_LABEL: Record<string, string> = {
   manual: "Pegado",
 };
 
+/**
+ * Fecha que se muestra en la tarjeta.
+ *
+ * Antes se caía a "Hoy" cuando el mensaje no traía fecha reconocible, así que
+ * un SMS de la semana pasada aparecía como recién llegado. Ahora se usa la
+ * fecha real del mensaje y solo se dice "Hoy"/"Ayer" cuando de verdad lo es.
+ */
+function formatCaptureDate(item: InboxItem): string {
+  const iso = item.parsedDate ?? item.receivedAt;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+
+  const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const now = new Date();
+
+  if (key(date) === key(now)) return "Hoy";
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (key(date) === key(yesterday)) return "Ayer";
+
+  return date.toLocaleDateString("es-CO", {
+    day: "numeric",
+    month: "short",
+    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+    timeZone: "America/Bogota",
+  });
+}
 /** Etiqueta del tipo detectado, incluido el retiro en efectivo. */
 function typeLabel(item: InboxItem): string {
   if (item.notes === "retiro_efectivo") return " · Retiro en efectivo → bolsillo";
@@ -101,6 +132,10 @@ export function InboxView() {
   // llamarse "Moneditas"). Es el destino natural de un retiro en cajero.
   const [cashAccountId, setCashAccountId] = useState<string | null>(null);
 
+  // Filtro: por defecto se ocultan las capturas que ya tienen un
+  // movimiento registrado, que es justo lo que no se quiere ver.
+  const [showMatched, setShowMatched] = useState(false);
+
   // Captura nueva
   const [rawText, setRawText] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -136,6 +171,8 @@ export function InboxView() {
       .catch(() => setCashAccountId(null));
   }, []);
 
+  const matchedCount = items.filter((item) => item.possibleMatch).length;
+  const visibleItems = showMatched ? items : items.filter((item) => !item.possibleMatch);
   const handleCapture = async () => {
     const text = rawText.trim();
     if (!text) return;
@@ -201,7 +238,7 @@ export function InboxView() {
         try {
           const res = await apiFetch<{ duplicate?: boolean; skipped?: boolean }>("/api/inbox", {
             method: "POST",
-            body: JSON.stringify({ rawText: message.body, source: "sms" }),
+            body: JSON.stringify({ rawText: message.body, source: "sms", capturedAt: message.date }),
           });
           if (res.duplicate) duplicates++;
           else if (res.skipped) skipped++;
@@ -310,23 +347,49 @@ export function InboxView() {
         </CardContent>
       </Card>
 
+      {/* Filtro: las capturas que ya tienen movimiento se ocultan por defecto.
+          Es lo que el usuario ya tiene controlado y no quiere volver a ver. */}
+      {matchedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowMatched((value) => !value)}
+          className="w-full text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-xl py-2 px-3 flex items-center justify-center gap-1.5"
+        >
+          <AlertTriangle className="size-3" />
+          {showMatched
+            ? `Ocultar las ${matchedCount} que ya están registradas`
+            : `${matchedCount} ya registradas (ocultas) · Ver`}
+        </button>
+      )}
+
       {/* Lista */}
       {loading ? (
         <div className="space-y-2">
           <div className="h-20 animate-pulse rounded-2xl bg-gray-100 dark:bg-gray-800" />
           <div className="h-20 animate-pulse rounded-2xl bg-gray-100 dark:bg-gray-800" />
         </div>
-      ) : items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <div className="rounded-2xl border border-gray-100 dark:border-gray-700/50 p-6 text-center">
           <Inbox className="size-8 mx-auto text-gray-300 dark:text-gray-600 mb-2" />
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Nada pendiente</p>
-          <p className="text-[11px] text-gray-400 mt-1">
-            Cuando lleguen SMS, correos o capturas por voz, aparecerán aquí para clasificar.
-          </p>
+          {matchedCount > 0 && !showMatched ? (
+            <>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Todo al día</p>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Las {matchedCount} capturas pendientes ya tienen su movimiento registrado.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Nada pendiente</p>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Cuando lleguen SMS, correos o capturas por voz, aparecerán aquí para clasificar.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const isOpen = expanded === item.id;
             const lowConfidence = (item.confidence ?? 0) < 0.6;
             const noAmount = item.parsedAmount === null;
@@ -353,13 +416,7 @@ export function InboxView() {
                         {item.parsedMerchant || "Sin comercio detectado"}
                       </p>
                       <p className="text-[11px] text-gray-400">
-                        {item.parsedDate
-                          ? new Date(item.parsedDate).toLocaleDateString("es-CO", {
-                              day: "numeric",
-                              month: "short",
-                              timeZone: "America/Bogota",
-                            })
-                          : "Hoy"}
+                        {formatCaptureDate(item)}
                         {typeLabel(item)}
                       </p>
                     </div>
@@ -396,7 +453,11 @@ export function InboxView() {
                         <AlertTriangle className="size-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                         <div className="min-w-0">
                           <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
-                            Parece ya registrado
+                            {item.possibleMatch.origin === "recurring"
+                              ? item.possibleMatch.status === "pending"
+                                ? "Coincide con un pago programado"
+                                : "Ya está registrado como pago"
+                              : "Parece ya registrado"}
                           </p>
                           <p className="text-[10px] text-amber-700 dark:text-amber-400 truncate">
                             {item.possibleMatch.description} ·{" "}
