@@ -41,6 +41,8 @@ type InboxItem = {
   parsedMerchant: string | null;
   confidence: number | null;
   status: string;
+  /** "retiro_efectivo" cuando el retiro en cajero pasó la plata a efectivo. */
+  notes: string | null;
   receivedAt: string;
 };
 
@@ -54,6 +56,21 @@ const SOURCE_LABEL: Record<string, string> = {
   manual: "Pegado",
 };
 
+/** Etiqueta del tipo detectado, incluido el retiro en efectivo. */
+function typeLabel(item: InboxItem): string {
+  if (item.notes === "retiro_efectivo") return " · Retiro en efectivo → bolsillo";
+  if (item.parsedType === "income") return " · Ingreso";
+  if (item.parsedType === "transfer") return " · Transferencia";
+  return " · Gasto";
+}
+
+/** Color del monto según el tipo. */
+function amountClass(item: InboxItem, noAmount: boolean): string {
+  if (noAmount) return "text-gray-300 dark:text-gray-600";
+  if (item.parsedType === "income") return "text-emerald-600 dark:text-emerald-400";
+  if (item.parsedType === "transfer") return "text-sky-600 dark:text-sky-400";
+  return "text-gray-900 dark:text-white";
+}
 function toDateInput(iso: string | null): string | undefined {
   if (!iso) return undefined;
   const d = new Date(iso);
@@ -100,12 +117,17 @@ export function InboxView() {
     if (!text) return;
     setSaving(true);
     try {
-      const res = await apiFetch<{ item?: InboxItem; duplicate?: boolean }>(
+      const res = await apiFetch<{ item?: InboxItem; duplicate?: boolean; skipped?: boolean; reason?: string }>(
         "/api/inbox",
         { method: "POST", body: JSON.stringify({ rawText: text, source: "manual" }) }
       );
       if (res.duplicate) {
         toast.info("Ese mensaje ya estaba en la bandeja");
+        return;
+      }
+      if (res.skipped) {
+        // Clave, publicidad o estafa: no se guarda, y se dice por qué.
+        toast.info(res.reason || "Ese mensaje no es un movimiento");
         return;
       }
       if (!res.item) {
@@ -149,24 +171,32 @@ export function InboxView() {
 
       let created = 0;
       let duplicates = 0;
+      // Claves, publicidad y estafas: no entran a la bandeja.
+      let skipped = 0;
       for (const message of candidates) {
         try {
-          const res = await apiFetch<{ duplicate?: boolean }>("/api/inbox", {
+          const res = await apiFetch<{ duplicate?: boolean; skipped?: boolean }>("/api/inbox", {
             method: "POST",
             body: JSON.stringify({ rawText: message.body, source: "sms" }),
           });
           if (res.duplicate) duplicates++;
+          else if (res.skipped) skipped++;
           else created++;
         } catch {
           /* un SMS que falle no debe tumbar el resto */
         }
       }
 
-      if (created === 0 && duplicates > 0) {
-        toast.info(`Nada nuevo: ${duplicates} SMS ya estaban en la bandeja`);
+      const extras = [
+        duplicates > 0 ? `${duplicates} ya estaban` : null,
+        skipped > 0 ? `${skipped} no eran movimientos` : null,
+      ].filter(Boolean);
+
+      if (created === 0) {
+        toast.info(extras.length ? `Nada nuevo · ${extras.join(" · ")}` : "Nada nuevo");
       } else {
         toast.success(
-          `${created} SMS capturados${duplicates > 0 ? ` · ${duplicates} ya estaban` : ""}`
+          `${created} capturados${extras.length ? ` · ${extras.join(" · ")}` : ""}`
         );
       }
       await load();
@@ -302,18 +332,12 @@ export function InboxView() {
                               timeZone: "America/Bogota",
                             })
                           : "Hoy"}
-                        {item.parsedType === "income" ? " · Ingreso" : " · Gasto"}
+                        {typeLabel(item)}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
                       <p
-                        className={`text-sm font-bold ${
-                          noAmount
-                            ? "text-gray-300 dark:text-gray-600"
-                            : item.parsedType === "income"
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-gray-900 dark:text-white"
-                        }`}
+                        className={`text-sm font-bold ${amountClass(item, noAmount)}`}
                       >
                         {noAmount ? "—" : formatCurrency(item.parsedAmount!)}
                       </p>
@@ -369,10 +393,12 @@ export function InboxView() {
         }}
         defaultDescription={
           accepting
-            ? (accepting.parsedMerchant || accepting.rawText).slice(0, 120)
+            ? accepting.notes === "retiro_efectivo"
+              ? "Retiro en efectivo"
+              : (accepting.parsedMerchant || accepting.rawText).slice(0, 120)
             : undefined
         }
-        defaultType={accepting?.parsedType === "income" ? "income" : "expense"}
+        defaultType={accepting?.parsedType || "expense"}
         prefill={
           accepting
             ? {

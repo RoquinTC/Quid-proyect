@@ -9,6 +9,7 @@ import {
   inboxDeleteSchema,
 } from "@/lib/validations";
 import { parseCapture } from "@/lib/inbox/parse";
+import { classifyCapture, isMovement } from "@/lib/inbox/classify";
 import { toNumber } from "@/lib/decimal-serializer";
 
 /**
@@ -103,8 +104,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Error interno" }, { status: 500 });
     }
 
-    const parsed = parseCapture(body.rawText);
     const cleanText = body.rawText.trim();
+
+    // Primero se decide SI es un movimiento. Sin esto, una clave temporal de
+    // 6 dígitos entra como gasto y una estafa como deuda.
+    const classification = classifyCapture(cleanText);
+    if (!isMovement(classification)) {
+      return NextResponse.json(
+        {
+          skipped: true,
+          reason: classification.reason,
+          noiseReason: classification.noiseReason ?? null,
+        },
+        { status: 200 }
+      );
+    }
+
+    const parsed = parseCapture(cleanText);
 
     // Evita duplicados al releer los SMS: si ese texto ya se capturó (aunque
     // se haya aceptado o descartado), no se vuelve a crear.
@@ -122,10 +138,12 @@ export async function POST(req: NextRequest) {
         source: body.source || "manual",
         rawText: cleanText,
         parsedAmount: parsed.amount,
-        parsedType: parsed.type,
+        parsedType: classification.kind,
         parsedDate: parsed.date ? new Date(`${parsed.date}T12:00:00`) : null,
         parsedMerchant: parsed.merchant,
         confidence: parsed.confidence,
+        // Marca el retiro en cajero: el dinero pasó a efectivo.
+        notes: classification.cashWithdrawal ? "retiro_efectivo" : null,
         status: "pending",
       },
     });

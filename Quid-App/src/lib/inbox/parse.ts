@@ -15,7 +15,6 @@
  *  - Es puro y sin dependencias: se prueba con texto real de SMS.
  */
 
-import { parseAmountLiteral } from "@/lib/parse/expression";
 
 export type InboxSource = "sms" | "email" | "voice" | "notification" | "manual";
 
@@ -92,6 +91,41 @@ function round2(value: number): number {
 }
 
 /**
+ * Interpreta un token de dinero venga en formato colombiano o estadounidense.
+ *
+ * Los bancos no se ponen de acuerdo: Bancolombia escribe `$45.900` y
+ * `$1.234.567,50`, mientras que BBVA o Bold usan `$15,000.00` y `$1,234,567.89`.
+ * Leer el segundo como si fuera colombiano multiplica el monto por 1000.
+ *
+ * Regla: el **último** separador manda.
+ *  - Si le siguen 3 dígitos y todos los grupos son de 3 → es separador de
+ *    miles (`15,000` → 15000, `12.000` → 12000).
+ *  - Si le siguen 1 o 2 dígitos → es decimal y el resto son miles
+ *    (`12.000,50` → 12000.5, `15,000.00` → 15000).
+ */
+export function parseMoneyToken(raw: string): number {
+  const token = raw.replace(/[^\d.,]/g, "");
+  if (!token) return NaN;
+
+  const parts = token.split(/[.,]/);
+  if (parts.length === 1) return Number(token);
+
+  const lastSeparatorIndex = Math.max(token.lastIndexOf(","), token.lastIndexOf("."));
+  const digitsAfterLast = token.length - lastSeparatorIndex - 1;
+  const allGroupsOfThree = parts.slice(1).every((part) => part.length === 3);
+
+  // Separador de miles: "15,000", "1.234.567".
+  if (digitsAfterLast === 3 && allGroupsOfThree) {
+    return Number(parts.join(""));
+  }
+
+  // Decimal en el último separador; el resto son miles.
+  const whole = parts.slice(0, -1).join("");
+  const decimals = parts[parts.length - 1];
+  return Number(`${whole}.${decimals}`);
+}
+
+/**
  * Busca el monto en el texto.
  *
  * Estrategia en dos pasadas:
@@ -112,7 +146,7 @@ export function extractAmount(text: string): number | null {
 
   const currencyPattern = /(?:\$|\bCOP\b|\bpesos?\b)\s*([\d][\d.,]*)/gi;
   for (const match of text.matchAll(currencyPattern)) {
-    const value = parseAmountLiteral(clean(match[1]));
+    const value = parseMoneyToken(clean(match[1]));
     if (Number.isFinite(value) && value > 0 && value < 1e12) candidates.push(value);
   }
 
@@ -121,7 +155,7 @@ export function extractAmount(text: string): number | null {
     // dígitos: así se evitan cuotas ("3"), meses ("11") y similares.
     const loosePattern = /\b(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+,\d{1,2}|\d{3,})\b/g;
     for (const match of text.matchAll(loosePattern)) {
-      const value = parseAmountLiteral(clean(match[1]));
+      const value = parseMoneyToken(clean(match[1]));
       if (Number.isFinite(value) && value > 0 && value < 1e12) candidates.push(value);
     }
   }
