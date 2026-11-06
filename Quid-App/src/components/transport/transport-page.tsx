@@ -121,7 +121,7 @@ const docTypeIcons: Record<string, typeof Shield> = {
 
 type VehicleWithDetails = Vehicle & {
   fuelLogs: Array<{ id: string; date: string; km: number; amount: number; pricePerGallon: number; gallons: number; isFullTank?: boolean; station?: string | null; notes?: string | null }>;
-  maintenanceRecords: Array<{ id: string; type: string; description: string; km: number; cost: number; date: string; nextDueKm?: number | null; nextDueDate?: string | null; reminderEnabled?: boolean; items?: Array<{ id: string; name: string; quantity: number; unitPrice: number; totalPrice: number }> }>;
+  maintenanceRecords: Array<{ id: string; type: string; description: string; km: number; cost: number; date: string; nextDueKm?: number | null; nextDueDate?: string | null; reminderEnabled: boolean; items?: Array<{ id: string; maintenanceRecordId: string; name: string; quantity: number; unitPrice: number; totalPrice: number }> }>;
   documents?: Array<{ id: string; vehicleId: string; type: string; documentNumber?: string | null; issueDate: string; expiryDate: string; cost: number; reminderDays: number; reminderEnabled: boolean; notes?: string | null }>;
   reminders?: VehicleReminder[];
   fuelLevel?: number;
@@ -1682,6 +1682,18 @@ export function TransportPage() {
               setEditDocument(null);
               setShowDocumentForm(true);
             }}
+            onEditMaintenanceRecord={(recordId) => {
+              const record = (selectedVehicle?.maintenanceRecords ?? []).find((item) => item.id === recordId) ?? null;
+              if (!record) return;
+              setEditMaintenance(record);
+              setShowMaintenanceForm(true);
+            }}
+            onEditDocumentRecord={(documentId) => {
+              const doc = (selectedVehicle?.documents ?? []).find((item) => item.id === documentId) ?? null;
+              if (!doc) return;
+              setEditDocument(doc);
+              setShowDocumentForm(true);
+            }}
           />
         ) : visibleTimeline.length === 0 ? (
           <div className="p-8 text-center">
@@ -1985,6 +1997,8 @@ function ReminderBoard({
   onDeleteReminder,
   onCreateMaintenance,
   onCreateDocument,
+  onEditMaintenanceRecord,
+  onEditDocumentRecord,
 }: {
   vehicle: VehicleWithDetails | null;
   onCreateReminder: () => void;
@@ -1993,6 +2007,8 @@ function ReminderBoard({
   onDeleteReminder: (reminder: VehicleReminder) => void;
   onCreateMaintenance: () => void;
   onCreateDocument: () => void;
+  onEditMaintenanceRecord: (recordId: string) => void;
+  onEditDocumentRecord: (documentId: string) => void;
 }) {
   const now = new Date();
 
@@ -2200,6 +2216,8 @@ function ReminderBoard({
                   onEditReminder={onEditReminder}
                   onToggleReminder={onToggleReminder}
                   onDeleteReminder={onDeleteReminder}
+                  onEditMaintenanceRecord={onEditMaintenanceRecord}
+                  onEditDocumentRecord={onEditDocumentRecord}
                 />
               ))}
             </div>
@@ -2215,11 +2233,15 @@ function ReminderBoardCard({
   onEditReminder,
   onToggleReminder,
   onDeleteReminder,
+  onEditMaintenanceRecord,
+  onEditDocumentRecord,
 }: {
   item: ReminderBoardItem;
   onEditReminder: (reminder: VehicleReminder) => void;
   onToggleReminder: (reminder: VehicleReminder, completed: boolean) => void;
   onDeleteReminder: (reminder: VehicleReminder) => void;
+  onEditMaintenanceRecord: (recordId: string) => void;
+  onEditDocumentRecord: (documentId: string) => void;
 }) {
   const Icon = item.kind === "custom"
     ? Bell
@@ -2270,6 +2292,41 @@ function ReminderBoardCard({
               <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => onDeleteReminder(item.reminder)}>
                 <Trash2 className="mr-2 size-4" />
                 Eliminar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* A reminder born from a maintenance record or a document has no row of
+            its own to edit: the record IS the source. Without this the driver
+            could see the reminder but had no way to change or dismiss it. */}
+        {item.kind === "maintenance" && item.recordId && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 rounded-xl">
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem onClick={() => onEditMaintenanceRecord(item.recordId!)}>
+                <Pencil className="mr-2 size-4 text-blue-500" />
+                Editar mantenimiento
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {item.kind === "document" && item.documentId && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-8 rounded-xl">
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rounded-xl">
+              <DropdownMenuItem onClick={() => onEditDocumentRecord(item.documentId!)}>
+                <Pencil className="mr-2 size-4 text-blue-500" />
+                Editar documento
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
