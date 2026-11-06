@@ -345,7 +345,8 @@ export function TransportPage() {
     const actionMap: Partial<Record<SidebarAction, () => void>> = {
       "create-vehicle": () => { setEditVehicle(null); setShowVehicleForm(true); },
       "log-fuel": () => { setEditFuelLog(null); setShowFuelLogForm(true); },
-      "log-maintenance": () => { setEditMaintenance(null); setShowMaintenanceForm(true); },
+      "log-maintenance": () => { setEditMaintenance(null); setMaintenancePreset(null); setShowMaintenanceForm(true); },
+      "log-oil-change": () => { setEditMaintenance(null); setMaintenancePreset(["oil_change"]); setShowMaintenanceForm(true); },
       "register-document": () => { setEditDocument(null); setShowDocumentForm(true); },
       "update-fuel-price": () => setShowFuelPriceDialog(true),
       "create-vehicle-reminder": () => { setEditReminder(null); setShowReminderForm(true); },

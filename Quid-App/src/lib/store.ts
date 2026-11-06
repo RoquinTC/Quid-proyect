@@ -25,6 +25,7 @@ export type SidebarAction =
   | "create-vehicle"
   | "log-fuel"
   | "log-maintenance"
+  | "log-oil-change"
   | "register-document"
   | "update-fuel-price"
   | "create-vehicle-reminder"

@@ -8,6 +8,7 @@ import {
   Car,
   Clock,
   CreditCard,
+  Droplets,
   Fuel,
   Heart,
   Home,
@@ -71,6 +72,7 @@ const financeActions = [
 ];
 
 const transportActions = [
+  action("log-oil-change", "transport", "Cambio de aceite", "Solo el aceite, sin más", Droplets, "text-amber-600", "bg-amber-100 dark:bg-amber-900/30"),
   action("log-fuel", "transport", "Tanqueo", "Registra combustible", Fuel, "text-cyan-600", "bg-cyan-100 dark:bg-cyan-900/30"),
   action("update-fuel-price", "transport", "Precio combustible", "Actualiza la proyección", Landmark, "text-blue-600", "bg-blue-100 dark:bg-blue-900/30"),
   action("log-maintenance", "transport", "Mantenimiento", "Servicio o reparación", Wrench, "text-indigo-600", "bg-indigo-100 dark:bg-indigo-900/30"),
