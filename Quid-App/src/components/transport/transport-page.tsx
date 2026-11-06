@@ -438,28 +438,9 @@ export function TransportPage() {
       });
     }
 
-    for (const record of selectedVehicle.maintenanceRecords ?? []) {
-      if (!record.reminderEnabled || (!record.nextDueDate && !record.nextDueKm)) continue;
-      const daysUntil = record.nextDueDate
-        ? Math.ceil((new Date(record.nextDueDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-        : null;
-      const kmRemaining = record.nextDueKm != null ? record.nextDueKm - selectedVehicle.currentKm : null;
-      const byDate = daysUntil != null && daysUntil <= weekLimit;
-      const byKm = kmRemaining != null && kmRemaining <= 500;
-      if (!byDate && !byKm) continue;
-      const isOverdue = (daysUntil != null && daysUntil <= 0) || (kmRemaining != null && kmRemaining <= 0);
-      alerts.push({
-        id: `maintenance-${record.id}`,
-        kind: "maintenance",
-        title: "Mantenimiento",
-        detail: [
-          daysUntil != null ? (daysUntil <= 0 ? "Vence hoy" : `En ${daysUntil} día${daysUntil === 1 ? "" : "s"}`) : null,
-          kmRemaining != null ? (kmRemaining <= 0 ? "límite alcanzado" : `faltan ${Math.round(kmRemaining).toLocaleString("es-CO")} km`) : null,
-        ].filter(Boolean).join(" · "),
-        severity: isOverdue ? "danger" : "warning",
-        dueScore: Math.min(daysUntil ?? 999, kmRemaining != null ? kmRemaining / 100 : 999),
-      });
-    }
+    // Records are intentionally absent: their next-due is frozen at the moment
+    // of the work, so they resurfaced as alerts forever. Maintenance alerts come
+    // from the reminder written when the service was registered.
 
     for (const doc of selectedVehicle.documents ?? []) {
       if (!doc.reminderEnabled) continue;
@@ -478,8 +459,8 @@ export function TransportPage() {
     return alerts.sort((a, b) => a.dueScore - b.dueScore).slice(0, 4);
   }, [selectedVehicle]);
 
-  // Unified forecast for the dashboard: maintenance, reminders and documents,
-  // with km-only targets projected onto the calendar by the prediction engine.
+  // Unified forecast for the dashboard: reminders and documents, with km-only
+  // targets projected onto the calendar by the prediction engine.
   const dashboardUpcoming = useMemo(() => {
     if (!selectedVehicle) return [];
     return buildUpcoming({
@@ -487,10 +468,7 @@ export function TransportPage() {
       avgKmPerDay: selectedVehicle.avgKmPerDay ?? 0,
       isLearning: selectedVehicle.isLearning ?? true,
       reminders: selectedVehicle.reminders ?? [],
-      maintenanceRecords: selectedVehicle.maintenanceRecords ?? [],
       documents: selectedVehicle.documents ?? [],
-      maintenanceLabel: (record) =>
-        MAINTENANCE_TYPES.find((type) => type.value === record.type)?.label ?? "Mantenimiento",
       documentLabel: (doc) => docTypeLabels[doc.type] ?? "Documento",
     });
   }, [selectedVehicle]);
@@ -2572,17 +2550,30 @@ function VehicleDetailView({
 
   // Upcoming maintenance with KM intervals (ALL reminders, not just urgent)
   const now = new Date();
-  const upcomingMaintenance = (vehicle.maintenanceRecords || [])
-    .filter(r => r.reminderEnabled && (r.nextDueKm || r.nextDueDate))
+  // Live targets only. Records are history and their next-due is frozen at the
+  // moment of the work, so they used to reappear here forever.
+  const upcomingMaintenance = (vehicle.reminders || [])
+    .filter(r => r.isActive && r.category === "maintenance")
     .map(r => {
-      const kmRemaining = r.nextDueKm ? r.nextDueKm - vehicle.currentKm : null;
-      const daysUntil = r.nextDueDate ? Math.ceil((new Date(r.nextDueDate).getTime() - now.getTime()) / (1000*60*60*24)) : null;
+      const kmRemaining = r.dueKm != null ? r.dueKm - vehicle.currentKm : null;
+      const daysUntil = r.dueDate ? Math.ceil((new Date(r.dueDate).getTime() - now.getTime()) / (1000*60*60*24)) : null;
       const isOverdue = (kmRemaining !== null && kmRemaining <= 0) || (daysUntil !== null && daysUntil <= 0);
-      const isUrgent = !isOverdue && ((kmRemaining !== null && kmRemaining <= 500) || (daysUntil !== null && daysUntil <= 15));
-      const typeConfig = MAINTENANCE_TYPES.find(t => t.value === r.type);
-      const kmInterval = r.nextDueKm && r.km ? Math.max(0, r.nextDueKm - r.km) : typeConfig?.nextKmInterval || 0;
-      const monthInterval = typeConfig?.nextMonthInterval || 0;
-      return { ...r, kmRemaining, daysUntil, isOverdue, isUrgent, kmInterval, monthInterval };
+      const isUrgent = !isOverdue && (
+        (kmRemaining !== null && kmRemaining <= (r.warningKm ?? 500)) ||
+        (daysUntil !== null && daysUntil <= (r.warningDays ?? 15))
+      );
+      return {
+        id: r.id,
+        title: r.title,
+        type: "otro",
+        nextDueDate: r.dueDate,
+        kmRemaining,
+        daysUntil,
+        isOverdue,
+        isUrgent,
+        kmInterval: r.repeatIntervalKm ?? 0,
+        monthInterval: r.repeatIntervalDays ? Math.max(1, Math.round(r.repeatIntervalDays / 30)) : 0,
+      };
     })
     .sort((a, b) => {
       if (a.isOverdue && !b.isOverdue) return -1;
@@ -2799,7 +2790,7 @@ function VehicleDetailView({
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
-                          {maintTypeLabels[r.type] || r.type}
+                          {r.title}
                           {r.kmInterval > 0 && (
                             <span className="text-gray-400 font-normal ml-1">· Cada {r.kmInterval.toLocaleString()} km</span>
                           )}

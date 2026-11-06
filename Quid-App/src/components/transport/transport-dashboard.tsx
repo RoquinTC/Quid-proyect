@@ -711,7 +711,7 @@ export function TransportDashboard({
           <div className="rounded-2xl border border-dashed border-gray-300 p-4 text-center dark:border-gray-700">
             <p className="text-[12px] font-semibold text-gray-500 dark:text-gray-400">Nada pendiente</p>
             <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
-              Creá un recordatorio o cargá un mantenimiento con próximo vencimiento.
+              Creá un recordatorio o registrá un mantenimiento con aviso.
             </p>
           </div>
         ) : (

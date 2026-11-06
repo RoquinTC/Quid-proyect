@@ -100,10 +100,7 @@ export interface BuildUpcomingInput {
   /** True while the app is still gathering history for the rate. */
   isLearning?: boolean;
   reminders?: ReminderLike[] | null;
-  maintenanceRecords?: MaintenanceLike[] | null;
   documents?: DocumentLike[] | null;
-  /** Label resolver for maintenance types (keeps this module UI-agnostic). */
-  maintenanceLabel?: (record: MaintenanceLike) => string;
   documentLabel?: (doc: DocumentLike) => string;
   today?: Date;
 }
@@ -315,9 +312,16 @@ export function describeProjection(
 /**
  * Build the unified, severity-sorted list of what is coming up for a vehicle.
  *
+ * Only REMINDERS and DOCUMENTS feed this. Maintenance records are deliberately
+ * excluded: a record keeps the next-due it computed the day the work was done, so
+ * feeding them in listed a service once per time it had ever been performed, and
+ * an old record stayed "upcoming" forever. Registering a maintenance already
+ * writes a reminder (one per service), and that reminder carries the live target
+ * — so the record would only duplicate it with a stale copy.
+ *
  * Unlike the legacy alert helper (which only surfaces items inside the 7-day
  * window and takes the top few), this returns everything with a known target,
- * including far-future maintenance, so the dashboard can show a real forecast.
+ * including far-future reminders, so the dashboard can show a real forecast.
  */
 export function buildUpcoming(input: BuildUpcomingInput): UpcomingItem[] {
   const today = input.today ?? new Date();
@@ -364,39 +368,6 @@ export function buildUpcoming(input: BuildUpcomingInput): UpcomingItem[] {
       confidence: projection.confidence,
       severity: severityFor({ kmRemaining, daysRemaining, projectedDays: projection.daysRemaining, warningKm, warningDays }),
       progress: progressFor(kmRemaining, warningKm),
-      source: dueDate && dueKm != null ? "both" : dueDate ? "date" : "km",
-      effectiveDays: daysRemaining ?? projection.daysRemaining,
-    });
-  }
-
-  // ── Maintenance ──
-  for (const record of input.maintenanceRecords ?? []) {
-    if (!record) continue;
-    if (record.reminderEnabled === false) continue;
-
-    const dueDate = toDate(record.nextDueDate);
-    const dueKm = record.nextDueKm != null ? Number(record.nextDueKm) : null;
-    if (!dueDate && (dueKm == null || !Number.isFinite(dueKm))) continue;
-
-    const kmRemaining = dueKm != null ? dueKm - currentKm : null;
-    const daysRemaining = dueDate ? daysBetween(today, dueDate) : null;
-    const projection = project(dueKm);
-    const label = input.maintenanceLabel?.(record) ?? record.description ?? "Mantenimiento";
-
-    items.push({
-      id: `maintenance-${record.id}`,
-      kind: "maintenance",
-      title: label,
-      subtitle: record.description && record.description !== label ? record.description : "Mantenimiento",
-      dueKm,
-      kmRemaining,
-      dueDate: dueDate ? dueDate.toISOString() : null,
-      daysRemaining,
-      projectedDate: projection.estimatedDate,
-      projectedDays: projection.daysRemaining,
-      confidence: projection.confidence,
-      severity: severityFor({ kmRemaining, daysRemaining, projectedDays: projection.daysRemaining }),
-      progress: progressFor(kmRemaining, DEFAULT_WARNING_KM),
       source: dueDate && dueKm != null ? "both" : dueDate ? "date" : "km",
       effectiveDays: daysRemaining ?? projection.daysRemaining,
     });

@@ -12,7 +12,6 @@ import {
   estimateKmDueDate,
   severityFor,
   type DocumentLike,
-  type MaintenanceLike,
   type ReminderLike,
 } from "@/lib/transport-prediction";
 
@@ -198,11 +197,6 @@ describe("buildUpcoming", () => {
     { id: "r4", title: "Ya hecho", dueKm: 10_500, completedAt: new Date(2026, 2, 1) },
   ];
 
-  const maintenance: MaintenanceLike[] = [
-    { id: "m1", description: "Frenos", nextDueKm: 10_100, reminderEnabled: true },
-    { id: "m2", description: "Sin recordatorio", nextDueKm: 10_100, reminderEnabled: false },
-  ];
-
   const documents: DocumentLike[] = [
     { id: "d1", type: "tecnomecanica", expiryDate: new Date(2026, 3, 20), reminderDays: 30, reminderEnabled: true },
     { id: "d2", type: "otro", expiryDate: new Date(2026, 3, 20), reminderEnabled: false },
@@ -213,7 +207,6 @@ describe("buildUpcoming", () => {
       currentKm: 10_000,
       avgKmPerDay: 50,
       reminders,
-      maintenanceRecords: maintenance,
       documents,
       today: TODAY,
       documentLabel: (doc) => (doc.type === "tecnomecanica" ? "Tecnomecánica" : doc.type),
@@ -224,8 +217,15 @@ describe("buildUpcoming", () => {
     const ids = build().map((item) => item.id);
     expect(ids).not.toContain("reminder-r3");
     expect(ids).not.toContain("reminder-r4");
-    expect(ids).not.toContain("maintenance-m2");
     expect(ids).not.toContain("document-d2");
+  });
+
+  it("never emits maintenance-record items", () => {
+    // Records are history: their next-due is frozen at the moment of the work, so
+    // feeding them in listed a service once per time it had been performed and
+    // kept old ones "upcoming" forever. The live target lives in a reminder.
+    const ids = build().map((item) => item.id);
+    expect(ids.some((id) => id.startsWith("maintenance-"))).toBe(false);
   });
 
   it("gives a km-only item a projected date", () => {
@@ -288,7 +288,7 @@ describe("buildUpcoming", () => {
   });
 
   it("returns an empty list for a vehicle with nothing pending", () => {
-    expect(build({ reminders: [], maintenanceRecords: [], documents: [] })).toEqual([]);
+    expect(build({ reminders: [], documents: [] })).toEqual([]);
   });
 
   it("survives a vehicle with no learned rate", () => {
