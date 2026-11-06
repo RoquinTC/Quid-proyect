@@ -1221,25 +1221,6 @@ export function TransportPage() {
         {/* ─── Reminders Section (compact bar, always visible when vehicle selected) ─── */}
         {selectedVehicle && (transportTab === "summary" || transportTab === "reminders") && (() => {
           const now = new Date();
-          const maintReminders = (selectedVehicle.maintenanceRecords || [])
-            .filter(r => r.reminderEnabled && (r.nextDueKm || r.nextDueDate))
-            .map(r => {
-              const kmRemaining = r.nextDueKm ? r.nextDueKm - selectedVehicle.currentKm : null;
-              const daysUntil = r.nextDueDate ? Math.ceil((new Date(r.nextDueDate).getTime() - now.getTime()) / (1000*60*60*24)) : null;
-              const isOverdue = (kmRemaining !== null && kmRemaining <= 0) || (daysUntil !== null && daysUntil <= 0);
-              const isUrgent = !isOverdue && ((kmRemaining !== null && kmRemaining <= 500) || (daysUntil !== null && daysUntil <= 15));
-              const typeConfig = MAINTENANCE_TYPES.find(t => t.value === r.type);
-              const kmInterval = r.nextDueKm && r.km ? Math.max(0, r.nextDueKm - r.km) : typeConfig?.nextKmInterval || 0;
-              const monthInterval = typeConfig?.nextMonthInterval || 0;
-              return { ...r, kmRemaining, daysUntil, isOverdue, isUrgent, kmInterval, monthInterval };
-            })
-            .sort((a, b) => {
-              if (a.isOverdue && !b.isOverdue) return -1;
-              if (!a.isOverdue && b.isOverdue) return 1;
-              if (a.isUrgent && !b.isUrgent) return -1;
-              if (!a.isUrgent && b.isUrgent) return 1;
-              return (a.kmRemaining ?? Infinity) - (b.kmRemaining ?? Infinity);
-            });
 
           const docReminders = (selectedVehicle.documents || [])
             .filter(d => d.reminderEnabled)
@@ -1273,10 +1254,13 @@ export function TransportPage() {
             });
 
           const activeCustomReminders = customReminders.filter(r => r.isActive);
-          const hasReminders = maintReminders.length > 0 || docReminders.length > 0 || customReminders.length > 0;
-          const overdueCount = maintReminders.filter(r => r.isOverdue).length + docReminders.filter(d => d.isExpired).length + activeCustomReminders.filter(r => r.isOverdue).length;
-          const urgentCount = maintReminders.filter(r => r.isUrgent).length + docReminders.filter(d => d.isExpiringSoon).length + activeCustomReminders.filter(r => r.isUrgent).length;
-          const totalCount = maintReminders.length + docReminders.length + activeCustomReminders.length;
+          // Only real reminders count here. Maintenance RECORDS used to be added
+          // too, with the next-due frozen at the moment they were registered, so
+          // a service done twice listed twice and the total double-counted it.
+          const hasReminders = docReminders.length > 0 || activeCustomReminders.length > 0;
+          const overdueCount = docReminders.filter(d => d.isExpired).length + activeCustomReminders.filter(r => r.isOverdue).length;
+          const urgentCount = docReminders.filter(d => d.isExpiringSoon).length + activeCustomReminders.filter(r => r.isUrgent).length;
+          const totalCount = docReminders.length + activeCustomReminders.length;
 
           return (
             <div className="px-4 pt-2">
@@ -1391,62 +1375,6 @@ export function TransportPage() {
                               </DropdownMenu>
                             </div>
                           ))}
-                          {maintReminders.map(r => {
-                            const Icon = maintTypeIcons[r.type] || Wrench;
-                            return (
-                              <div key={r.id} className={`flex items-center gap-2.5 p-2 rounded-xl ${
-                                r.isOverdue
-                                  ? "bg-red-100/60 dark:bg-red-900/30"
-                                  : r.isUrgent
-                                  ? "bg-amber-100/50 dark:bg-amber-900/20"
-                                  : "bg-white/60 dark:bg-gray-800/40"
-                              }`}>
-                                <div className={`size-7 rounded-lg flex items-center justify-center flex-shrink-0 ${maintTypeColors[r.type] || maintTypeColors.other}`}>
-                                  <Icon className="size-3.5" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-gray-900 dark:text-white truncate">
-                                    {maintTypeLabels[r.type] || r.type}
-                                    {r.kmInterval > 0 && (
-                                      <span className="text-gray-400 font-normal ml-1">· Cada {r.kmInterval.toLocaleString()} km</span>
-                                    )}
-                                    {r.monthInterval > 0 && !r.kmInterval && (
-                                      <span className="text-gray-400 font-normal ml-1">· Cada {r.monthInterval} mes{r.monthInterval > 1 ? "es" : ""}</span>
-                                    )}
-                                  </p>
-                                  <p className="text-[11px] text-gray-500 flex items-center gap-1.5 flex-wrap">
-                                    {r.kmRemaining !== null && (
-                                      <span className={`font-medium ${
-                                        r.isOverdue ? "text-red-600 dark:text-red-400" : r.isUrgent ? "text-amber-600 dark:text-amber-400" : "text-gray-600 dark:text-gray-400"
-                                      }`}>
-                                        {r.isOverdue ? "Vencido" : `Faltan ${r.kmRemaining.toLocaleString("es-CO")} km`}
-                                      </span>
-                                    )}
-                                    {r.daysUntil !== null && (
-                                      <span className="text-gray-400">
-                                        <Clock className="size-3 inline -mt-0.5" /> {formatShortDate(r.nextDueDate!)}
-                                        {!r.isOverdue && r.daysUntil > 0 && (
-                                          <span className="ml-1">({r.daysUntil}d)</span>
-                                        )}
-                                      </span>
-                                    )}
-                                  </p>
-                                </div>
-                                {r.kmRemaining !== null && r.kmInterval > 0 && !r.isOverdue && (
-                                  <div className="w-12 flex-shrink-0">
-                                    <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full ${
-                                          r.kmRemaining <= 500 ? "bg-red-500" : r.kmRemaining <= r.kmInterval * 0.3 ? "bg-amber-500" : "bg-emerald-500"
-                                        }`}
-                                        style={{ width: `${Math.max(0, Math.min(100, ((r.kmInterval - r.kmRemaining) / r.kmInterval) * 100))}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
                           {docReminders.map(d => {
                             const DocIcon = docTypeIcons[d.type] || FileText;
                             return (
