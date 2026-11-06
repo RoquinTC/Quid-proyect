@@ -196,6 +196,27 @@ jobs:
           path: Quid-App/dist/Quid.apk
           retention-days: 90
 
+      # La APK de GitHub se quedaba atrás: entre 1.1.8 y 1.1.13 solo se
+      # subieron versiones a main, sin tag, así que el Release nunca se
+      # actualizaba. Aquí se publica el Release de la versión que está en main
+      # cuando todavía no existe, sin necesidad de crear el tag a mano.
+      - name: Publicar Release de la versión si falta
+        if: startsWith(github.ref, 'refs/heads/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./Quid-App/package.json').version")
+          TAG="v$VERSION"
+          echo "Versión en main: $VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "El release $TAG ya existe; no se toca."
+            exit 0
+          fi
+          gh release create "$TAG" "Quid-App/dist/Quid.apk" \
+            --title "Quid $TAG" \
+            --target "$GITHUB_SHA" \
+            --notes "APK compilada automáticamente desde main ($GITHUB_SHA) para la versión $VERSION."
       # Solo en tags: Release con descarga directa permanente.
       - name: Publicar Release
         if: startsWith(github.ref, 'refs/tags/')
