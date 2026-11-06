@@ -1371,7 +1371,7 @@ model UserSettings {
   // No guarda contraseñas de correo: se envía el mensaje por HTTP.
   inboxEmailEnabled   Boolean   @default(false)
   /// Token que autoriza el POST a /api/inbox/email (uno por usuario).
-  inboxEmailToken     String?   @unique
+  inboxEmailToken     String?
   countryCode         String    @default("CO") // For holiday calculations
   lastBudgetReset     DateTime? // When budgets were last reset
   notificationsEnabled Boolean  @default(true) // Global notifications toggle
@@ -1386,6 +1386,7 @@ model UserSettings {
 
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([inboxEmailToken])
   @@map("user_settings")
 }
 
