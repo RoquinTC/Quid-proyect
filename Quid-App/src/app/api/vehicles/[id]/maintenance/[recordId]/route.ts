@@ -11,6 +11,7 @@ import {
   reverseFinanceEntry,
   reverseUnpaidCreditInstallmentByAmount,
 } from "@/lib/transport-finance";
+import { syncMaintenanceItemReminders } from "@/lib/maintenance-reminder-sync";
 import {
   resolveMaintenanceDisplayName,
 } from "@/lib/transport-maintenance-rules";
@@ -42,12 +43,14 @@ async function syncMaintenanceReminder({
   const userRules = await db.maintenanceServiceRule.findMany({ where: { userId } });
   const title = resolveMaintenanceDisplayName(type, userRules);
 
+  // Deactivate only once a replacement is certain. Doing it before the guard
+  // silently switched off an existing reminder and created nothing in return.
+  if (!enabled || (!dueKm && !dueDate)) return;
+
   await db.vehicleReminder.updateMany({
     where: { userId, vehicleId, category: "maintenance", title, isActive: true },
     data: { isActive: false, completedAt: new Date() },
   });
-
-  if (!enabled || (!dueKm && !dueDate)) return;
 
   await db.vehicleReminder.create({
     data: {
@@ -95,7 +98,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const {
       type, description, cost, km, date, repeatIntervalKm, nextDueKm, nextDueDate, reminderEnabled,
-      paymentType, accountId, subAccountId, debtId, installmentCount,
+      paymentType, accountId, subAccountId, debtId, installmentCount, items,
     } = body;
     const finalKm = km !== undefined ? Number(km) : existing.km;
     const finalType = type ?? existing.type;
@@ -131,7 +134,42 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       data: updateData,
     });
 
-    if (
+    const hasItems = Array.isArray(items) && items.length > 0;
+
+    if (hasItems) {
+      // This route used to ignore `items` completely, so changing a service or
+      // its price on an existing record was silently discarded, and the reminder
+      // for that service could never be set from an edit. Reconcile the services
+      // and then run the very same per-item pass the create route runs.
+      await db.maintenanceItem.deleteMany({ where: { maintenanceRecordId: recordId } });
+      await db.maintenanceItem.createMany({
+        data: items.map((item: any) => ({
+          maintenanceRecordId: recordId,
+          name: item.name,
+          quantity: item.quantity || 1,
+          unitPrice: item.unitPrice,
+          totalPrice: item.totalPrice || (item.quantity || 1) * item.unitPrice,
+        })),
+      });
+
+      await syncMaintenanceItemReminders({
+        userId: session.user.id,
+        vehicleId: id,
+        vehicleName: vehicle.name,
+        items: items.map((item: any) => ({
+          name: item.name,
+          typeKey: item.typeKey ?? null,
+          scheduleReminder: item.scheduleReminder,
+          reminderIntervalKm: item.reminderIntervalKm ?? null,
+          reminderIntervalDays: item.reminderIntervalDays ?? null,
+          reminderWarningKm: item.reminderWarningKm ?? null,
+        })),
+        description: finalDescription,
+        recordKm: finalKm,
+        recordDate: record.date,
+        enabled: reminderEnabled ?? record.reminderEnabled,
+      });
+    } else if (
       type !== undefined ||
       description !== undefined ||
       km !== undefined ||

@@ -16,6 +16,7 @@ import {
   resolveMaintenanceRule,
   shouldCreateServiceReminder,
 } from "@/lib/transport-maintenance-rules";
+import { syncMaintenanceItemReminders as syncMaintenanceReminder } from "@/lib/maintenance-reminder-sync";
 
 /**
  * Store a rule row for every custom service name used in this record.
@@ -60,119 +61,6 @@ async function persistCustomServiceRules(
       },
       // Never overwrite what the user configured in the intervals dialog.
       update: {},
-    });
-  }
-}
-
-async function syncMaintenanceReminder({
-  userId,
-  vehicleId,
-  vehicleName,
-  items,
-  description,
-  recordKm,
-  recordDate,
-  enabled,
-}: {
-  userId: string;
-  vehicleId: string;
-  vehicleName: string;
-  items: Array<{
-    name: string;
-    typeKey?: string | null;
-    scheduleReminder?: boolean;
-    reminderIntervalKm?: number | null;
-    reminderIntervalDays?: number | null;
-    reminderWarningKm?: number | null;
-  }>;
-  description: string;
-  recordKm: number;
-  recordDate: Date;
-  enabled: boolean;
-}) {
-  if (!enabled || items.length === 0) return;
-
-  const userRules = await db.maintenanceServiceRule.findMany({
-    where: { userId },
-  });
-
-  for (const item of items) {
-    if (item.scheduleReminder === false) continue;
-
-    const itemName = item.name;
-    const typeKey = item.typeKey || item.name;
-    const resolvedRule = resolveMaintenanceRule({ name: itemName, typeKey }, userRules);
-
-    // Honour an explicit interval typed in the form, even when the service rule
-    // is inactive. Skipping on `!isActive` alone silently discarded the request.
-    if (!shouldCreateServiceReminder({
-      scheduleReminder: item.scheduleReminder,
-      reminderIntervalKm: item.reminderIntervalKm,
-      reminderIntervalDays: item.reminderIntervalDays,
-      ruleIsActive: resolvedRule.isActive,
-    })) continue;
-
-    // Find existing active reminder to carry over custom intervals
-    const existingReminder = await db.vehicleReminder.findFirst({
-      where: {
-        userId,
-        vehicleId,
-        category: "maintenance",
-        title: itemName,
-        isActive: true,
-      },
-    });
-
-    if (existingReminder) {
-      await db.vehicleReminder.update({
-        where: { id: existingReminder.id },
-        data: {
-          isActive: false,
-          completedAt: new Date(),
-          completedKm: recordKm,
-        },
-      });
-    }
-
-    // User service rules are the source of truth. Existing reminders can still
-    // carry a custom interval when the user edited only that reminder.
-    const intervalKm =
-      item.reminderIntervalKm ??
-      existingReminder?.repeatIntervalKm ??
-      resolvedRule.intervalKm ??
-      0;
-    const intervalDays =
-      item.reminderIntervalDays ??
-      existingReminder?.repeatIntervalDays ??
-      resolvedRule.intervalDays ??
-      0;
-
-    if (!intervalKm && !intervalDays) continue; // No rule to generate next reminder for this specific item
-
-    const nextDueKm = intervalKm > 0 ? recordKm + intervalKm : null;
-    let nextDueDate: Date | null = null;
-    
-    if (intervalDays > 0) {
-      nextDueDate = new Date(recordDate);
-      nextDueDate.setDate(nextDueDate.getDate() + intervalDays);
-    }
-
-    await db.vehicleReminder.create({
-      data: {
-        userId,
-        vehicleId,
-        title: itemName,
-        description: description || `Próximo: ${itemName} de ${vehicleName}`,
-        category: "maintenance",
-        triggerMode: nextDueKm && nextDueDate ? "hybrid" : nextDueKm ? "km" : "date",
-        dueKm: nextDueKm,
-        dueDate: nextDueDate,
-        warningKm: intervalKm ? item.reminderWarningKm ?? resolvedRule.warningKm : 500,
-        warningDays: 15,
-        repeatIntervalKm: intervalKm > 0 ? intervalKm : null,
-        repeatIntervalDays: intervalDays > 0 ? intervalDays : null,
-        isActive: true,
-      },
     });
   }
 }
