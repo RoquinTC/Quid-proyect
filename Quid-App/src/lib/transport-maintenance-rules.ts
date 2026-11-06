@@ -130,3 +130,30 @@ export function resolveMaintenanceDisplayName(
   const fromCaller = fallbackNames.map((name) => name?.trim()).find((name) => Boolean(name));
   return fromCaller || "Mantenimiento";
 }
+
+/**
+ * Decide whether registering a maintenance item should create its reminder.
+ *
+ * A service rule supplies a DEFAULT interval, so `isActive` answers "should this
+ * service nag me at all?". When the driver explicitly types an interval while
+ * registering the work, that request is more specific than the default and wins.
+ *
+ * This is not cosmetic. In production the oil-change rule was inactive, so an
+ * explicit "remind me in 2.500 km" was discarded by a bare
+ * `if (!rule.isActive) continue`: the reminder never appeared and nothing
+ * explained why.
+ */
+export function shouldCreateServiceReminder(params: {
+  scheduleReminder?: boolean | null;
+  reminderIntervalKm?: number | null;
+  reminderIntervalDays?: number | null;
+  ruleIsActive: boolean;
+}): boolean {
+  if (params.scheduleReminder === false) return false;
+
+  const askedExplicitly =
+    (params.reminderIntervalKm != null && Number(params.reminderIntervalKm) > 0) ||
+    (params.reminderIntervalDays != null && Number(params.reminderIntervalDays) > 0);
+
+  return params.ruleIsActive || askedExplicitly;
+}

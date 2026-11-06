@@ -14,6 +14,7 @@ import {
   normalizeMaintenanceTypeKey,
   resolveMaintenanceDisplayName,
   resolveMaintenanceRule,
+  shouldCreateServiceReminder,
 } from "@/lib/transport-maintenance-rules";
 
 /**
@@ -101,7 +102,15 @@ async function syncMaintenanceReminder({
     const itemName = item.name;
     const typeKey = item.typeKey || item.name;
     const resolvedRule = resolveMaintenanceRule({ name: itemName, typeKey }, userRules);
-    if (!resolvedRule.isActive) continue;
+
+    // Honour an explicit interval typed in the form, even when the service rule
+    // is inactive. Skipping on `!isActive` alone silently discarded the request.
+    if (!shouldCreateServiceReminder({
+      scheduleReminder: item.scheduleReminder,
+      reminderIntervalKm: item.reminderIntervalKm,
+      reminderIntervalDays: item.reminderIntervalDays,
+      ruleIsActive: resolvedRule.isActive,
+    })) continue;
 
     // Find existing active reminder to carry over custom intervals
     const existingReminder = await db.vehicleReminder.findFirst({

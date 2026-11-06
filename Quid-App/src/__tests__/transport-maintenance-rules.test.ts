@@ -2,7 +2,70 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeMaintenanceTypeKey,
   resolveMaintenanceDisplayName,
+  shouldCreateServiceReminder,
 } from "@/lib/transport-maintenance-rules";
+
+describe("shouldCreateServiceReminder", () => {
+  /**
+   * The production failure this guards.
+   *
+   * The oil-change rule sat inactive while the driver explicitly asked for a
+   * reminder at 2.500 km. A bare `if (!rule.isActive) continue` threw the request
+   * away: no reminder appeared, nothing replaced the old one, and nothing said
+   * why. An explicit request is more specific than a default and must win.
+   */
+  it("honours an explicit distance even when the rule is inactive", () => {
+    expect(
+      shouldCreateServiceReminder({
+        reminderIntervalKm: 2_500,
+        ruleIsActive: false,
+      })
+    ).toBe(true);
+  });
+
+  it("honours an explicit time interval too", () => {
+    expect(
+      shouldCreateServiceReminder({
+        reminderIntervalDays: 180,
+        ruleIsActive: false,
+      })
+    ).toBe(true);
+  });
+
+  it("creates nothing when the rule is inactive and nothing was asked", () => {
+    expect(shouldCreateServiceReminder({ ruleIsActive: false })).toBe(false);
+    expect(
+      shouldCreateServiceReminder({
+        reminderIntervalKm: null,
+        reminderIntervalDays: null,
+        ruleIsActive: false,
+      })
+    ).toBe(false);
+  });
+
+  it("creates from the rule alone when it is active", () => {
+    expect(shouldCreateServiceReminder({ ruleIsActive: true })).toBe(true);
+  });
+
+  it("respects an explicit opt-out above everything else", () => {
+    expect(
+      shouldCreateServiceReminder({
+        scheduleReminder: false,
+        reminderIntervalKm: 2_500,
+        ruleIsActive: true,
+      })
+    ).toBe(false);
+  });
+
+  it("treats a zero or blank interval as 'not asked'", () => {
+    expect(
+      shouldCreateServiceReminder({ reminderIntervalKm: 0, ruleIsActive: false })
+    ).toBe(false);
+    expect(
+      shouldCreateServiceReminder({ reminderIntervalKm: 0, ruleIsActive: true })
+    ).toBe(true);
+  });
+});
 
 describe("normalizeMaintenanceTypeKey", () => {
   it("slugs a human label into a stable key", () => {
