@@ -72,6 +72,17 @@ describe("extractMerchant", () => {
     expect(extractMerchant("Comercio: RAPPI")).toBe("RAPPI");
   });
 
+  it("rechaza frases que no son un comercio", () => {
+    // Casos reales de SMS: una oración no es el nombre de un negocio.
+    expect(extractMerchant("Full Equipo tienes plan celular ilimitado")).toBeNull();
+    expect(extractMerchant("en cajero automatico es 276000")).toBeNull();
+    expect(extractMerchant("Compra en tu tienda de siempre por 10000")).toBeNull();
+  });
+
+  it("acepta comercios de una o dos palabras en mayusculas", () => {
+    expect(extractMerchant("pago en RAPPI")).toBe("RAPPI");
+    expect(extractMerchant("compra en D1 SANTAFE")).toBe("D1 SANTAFE");
+  });
   it("devuelve null si no hay comercio", () => {
     expect(extractMerchant("Cargo por $10.000")).toBeNull();
   });

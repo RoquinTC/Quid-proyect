@@ -143,6 +143,32 @@ export function detectType(text: string): { type: "expense" | "income"; explicit
   return { type: "expense", explicit: false };
 }
 
+/**
+ * ¿El candidato parece de verdad el nombre de un comercio?
+ *
+ * Los SMS reales traen frases como "Full Equipo tienes plan celular" o
+ * "cajero automatico es 276000": si se aceptan tal cual, la bandeja muestra
+ * oraciones como si fueran el nombre del negocio. Es preferible dejar el
+ * comercio vacío (la UI cae al texto del mensaje) que mostrar una frase.
+ */
+function isLikelyMerchant(candidate: string): boolean {
+  if (candidate.length < 3 || candidate.length > 30) return false;
+  if (!/[A-Za-zÁÉÍÓÚÑÜ]/.test(candidate)) return false;
+
+  const words = candidate.split(/\s+/).filter(Boolean);
+  if (words.length > 5) return false;
+
+  // Los bancos escriben el comercio en mayúsculas o con mayúscula inicial.
+  if (!/^[A-ZÁÉÍÓÚÑÜ0-9]/.test(words[0])) return false;
+
+  // Nada de verbos ni fórmulas de aviso.
+  const banned =
+    /\b(tienes|tiene|puedes|puede|usted|es|son|sera|será|favor|gracias|ahora|hoy|desde|para|debes|debe|caduca|vence)\b/i;
+  if (banned.test(candidate)) return false;
+
+  return true;
+}
+
 /** Intenta sacar el comercio del texto ("... en EXITO PRADO ..."). */
 export function extractMerchant(text: string): string | null {
   // "en <COMERCIO>" — corta en punto, coma, punto y coma o salto de línea.
@@ -163,8 +189,7 @@ export function extractMerchant(text: string): string | null {
     let candidate = match[1].replace(/\s+/g, " ").trim();
     candidate = candidate.split(stopWords)[0].replace(/[.,;\s]+$/, "").trim();
 
-    // Debe tener al menos una letra y no ser solo dígitos.
-    if (candidate.length >= 3 && /[A-Za-zÁÉÍÓÚÑÜ]/.test(candidate)) {
+    if (isLikelyMerchant(candidate)) {
       return candidate;
     }
   }
