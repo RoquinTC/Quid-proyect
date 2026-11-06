@@ -62,6 +62,7 @@ model User {
   categoryRules       CategoryRule[]
   categoryGroups      CategoryGroup[]
   recurringSeries     RecurringSeries[]
+  inboxItems          InboxItem[]
   settings            UserSettings?
   sentInvitations     AccountInvitation[]  @relation("SentInvitations")
   receivedInvitations AccountInvitation[]  @relation("ReceivedInvitations")
@@ -1617,4 +1618,38 @@ model RecurringSeries {
   @@index([payrollGroupId])
   @@index([savingsGoalId])
   @@map("recurring_series")
+}
+// ============================================
+// FINANZAS - BANDEJA DE ENTRADA (F-49)
+// ============================================
+
+/// Captura en crudo de un movimiento, pendiente de clasificar.
+/// El parser propone monto/tipo/comercio; el usuario confirma editando el
+/// formulario normal de transacción. Aceptar aquí NO crea dinero por su
+/// cuenta: solo recuerda que la captura ya se resolvió.
+model InboxItem {
+  id             String    @id @default(cuid())
+  userId         String
+  /// sms | email | voice | notification | manual
+  source         String    @default("manual")
+  rawText        String
+  parsedAmount   Decimal?
+  /// expense | income
+  parsedType     String?
+  parsedDate     DateTime?
+  parsedMerchant String?
+  /// 0..1 — qué tan completa salió la lectura automática.
+  confidence     Float?
+  /// pending | accepted | dismissed
+  status         String    @default("pending")
+  transactionId  String?
+  notes          String?
+  receivedAt     DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("inbox_items")
 }

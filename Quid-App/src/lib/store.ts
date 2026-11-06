@@ -4,7 +4,7 @@ import type { CachedSession } from "@/lib/offline-session";
 
 export type ModuleType = "dashboard" | "finance" | "transport" | "health" | "pantry" | "settings";
 
-export type FinanceSubView = "overview" | "accounts" | "transactions" | "budgets" | "debts" | "savings" | "cdts" | "recurring" | "account-detail" | "debt-detail" | "savings-detail" | "simulator" | "credit-simulator" | "debt-simulator";
+export type FinanceSubView = "overview" | "inbox" | "accounts" | "transactions" | "budgets" | "debts" | "savings" | "cdts" | "recurring" | "account-detail" | "debt-detail" | "savings-detail" | "simulator" | "credit-simulator" | "debt-simulator";
 export type TransportSubView = "vehicles" | "fuel" | "maintenance";
 export type HealthSubView = "summary" | "medications" | "appointments" | "orders" | "profiles" | "inventory" | "authorizations" | "claims";
 export type HealthMedicationFilter = "all" | "active" | "needs_setup" | "configured";

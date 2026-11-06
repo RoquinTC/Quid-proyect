@@ -58,6 +58,15 @@ interface TransactionFormProps {
   } | null;
   onSuccess?: () => void | Promise<void>;
   /**
+   * F-49 · Valores iniciales para aceptar una captura de la bandeja.
+   * Solo se aplican al crear (nunca al editar).
+   */
+  prefill?: {
+    amount?: string;
+    category?: string;
+    date?: string;
+  } | null;
+  /**
    * F-39 · Cuando se provee, el formulario ofrece registrar un "Pago":
    * una obligación futura que todavía no movió dinero. No crea una
    * transacción; abre el formulario de pago programado en modo único.
@@ -74,6 +83,7 @@ export function TransactionForm({
   editTransaction,
   onSuccess,
   onCreatePayment,
+  prefill,
 }: TransactionFormProps) {
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -212,6 +222,13 @@ export function TransactionForm({
     }
   }, [category, editTransaction]);
 
+  // F-49 · Prellenar desde una captura de la bandeja (solo al crear).
+  useEffect(() => {
+    if (!open || !prefill || editTransaction) return;
+    if (prefill.amount) setAmount(prefill.amount);
+    if (prefill.category) setCategory(prefill.category);
+    if (prefill.date) setDate(prefill.date);
+  }, [open, prefill, editTransaction]);
   // F-48 · Pide la sugerencia de cuenta para la categoría/subcategoría elegida.
   useEffect(() => {
     if (!open || isEditing || type === "transfer") {

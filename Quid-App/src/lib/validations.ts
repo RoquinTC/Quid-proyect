@@ -1185,3 +1185,19 @@ export const categoryGroupUpdateSchema = z.object({
 export const categoryGroupDeleteSchema = z.object({
   id: z.string().min(1),
 });
+// ── F-49 · Bandeja de entrada ──
+export const inboxCreateSchema = z.object({
+  rawText: z.string().min(1, "El texto es obligatorio").max(4000),
+  source: z.enum(["sms", "email", "voice", "notification", "manual"]).optional().default("manual"),
+});
+
+export const inboxUpdateSchema = z.object({
+  id: z.string().min(1),
+  status: z.enum(["accepted", "dismissed"]),
+  transactionId: z.string().min(1).optional().nullable(),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+export const inboxDeleteSchema = z.object({
+  id: z.string().min(1),
+});

@@ -159,6 +159,8 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   { model: "CategoryGroupMember", table: "category_group_members", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: false, parentRelation: "group" },
   // F-28 · Definición de pago recurrente (las ocurrencias viven en RecurringPayment).
   { model: "RecurringSeries", table: "recurring_series", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  // F-49 · Bandeja de capturas pendientes de clasificar.
+  { model: "InboxItem", table: "inbox_items", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
 
   // ── Finanzas: deudas ────────────────────────────────────────────────────
   { model: "Debt", table: "debts", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },

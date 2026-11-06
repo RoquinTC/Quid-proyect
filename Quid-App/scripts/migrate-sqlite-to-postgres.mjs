@@ -88,6 +88,8 @@ const modelPlan = [
   ["categoryGroupMember", "CategoryGroupMember"],
   // F-28 · Definición de series recurrentes.
   ["recurringSeries", "RecurringSeries"],
+  // F-49 · Bandeja de entrada.
+  ["inboxItem", "InboxItem"],
   ["pushSubscription", "PushSubscription"],
   ["userSettings", "UserSettings"],
   ["storedBackup", "StoredBackup"],
