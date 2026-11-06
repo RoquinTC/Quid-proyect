@@ -37,6 +37,7 @@ import { CategoriesManager } from "@/components/finance/categories-manager";
 import { apiFetch } from "@/lib/api";
 import { CategoryGroupsManager } from "@/components/finance/category-groups-manager";
 import { InboxRulesManager } from "@/components/finance/inbox-rules-manager";
+import { InboxEmailCard } from "./inbox-email-card";
 
 type AppSettings = {
   budgetCutoffDay: number;
@@ -44,6 +45,7 @@ type AppSettings = {
   budgetCycleMode: string;
   respectHolidays: boolean;
   smsCaptureEnabled: boolean;
+  inboxEmailEnabled: boolean;
   needsBudgetReset: boolean;
   lastBudgetReset?: string | null;
   currentPeriod?: {
@@ -314,8 +316,13 @@ export function FinanceSettings({
                   </p>
                 </CardContent>
               </Card>
+              {/* F-22 · Captura por correo */}
+              <InboxEmailCard
+                enabled={settings.inboxEmailEnabled === true}
+                onToggle={(v) => updateSetting("inboxEmailEnabled", v)}
+              />
               {/* F-36 · Reglas de captura (solo tienen sentido con la bandeja activa) */}
-              {settings.smsCaptureEnabled && <InboxRulesManager />}
+              {(settings.smsCaptureEnabled || settings.inboxEmailEnabled) && <InboxRulesManager />}
               {/* Considerar Días Festivos */}
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                 <CardContent className="p-3">

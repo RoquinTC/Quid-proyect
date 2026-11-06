@@ -1,6 +1,15 @@
 {
-  "currentVersion": "1.1.13",
+  "currentVersion": "1.1.14",
   "releases": [
+    {
+      "version": "1.1.14",
+      "date": "2026-11-06",
+      "title": "Quid 1.1.14",
+      "changes": [
+        "Captura por correo con token propio",
+        "Facturas y avisos del banco entran a la misma bandeja"
+      ]
+    },
     {
       "version": "1.1.13",
       "date": "2026-11-06",

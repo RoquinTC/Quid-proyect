@@ -425,6 +425,8 @@ export interface UserSettings {
   respectHolidays: boolean;
   /** F-01 · Captura por SMS (opt-in). Apagada, la bandeja no se muestra. */
   smsCaptureEnabled: boolean;
+  /** F-22 · Captura por correo (opt-in). */
+  inboxEmailEnabled: boolean;
   countryCode: string;
   lastBudgetReset?: string | null;
   notificationsEnabled: boolean;

@@ -80,6 +80,7 @@ export async function PUT(req: NextRequest) {
       budgetCycleMode,
       respectHolidays,
       smsCaptureEnabled,
+      inboxEmailEnabled,
       countryCode,
       notificationsEnabled,
       lockOnResume,
@@ -142,6 +143,7 @@ export async function PUT(req: NextRequest) {
     if (budgetCycleMode !== undefined) data.budgetCycleMode = budgetCycleMode;
     if (respectHolidays !== undefined) data.respectHolidays = respectHolidays;
     if (smsCaptureEnabled !== undefined) data.smsCaptureEnabled = smsCaptureEnabled;
+    if (inboxEmailEnabled !== undefined) data.inboxEmailEnabled = inboxEmailEnabled;
     if (countryCode !== undefined) data.countryCode = countryCode;
     if (notificationsEnabled !== undefined) data.notificationsEnabled = notificationsEnabled;
     if (lockOnResume !== undefined) data.lockOnResume = lockOnResume;

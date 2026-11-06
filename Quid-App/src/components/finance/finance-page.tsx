@@ -87,10 +87,16 @@ export function FinancePage() {
   // F-01 · La captura por SMS es opt-in. Si está apagada, la bandeja no existe
   // como pestaña y el plugin nativo nunca se invoca (ni se pide el permiso).
   const [smsCaptureEnabled, setSmsCaptureEnabled] = useState(false);
+  const [emailCaptureEnabled, setEmailCaptureEnabled] = useState(false);
+  // La bandeja sirve a las dos fuentes: SMS y correo.
+  const inboxAvailable = smsCaptureEnabled || emailCaptureEnabled;
 
   const loadCaptureFlag = useCallback(() => {
-    apiFetch<{ smsCaptureEnabled?: boolean }>("/api/settings")
-      .then((s) => setSmsCaptureEnabled(s?.smsCaptureEnabled === true))
+    apiFetch<{ smsCaptureEnabled?: boolean; inboxEmailEnabled?: boolean }>("/api/settings")
+      .then((s) => {
+        setSmsCaptureEnabled(s?.smsCaptureEnabled === true);
+        setEmailCaptureEnabled(s?.inboxEmailEnabled === true);
+      })
       .catch(() => { /* sin ajustes: se queda apagada */ });
   }, []);
 
@@ -103,13 +109,13 @@ export function FinancePage() {
 
   // Si el usuario apaga la captura estando en la bandeja, se sale a Resumen.
   useEffect(() => {
-    if (!smsCaptureEnabled && financeSubView === "inbox") {
+    if (!inboxAvailable && financeSubView === "inbox") {
       setFinanceSubView("overview");
     }
-  }, [smsCaptureEnabled, financeSubView, setFinanceSubView]);
+  }, [inboxAvailable, financeSubView, setFinanceSubView]);
   const tabs = useMemo(
-    () => ALL_FINANCE_TABS.filter((tab) => tab.id !== "inbox" || smsCaptureEnabled),
-    [smsCaptureEnabled]
+    () => ALL_FINANCE_TABS.filter((tab) => tab.id !== "inbox" || inboxAvailable),
+    [inboxAvailable]
   );
 
   // Sidebar quick-action forms (managed at page level so they work from sidebar)
@@ -217,7 +223,7 @@ export function FinancePage() {
       case "inbox":
         // F-01 · Doble guarda: si la captura por SMS está apagada, la bandeja
         // no se muestra aunque el estado haya quedado apuntando ahí.
-        return smsCaptureEnabled ? <InboxView /> : <FinanceOverview />;
+        return inboxAvailable ? <InboxView /> : <FinanceOverview />;
       case "accounts":
         return <AccountsView />;
       case "budgets":
