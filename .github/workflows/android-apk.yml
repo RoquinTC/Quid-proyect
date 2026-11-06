@@ -206,14 +206,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          VERSION=$(node -p "require('./Quid-App/package.json').version")
+          # El job corre dentro de Quid-App (defaults.run.working-directory).
+          VERSION=$(node -p "require('./package.json').version")
           TAG="v$VERSION"
           echo "Versión en main: $VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "El release $TAG ya existe; no se toca."
             exit 0
           fi
-          gh release create "$TAG" "Quid-App/dist/Quid.apk" \
+          gh release create "$TAG" "dist/Quid.apk" \
             --title "Quid $TAG" \
             --target "$GITHUB_SHA" \
             --notes "APK compilada automáticamente desde main ($GITHUB_SHA) para la versión $VERSION."
