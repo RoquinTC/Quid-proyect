@@ -15,8 +15,10 @@ import {
   Sparkles,
   AlertTriangle,
   Loader2,
+  MessageSquare,
 } from "lucide-react";
 import { TransactionForm } from "./transaction-form";
+import { isSmsReadingAvailable, readRecentSms } from "@/lib/native/sms";
 
 /**
  * F-49 · Bandeja de entrada.
@@ -67,6 +69,7 @@ export function InboxView() {
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [readingSms, setReadingSms] = useState(false);
 
   // Captura nueva
   const [rawText, setRawText] = useState("");
@@ -97,10 +100,18 @@ export function InboxView() {
     if (!text) return;
     setSaving(true);
     try {
-      const res = await apiFetch<{ item: InboxItem; parsed: Record<string, boolean> }>(
+      const res = await apiFetch<{ item?: InboxItem; duplicate?: boolean }>(
         "/api/inbox",
         { method: "POST", body: JSON.stringify({ rawText: text, source: "manual" }) }
       );
+      if (res.duplicate) {
+        toast.info("Ese mensaje ya estaba en la bandeja");
+        return;
+      }
+      if (!res.item) {
+        toast.error("No se pudo capturar");
+        return;
+      }
       if (res.item.parsedAmount === null) {
         toast.warning("Capturado, pero no se detectó un monto. Edítalo al registrarlo.");
       } else {
@@ -115,6 +126,54 @@ export function InboxView() {
     }
   };
 
+  /** Lee los SMS del teléfono y los deposita en la bandeja. */
+  const handleReadSms = async () => {
+    setReadingSms(true);
+    try {
+      const result = await readRecentSms(120, 21);
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+
+      // Pre-filtro en el teléfono: solo se envían mensajes que parecen
+      // movimientos. El parser del servidor hace la lectura fina, pero no
+      // tiene sentido subir 120 SMS de conversaciones personales.
+      const FINANCIAL = /(\$|\bCOP\b|compra|pago|retiro|abono|transacci|d[eé]bito|factura|consignaci|cuota)/i;
+      const candidates = result.messages.filter((m) => FINANCIAL.test(m.body)).slice(0, 60);
+
+      if (candidates.length === 0) {
+        toast.info("No se encontraron SMS de movimientos");
+        return;
+      }
+
+      let created = 0;
+      let duplicates = 0;
+      for (const message of candidates) {
+        try {
+          const res = await apiFetch<{ duplicate?: boolean }>("/api/inbox", {
+            method: "POST",
+            body: JSON.stringify({ rawText: message.body, source: "sms" }),
+          });
+          if (res.duplicate) duplicates++;
+          else created++;
+        } catch {
+          /* un SMS que falle no debe tumbar el resto */
+        }
+      }
+
+      if (created === 0 && duplicates > 0) {
+        toast.info(`Nada nuevo: ${duplicates} SMS ya estaban en la bandeja`);
+      } else {
+        toast.success(
+          `${created} SMS capturados${duplicates > 0 ? ` · ${duplicates} ya estaban` : ""}`
+        );
+      }
+      await load();
+    } finally {
+      setReadingSms(false);
+    }
+  };
   const mark = async (item: InboxItem, status: "accepted" | "dismissed") => {
     try {
       await apiFetch("/api/inbox", {
@@ -152,6 +211,19 @@ export function InboxView() {
         )}
       </div>
 
+      {/* Lectura de SMS (solo app Android) */}
+      {isSmsReadingAvailable() && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleReadSms}
+          disabled={readingSms}
+          className="w-full h-9 rounded-xl text-xs border-sky-200 dark:border-sky-900/50 text-sky-700 dark:text-sky-300"
+        >
+          {readingSms ? <Loader2 className="size-3.5 animate-spin mr-1" /> : <MessageSquare className="size-3.5 mr-1" />}
+          {readingSms ? "Leyendo SMS…" : "Leer SMS del teléfono"}
+        </Button>
+      )}
       {/* Captura manual */}
       <Card className="border border-dashed border-indigo-200 dark:border-indigo-900/50 shadow-none rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/10">
         <CardContent className="p-3 space-y-2">

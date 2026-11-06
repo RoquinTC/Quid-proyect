@@ -1097,6 +1097,8 @@ export const settingsUpdateSchema = z.object({
   /** Ciclo del presupuesto: mensual o quincenal. */
   budgetCycleMode: z.enum(["monthly", "semimonthly"]).optional(),
   respectHolidays: z.boolean().optional(),
+  /** F-01 · Captura por SMS (opt-in). */
+  smsCaptureEnabled: z.boolean().optional(),
   countryCode: z.string().optional(),
   notificationsEnabled: z.boolean().optional(),
   lockOnResume: z.boolean().optional(),

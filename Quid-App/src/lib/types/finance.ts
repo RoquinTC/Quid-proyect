@@ -423,6 +423,8 @@ export interface UserSettings {
   /** `monthly` (un ciclo al mes) o `semimonthly` (dos quincenas). */
   budgetCycleMode: string;
   respectHolidays: boolean;
+  /** F-01 · Captura por SMS (opt-in). Apagada, la bandeja no se muestra. */
+  smsCaptureEnabled: boolean;
   countryCode: string;
   lastBudgetReset?: string | null;
   notificationsEnabled: boolean;

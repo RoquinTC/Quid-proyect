@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(QuidCalendarPlugin.class);
         registerPlugin(QuidGoogleAuthPlugin.class);
         registerPlugin(QuidDoseSoundPlugin.class);
+        registerPlugin(QuidSmsPlugin.class);
         super.onCreate(savedInstanceState);
 
         CookieManager cookieManager = CookieManager.getInstance();

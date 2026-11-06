@@ -79,6 +79,7 @@ export async function PUT(req: NextRequest) {
       budgetCutoffDay2,
       budgetCycleMode,
       respectHolidays,
+      smsCaptureEnabled,
       countryCode,
       notificationsEnabled,
       lockOnResume,
@@ -140,6 +141,7 @@ export async function PUT(req: NextRequest) {
     if (budgetCutoffDay2 !== undefined) data.budgetCutoffDay2 = budgetCutoffDay2;
     if (budgetCycleMode !== undefined) data.budgetCycleMode = budgetCycleMode;
     if (respectHolidays !== undefined) data.respectHolidays = respectHolidays;
+    if (smsCaptureEnabled !== undefined) data.smsCaptureEnabled = smsCaptureEnabled;
     if (countryCode !== undefined) data.countryCode = countryCode;
     if (notificationsEnabled !== undefined) data.notificationsEnabled = notificationsEnabled;
     if (lockOnResume !== undefined) data.lockOnResume = lockOnResume;

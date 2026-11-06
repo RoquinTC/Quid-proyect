@@ -30,6 +30,7 @@ import {
   ChevronRight,
   Database,
   Lock,
+  MessageSquare,
 } from "lucide-react";
 import { AccountManager } from "@/components/finance/account-manager";
 import { CategoriesManager } from "@/components/finance/categories-manager";
@@ -41,6 +42,7 @@ type AppSettings = {
   budgetCutoffDay2: number;
   budgetCycleMode: string;
   respectHolidays: boolean;
+  smsCaptureEnabled: boolean;
   needsBudgetReset: boolean;
   lastBudgetReset?: string | null;
   currentPeriod?: {
@@ -286,6 +288,31 @@ export function FinanceSettings({
               {/* F-43 · Grupos de categorías */}
               <CategoryGroupsManager />
 
+              {/* F-01 · Captura por SMS (opt-in) */}
+              <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="size-8 rounded-lg bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                        <MessageSquare className="size-3.5 text-sky-600 dark:text-sky-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">Captura por SMS</p>
+                        <p className="text-xs text-gray-400">Lee SMS del banco y los deja en la bandeja</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={settings.smsCaptureEnabled === true}
+                      onCheckedChange={(v) => updateSetting("smsCaptureEnabled", v)}
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-2 pl-11">
+                    {settings.smsCaptureEnabled
+                      ? "La próxima vez que abras la bandeja se pedirá permiso para leer SMS. Solo se leen los recibidos; Quid no envía ni borra nada."
+                      : "Apagado: la pestaña Bandeja no aparece y el permiso de SMS nunca se pide."}
+                  </p>
+                </CardContent>
+              </Card>
               {/* Considerar Días Festivos */}
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                 <CardContent className="p-3">

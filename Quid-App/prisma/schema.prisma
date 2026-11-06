@@ -1363,6 +1363,9 @@ model UserSettings {
   budgetCutoffDay2    Int       @default(16) // Segundo corte (solo modo semanal/quincenal)
   budgetCycleMode     String    @default("monthly") // monthly | semimonthly
   respectHolidays     Boolean   @default(true) // Consider holidays for business day calculation
+  // F-01 · Captura por SMS (opt-in). Con false la bandeja no se muestra y el
+  // plugin nativo nunca se invoca: el permiso ni se pide.
+  smsCaptureEnabled   Boolean   @default(false)
   countryCode         String    @default("CO") // For holiday calculations
   lastBudgetReset     DateTime? // When budgets were last reset
   notificationsEnabled Boolean  @default(true) // Global notifications toggle

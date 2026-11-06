@@ -104,12 +104,23 @@ export async function POST(req: NextRequest) {
     }
 
     const parsed = parseCapture(body.rawText);
+    const cleanText = body.rawText.trim();
+
+    // Evita duplicados al releer los SMS: si ese texto ya se capturó (aunque
+    // se haya aceptado o descartado), no se vuelve a crear.
+    const already = await db.inboxItem.findFirst({
+      where: { userId: session.user.id, rawText: cleanText },
+      select: { id: true },
+    });
+    if (already) {
+      return NextResponse.json({ duplicate: true, itemId: already.id }, { status: 200 });
+    }
 
     const item = await db.inboxItem.create({
       data: {
         userId: session.user.id,
         source: body.source || "manual",
-        rawText: body.rawText.trim(),
+        rawText: cleanText,
         parsedAmount: parsed.amount,
         parsedType: parsed.type,
         parsedDate: parsed.date ? new Date(`${parsed.date}T12:00:00`) : null,

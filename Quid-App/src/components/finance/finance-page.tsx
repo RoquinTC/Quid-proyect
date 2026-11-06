@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, Component } from "react";
+import { useState, useEffect, useCallback, useMemo, Component } from "react";
 import { useAppStore, type FinanceSubView, type SidebarAction } from "@/lib/store";
 import { motion, AnimatePresence } from "framer-motion";
+import { apiFetch } from "@/lib/api";
+import { useDataEvent } from "@/hooks/use-data-event";
 import { ModuleShell, ModuleTabs, type ModuleTab } from "@/components/layout/module-kit";
 import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock, Inbox } from "lucide-react";
 import { FinanceOverview } from "./finance-overview";
@@ -68,7 +70,7 @@ class TabErrorBoundary extends Component<{
   }
 }
 
-const tabs: ModuleTab<FinanceSubView>[] = [
+const ALL_FINANCE_TABS: ModuleTab<FinanceSubView>[] = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard, primary: true, hint: "Tu mes en una vista" },
   { id: "inbox", label: "Bandeja", icon: Inbox, primary: true, hint: "Capturas por clasificar" },
   { id: "accounts", label: "Cuentas", icon: Wallet, primary: true, hint: "Saldos y movimientos" },
@@ -81,6 +83,34 @@ const tabs: ModuleTab<FinanceSubView>[] = [
 
 export function FinancePage() {
   const { financeSubView, setFinanceSubView, sidebarAction, setSidebarAction } = useAppStore();
+
+  // F-01 · La captura por SMS es opt-in. Si está apagada, la bandeja no existe
+  // como pestaña y el plugin nativo nunca se invoca (ni se pide el permiso).
+  const [smsCaptureEnabled, setSmsCaptureEnabled] = useState(false);
+
+  const loadCaptureFlag = useCallback(() => {
+    apiFetch<{ smsCaptureEnabled?: boolean }>("/api/settings")
+      .then((s) => setSmsCaptureEnabled(s?.smsCaptureEnabled === true))
+      .catch(() => { /* sin ajustes: se queda apagada */ });
+  }, []);
+
+  useEffect(() => {
+    loadCaptureFlag();
+  }, [loadCaptureFlag]);
+
+  // Se refresca cuando el usuario cambia el interruptor en Ajustes.
+  useDataEvent("userSettings", loadCaptureFlag);
+
+  // Si el usuario apaga la captura estando en la bandeja, se sale a Resumen.
+  useEffect(() => {
+    if (!smsCaptureEnabled && financeSubView === "inbox") {
+      setFinanceSubView("overview");
+    }
+  }, [smsCaptureEnabled, financeSubView, setFinanceSubView]);
+  const tabs = useMemo(
+    () => ALL_FINANCE_TABS.filter((tab) => tab.id !== "inbox" || smsCaptureEnabled),
+    [smsCaptureEnabled]
+  );
 
   // Sidebar quick-action forms (managed at page level so they work from sidebar)
   const [showTransactionForm, setShowTransactionForm] = useState(false);
@@ -185,7 +215,9 @@ export function FinancePage() {
 
     switch (financeSubView) {
       case "inbox":
-        return <InboxView />;
+        // F-01 · Doble guarda: si la captura por SMS está apagada, la bandeja
+        // no se muestra aunque el estado haya quedado apuntando ahí.
+        return smsCaptureEnabled ? <InboxView /> : <FinanceOverview />;
       case "accounts":
         return <AccountsView />;
       case "budgets":
