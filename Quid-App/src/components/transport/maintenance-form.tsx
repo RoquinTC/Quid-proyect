@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Sheet,
   SheetContent,
@@ -68,6 +68,15 @@ interface MaintenanceFormProps {
   onOpenChange: (open: boolean) => void;
   preselectedVehicleId?: string | null;
   record?: MaintenanceRecord | null;
+  /**
+   * Services to pre-select when opening for a NEW record, by catalog key.
+   *
+   * Exists for the one-tap "cambio de aceite": changing the oil at home is a real
+   * scenario that is not a full maintenance, and making the driver walk the whole
+   * catalog to log it is why these entries went unrecorded (and why their
+   * reminders drifted).
+   */
+  presetServiceKeys?: string[] | null;
   onSuccess?: () => void;
 }
 
@@ -76,6 +85,7 @@ export function MaintenanceForm({
   onOpenChange,
   preselectedVehicleId,
   record,
+  presetServiceKeys,
   onSuccess,
 }: MaintenanceFormProps) {
   // ─── Step management ──
@@ -246,28 +256,55 @@ export function MaintenanceForm({
 
   // ─── Service catalog handlers ───
 
+  /**
+   * One catalog entry as a selected service, carrying the interval the driver
+   * configured for it. Shared by the catalog toggle and the preset so both build
+   * identical rows — including an already-enabled reminder, which is the point of
+   * logging an oil change.
+   */
+  const buildSelectedService = useCallback((typeKey: string, label?: string) => {
+    const typeConfig = MAINTENANCE_TYPES.find(t => t.value === typeKey);
+    const rule = maintenanceRules.find(r => r.typeKey === typeKey);
+    const intervalKm = rule?.intervalKm ?? typeConfig?.nextKmInterval ?? 0;
+    const intervalMonths = rule?.intervalMonths ?? typeConfig?.nextMonthInterval ?? 0;
+    return {
+      id: createId(),
+      typeKey,
+      label: label ?? rule?.name ?? typeConfig?.label ?? typeKey,
+      price: "",
+      scheduleReminder: Boolean(intervalKm || intervalMonths),
+      reminderIntervalKm: intervalKm ? String(intervalKm) : "",
+      reminderIntervalMonths: intervalMonths ? String(intervalMonths) : "",
+      reminderWarningKm: rule?.warningKm ? String(rule.warningKm) : intervalKm ? "500" : "",
+    };
+  }, [maintenanceRules]);
+
   const toggleService = useCallback((typeKey: string, label: string) => {
     setSelectedServices(prev => {
       const exists = prev.find(s => s.typeKey === typeKey);
       if (exists) {
         return prev.filter(s => s.typeKey !== typeKey);
       }
-      const typeConfig = MAINTENANCE_TYPES.find(t => t.value === typeKey);
-      const rule = maintenanceRules.find(r => r.typeKey === typeKey);
-      const intervalKm = rule?.intervalKm ?? typeConfig?.nextKmInterval ?? 0;
-      const intervalMonths = rule?.intervalMonths ?? typeConfig?.nextMonthInterval ?? 0;
-      return [...prev, {
-        id: createId(),
-        typeKey,
-        label,
-        price: "",
-        scheduleReminder: Boolean(intervalKm || intervalMonths),
-        reminderIntervalKm: intervalKm ? String(intervalKm) : "",
-        reminderIntervalMonths: intervalMonths ? String(intervalMonths) : "",
-        reminderWarningKm: rule?.warningKm ? String(rule.warningKm) : intervalKm ? "500" : "",
-      }];
+      return [...prev, buildSelectedService(typeKey, label)];
     });
-  }, [maintenanceRules]);
+  }, [buildSelectedService]);
+
+  // Apply the preset once per opening. The ref keeps the effect from re-adding a
+  // service the driver deliberately removed.
+  const presetAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open) {
+      presetAppliedRef.current = null;
+      return;
+    }
+    if (isEditing) return;
+    const keys = presetServiceKeys ?? [];
+    if (keys.length === 0) return;
+    const signature = keys.join("|");
+    if (presetAppliedRef.current === signature) return;
+    presetAppliedRef.current = signature;
+    setSelectedServices(keys.map((key) => buildSelectedService(key)));
+  }, [open, isEditing, presetServiceKeys, buildSelectedService]);
 
   const updateServicePrice = useCallback((id: string, price: string) => {
     setSelectedServices(prev =>

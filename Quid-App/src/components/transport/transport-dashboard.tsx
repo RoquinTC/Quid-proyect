@@ -24,6 +24,7 @@ import {
   ChevronRight,
   Clock,
   DollarSign,
+  Droplets,
   FileText,
   Fuel,
   Gauge,
@@ -96,6 +97,11 @@ export interface TransportDashboardProps {
   trackedKm?: number;
   onLogFuel: () => void;
   onLogMaintenance: () => void;
+  /**
+   * Register just an oil change, without walking the whole service catalog.
+   * Changing the oil at home is its own case, not a full maintenance.
+   */
+  onLogOilChange?: () => void;
   onRegisterDocument: () => void;
   onCreateReminder: () => void;
   onUpdateKm?: () => void;
@@ -567,6 +573,7 @@ export function TransportDashboard({
   trackedKm = 0,
   onLogFuel,
   onLogMaintenance,
+  onLogOilChange,
   onRegisterDocument,
   onCreateReminder,
   onUpdateKm,
@@ -732,6 +739,16 @@ export function TransportDashboard({
           <QuickAction icon={FileText} label="Documento" tone="violet" onClick={onRegisterDocument} />
           <QuickAction icon={Bell} label="Recordatorio" tone="rose" onClick={onCreateReminder} />
         </div>
+        {onLogOilChange && (
+          <button
+            type="button"
+            onClick={onLogOilChange}
+            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-2xl border border-cyan-200 bg-cyan-50/60 py-2.5 text-[12px] font-semibold text-cyan-700 transition-colors hover:border-cyan-400 hover:bg-cyan-50 dark:border-cyan-900/50 dark:bg-cyan-950/25 dark:text-cyan-300 dark:hover:border-cyan-700"
+          >
+            <Droplets className="size-3.5" />
+            Registrar solo cambio de aceite
+          </button>
+        )}
         {onUpdateKm && (
           <button
             type="button"

@@ -215,6 +215,9 @@ export function TransportPage() {
   const [editFuelLog, setEditFuelLog] = useState<FuelLog | null>(null);
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
   const [editMaintenance, setEditMaintenance] = useState<MaintenanceRecord | null>(null);
+  // Services the form should open pre-selected, by catalog key. Used by the
+  // one-tap oil change so the driver lands on a filled row instead of the catalog.
+  const [maintenancePreset, setMaintenancePreset] = useState<string[] | null>(null);
   const [showDocumentForm, setShowDocumentForm] = useState(false);
   const [editDocument, setEditDocument] = useState<VehicleDocument | null>(null);
   const [showReminderForm, setShowReminderForm] = useState(false);
@@ -1423,7 +1426,8 @@ export function TransportPage() {
                 upcoming={dashboardUpcoming}
                 efficiency={dashboardEfficiency}
                 onLogFuel={() => { setEditFuelLog(null); setShowFuelLogForm(true); }}
-                onLogMaintenance={() => { setEditMaintenance(null); setShowMaintenanceForm(true); }}
+                onLogMaintenance={() => { setEditMaintenance(null); setMaintenancePreset(null); setShowMaintenanceForm(true); }}
+                onLogOilChange={() => { setEditMaintenance(null); setMaintenancePreset(["oil_change"]); setShowMaintenanceForm(true); }}
                 onRegisterDocument={() => { setEditDocument(null); setShowDocumentForm(true); }}
                 onCreateReminder={() => { setEditReminder(null); setShowReminderForm(true); }}
                 onUpdateKm={() => setShowKmUpdate(true)}
@@ -1745,9 +1749,15 @@ export function TransportPage() {
 
       <MaintenanceForm
         open={showMaintenanceForm}
-        onOpenChange={setShowMaintenanceForm}
+        onOpenChange={(open) => {
+          setShowMaintenanceForm(open);
+          // Clear on close so the oil-change preset cannot leak into the next
+          // record the driver opens from another entry point.
+          if (!open) setMaintenancePreset(null);
+        }}
         preselectedVehicleId={selectedVehicleId}
         record={editMaintenance}
+        presetServiceKeys={maintenancePreset}
         onSuccess={refetchVehicles}
       />
 
