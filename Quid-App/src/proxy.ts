@@ -70,6 +70,10 @@ function getClientIp(request: NextRequest): string {
 const PUBLIC_ROUTES = [
   "/api/auth",
   "/api/health",
+  // F-22 · Captura por correo: se autentica con su propio token
+  // (x-inbox-token), no con sesión. El GET que genera el token sí exige
+  // sesión dentro del handler.
+  "/api/inbox/email",
 ];
 
 // ---------------------------------------------------------------------------
