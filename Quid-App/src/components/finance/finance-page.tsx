@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { apiFetch } from "@/lib/api";
 import { useDataEvent } from "@/hooks/use-data-event";
 import { ModuleShell, ModuleTabs, type ModuleTab } from "@/components/layout/module-kit";
-import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock, Inbox } from "lucide-react";
+import { LayoutDashboard, Wallet, Receipt, CreditCard, PiggyBank, Landmark, Clock, Inbox, TrendingUp } from "lucide-react";
 import { FinanceOverview } from "./finance-overview";
 import { AccountsView } from "./accounts-view";
 import { BudgetsView } from "./budgets-view";
@@ -28,6 +28,7 @@ import { CDTForm } from "./cdt-form";
 import { RecurringForm } from "./recurring-form";
 import { TransactionForm } from "./transaction-form";
 import { InboxView } from "./inbox-view";
+import { ProjectionView } from "./projection-view";
 
 // Error boundary component to prevent a single tab crash from breaking the entire app
 class TabErrorBoundary extends Component<{
@@ -73,6 +74,7 @@ class TabErrorBoundary extends Component<{
 const ALL_FINANCE_TABS: ModuleTab<FinanceSubView>[] = [
   { id: "overview", label: "Resumen", icon: LayoutDashboard, primary: true, hint: "Tu mes en una vista" },
   { id: "inbox", label: "Bandeja", icon: Inbox, primary: true, hint: "Capturas por clasificar" },
+  { id: "projection", label: "Proyección", icon: TrendingUp, primary: false, hint: "Saldo de los próximos días" },
   { id: "accounts", label: "Cuentas", icon: Wallet, primary: true, hint: "Saldos y movimientos" },
   { id: "budgets", label: "Presupuesto", icon: Receipt, primary: true, hint: "Límites por categoría" },
   { id: "debts", label: "Deudas", icon: CreditCard, primary: false, hint: "Cuotas y vencimientos" },
@@ -220,6 +222,8 @@ export function FinancePage() {
     if (financeSubView === "overview") return <FinanceOverview />;
 
     switch (financeSubView) {
+      case "projection":
+        return <ProjectionView />;
       case "inbox":
         // F-01 · Doble guarda: si la captura por SMS está apagada, la bandeja
         // no se muestra aunque el estado haya quedado apuntando ahí.
