@@ -5,11 +5,6 @@ import { useAppSession } from "@/lib/use-app-session";
 import { useAppStore, type ModuleType, type SidebarAction } from "@/lib/store";
 import { performLogout } from "@/lib/logout";
 import {
-  Home,
-  Wallet,
-  Car,
-  Heart,
-  ShoppingCart,
   Settings,
   LogOut,
   ChevronRight,
@@ -18,28 +13,9 @@ import {
   CreditCard,
   TrendingUp,
   Share2,
-  // Finance actions
-  ArrowLeftRight,
-  Banknote,
-  Receipt,
-  PiggyBank,
-  Landmark as DebtIcon,
-  Clock,
-  Tag,
   HandCoins,
-  // Transport actions
-  PlusCircle,
-  Fuel,
-  Wrench,
-  Shield,
-  // Health actions
-  Pill,
-  Stethoscope,
-  // Pantry actions
-  Refrigerator,
-  ListPlus,
-  ShieldCheck,
 } from "lucide-react";
+import { QUID_MODULES, groupActions } from "@/lib/modules/registry";
 import {
   Sheet,
   SheetContent,
@@ -52,87 +28,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { VehicleIcon } from "@/components/transport/vehicle-icon";
 import { useLocalQuery } from "@/lib/local/hooks/queries";
 
-// ─── Module definitions with quick actions ─────────────────────────
+// ─── Módulos y acciones ────────────────────────────────────────────
+// La lista vive en `lib/modules/registry.ts`; aquí solo se decide cómo se
+// agrupa. Cada módulo abre con "Abrir <módulo>" y luego sus acciones por
+// verbo (crear · registrar · gestionar).
 
-type QuickAction = {
-  id: SidebarAction;
-  label: string;
-  icon: typeof Home;
+const VERB_ORDER = ["crear", "registrar", "gestionar"] as const;
+type ActionVerb = (typeof VERB_ORDER)[number];
+
+const VERB_LABEL: Record<ActionVerb, string> = {
+  crear: "Crear",
+  registrar: "Registrar",
+  gestionar: "Gestionar",
 };
-
-type ModuleDef = {
-  id: ModuleType;
-  label: string;
-  icon: typeof Home;
-  color: string;
-  bg: string;
-  actions?: QuickAction[];
-};
-
-const moduleItems: ModuleDef[] = [
-  {
-    id: "dashboard",
-    label: "Inicio",
-    icon: Home,
-    color: "text-emerald-600 dark:text-emerald-400",
-    bg: "bg-emerald-100 dark:bg-emerald-900/30",
-    // Dashboard has no sub-actions — it just navigates
-  },
-  {
-    id: "finance",
-    label: "Finanzas",
-    icon: Wallet,
-    color: "text-teal-600 dark:text-teal-400",
-    bg: "bg-teal-100 dark:bg-teal-900/30",
-    actions: [
-      { id: "create-transaction", label: "Nueva Transacción", icon: ArrowLeftRight },
-      { id: "create-account", label: "Nueva Cuenta", icon: Banknote },
-      { id: "create-budget", label: "Nuevo Presupuesto", icon: Receipt },
-      { id: "create-savings-goal", label: "Nueva Meta de Ahorro", icon: PiggyBank },
-      { id: "create-debt", label: "Nueva Deuda", icon: CreditCard },
-      { id: "create-cdt", label: "Nuevo CDT", icon: DebtIcon },
-      { id: "create-recurring", label: "Nuevo Pago Recurrente", icon: Clock },
-      { id: "manage-categories", label: "Gestionar Categorías", icon: Tag },
-    ],
-  },
-  {
-    id: "transport",
-    label: "Transporte",
-    icon: Car,
-    color: "text-blue-600 dark:text-blue-400",
-    bg: "bg-blue-100 dark:bg-blue-900/30",
-    actions: [
-      { id: "create-vehicle", label: "Nuevo Vehículo", icon: PlusCircle },
-      { id: "log-fuel", label: "Registrar Recarga", icon: Fuel },
-      { id: "log-maintenance", label: "Registrar Mantenimiento", icon: Wrench },
-      { id: "register-document", label: "Registrar Documento", icon: Shield },
-      { id: "update-fuel-price", label: "Actualizar Precio Combustible", icon: Landmark },
-    ],
-  },
-  {
-    id: "health",
-    label: "Salud",
-    icon: Heart,
-    color: "text-rose-600 dark:text-rose-400",
-    bg: "bg-rose-100 dark:bg-rose-900/30",
-    actions: [
-      { id: "create-medication", label: "Nuevo Medicamento", icon: Pill },
-      { id: "create-appointment", label: "Nueva Cita Médica", icon: Stethoscope },
-    ],
-  },
-  {
-    id: "pantry",
-    label: "Despensa",
-    icon: ShoppingCart,
-    color: "text-amber-600 dark:text-amber-400",
-    bg: "bg-amber-100 dark:bg-amber-900/30",
-    actions: [
-      { id: "create-pantry-item", label: "Nuevo Producto", icon: Refrigerator },
-      { id: "create-shopping-list", label: "Nueva Lista de Mercado", icon: ListPlus },
-      { id: "create-health-profile", label: "Perfil de Salud", icon: ShieldCheck },
-    ],
-  },
-];
 
 const simulatorItems = [
   { id: "simulator-yield" as const, label: "Cuentas de alto rendimiento", icon: TrendingUp, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-100 dark:bg-emerald-900/30", comingSoon: false, subView: "simulator" as const },
@@ -216,10 +124,11 @@ export function AppSidebar() {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
               Módulos
             </p>
-            {moduleItems.map((item) => {
+            {QUID_MODULES.map((item) => {
               const Icon = item.icon;
               const isExpanded = expandedModule === item.id;
-              const hasActions = item.actions && item.actions.length > 0;
+              const hasActions = item.actions.length > 0;
+              const groups = groupActions(item);
 
               return (
                 <div key={item.id}>
@@ -231,6 +140,8 @@ export function AppSidebar() {
                         handleNavigate(item.id);
                       }
                     }}
+                    aria-expanded={hasActions ? isExpanded : undefined}
+                    title={item.hint}
                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-primary/10 transition-colors text-left"
                   >
                     <div className={`size-9 rounded-lg ${item.bg} flex items-center justify-center shrink-0`}>
@@ -264,7 +175,8 @@ export function AppSidebar() {
                     )}
                   </button>
 
-                  {/* Expandable quick actions */}
+                  {/* Antes la hamburguesa solo ofrecía crear; abrir el módulo
+                      también vive aquí, junto a las acciones agrupadas. */}
                   <AnimatePresence>
                     {isExpanded && hasActions && (
                       <motion.div
@@ -274,22 +186,47 @@ export function AppSidebar() {
                         transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
-                        <div className="pl-4 pr-1 py-1 space-y-0.5">
-                          {item.actions!.map((action) => {
-                            const ActionIcon = action.icon;
+                        <div className="pl-4 pr-1 py-1 space-y-1">
+                          <button
+                            onClick={() => handleNavigate(item.id)}
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-primary/5 hover:bg-primary/10 transition-colors text-left"
+                          >
+                            <div className={`size-6 rounded-md ${item.bg} flex items-center justify-center shrink-0`}>
+                              <Icon className={`size-3 ${item.color}`} />
+                            </div>
+                            <span className="text-[13px] font-semibold text-foreground flex-1">
+                              Abrir {item.label}
+                            </span>
+                            <ChevronRight className="size-3.5 text-muted-foreground/55" />
+                          </button>
+
+                          {VERB_ORDER.map((verb) => {
+                            const actions = groups[verb];
+                            if (!actions || actions.length === 0) return null;
+
                             return (
-                              <button
-                                key={action.id}
-                                onClick={() => handleQuickAction(item.id, action.id)}
-                                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-primary/10 transition-colors text-left group"
-                              >
-                                <div className={`size-6 rounded-md ${item.bg} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
-                                  <ActionIcon className={`size-3 ${item.color}`} />
-                                </div>
-                                <span className="text-[13px] text-muted-foreground flex-1">
-                                  {action.label}
-                                </span>
-                              </button>
+                              <div key={verb} className="space-y-0.5">
+                                <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                                  {VERB_LABEL[verb]}
+                                </p>
+                                {actions.map((action) => {
+                                  const ActionIcon = action.icon;
+                                  return (
+                                    <button
+                                      key={action.id}
+                                      onClick={() => handleQuickAction(item.id, action.id)}
+                                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-primary/10 transition-colors text-left group"
+                                    >
+                                      <div className={`size-6 rounded-md ${item.bg} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
+                                        <ActionIcon className={`size-3 ${item.color}`} />
+                                      </div>
+                                      <span className="text-[13px] text-muted-foreground flex-1">
+                                        {action.label}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             );
                           })}
                         </div>

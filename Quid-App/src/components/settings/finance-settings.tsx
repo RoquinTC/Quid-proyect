@@ -198,7 +198,7 @@ export function FinanceSettings({
         <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
           <AccordionItem value="ciclo" className="border-0">
             <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800/50">
-              <SectionHeader icon={Calendar} iconColor="text-teal-600" iconBg="bg-teal-100 dark:bg-teal-900/30" title="Ciclo y Parámetros Mensuales" />
+              <SectionHeader icon={Calendar} iconColor="text-teal-600" iconBg="bg-teal-100 dark:bg-teal-900/30" title="Ciclo y fechas" />
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4 space-y-3">
               {/* Ciclo del presupuesto */}
@@ -293,10 +293,17 @@ export function FinanceSettings({
                 </CardContent>
               </Card>
 
-              {/* F-43 · Grupos de categorías */}
-              <CategoryGroupsManager />
+            </AccordionContent>
+          </AccordionItem>
+        </Card>
 
-              {/* F-51 · Presentación */}
+        {/* F-51 · Presentación */}
+        <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
+          <AccordionItem value="presentacion" className="border-0">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <SectionHeader icon={Coins} iconColor="text-slate-600" iconBg="bg-slate-100 dark:bg-slate-800" title="Presentación" />
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 space-y-3">
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                 <CardContent className="p-3 space-y-3">
                   <div className="flex items-center justify-between">
@@ -344,8 +351,17 @@ export function FinanceSettings({
                   </div>
                 </CardContent>
               </Card>
+            </AccordionContent>
+          </AccordionItem>
+        </Card>
 
-              {/* F-01 · Captura por SMS (opt-in) */}
+        {/* F-01 · Captura por SMS (opt-in) */}
+        <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
+          <AccordionItem value="captura" className="border-0">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <SectionHeader icon={MessageSquare} iconColor="text-sky-600" iconBg="bg-sky-100 dark:bg-sky-900/30" title="Captura automática" />
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 space-y-3">
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
@@ -377,7 +393,17 @@ export function FinanceSettings({
               />
               {/* F-36 · Reglas de captura (solo tienen sentido con la bandeja activa) */}
               {(settings.smsCaptureEnabled || settings.inboxEmailEnabled) && <InboxRulesManager />}
-              {/* Considerar Días Festivos */}
+            </AccordionContent>
+          </AccordionItem>
+        </Card>
+
+        {/* Considerar Días Festivos */}
+        <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
+          <AccordionItem value="cierre" className="border-0">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <SectionHeader icon={RefreshCw} iconColor="text-rose-600" iconBg="bg-rose-100 dark:bg-rose-900/30" title="Corte y reinicio" />
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 space-y-3">
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">
@@ -484,6 +510,9 @@ export function FinanceSettings({
                   <CategoriesManager />
                 </CardContent>
               </Card>
+
+              {/* F-43 · Grupos de categorías */}
+              <CategoryGroupsManager />
             </AccordionContent>
           </AccordionItem>
         </Card>

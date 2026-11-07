@@ -20,8 +20,10 @@ import {
   ArrowLeftRight, Banknote, Receipt, PiggyBank, CreditCard, Clock, Tag,
   PlusCircle, Fuel, Wrench, Shield, Landmark,
   Pill, Stethoscope, Refrigerator, ListPlus, ShieldCheck,
+  Globe, Send,
   type LucideIcon,
 } from "lucide-react";
+import type { ModuleType, SidebarAction } from "@/lib/store";
 
 /** Las secciones de configuración que puede exponer un módulo. */
 export type SettingsSectionId =
@@ -35,7 +37,8 @@ export type SettingsSectionId =
 
 /** Acción rápida del menú: crea, registra o gestiona algo. */
 export type ModuleAction = {
-  id: string;
+  /** Debe ser una acción que alguna página de módulo ya sepa atender. */
+  id: SidebarAction;
   label: string;
   /** Ícono del menú hamburguesa. */
   icon: LucideIcon;
@@ -45,7 +48,7 @@ export type ModuleAction = {
 
 export type QuidModule = {
   /** Identificador estable; se usa en el store y en las rutas. */
-  id: string;
+  id: Exclude<ModuleType, "settings">;
   label: string;
   /** Frase corta que explica el módulo. */
   hint: string;
@@ -139,20 +142,101 @@ export const QUID_MODULES: QuidModule[] = [
   },
 ];
 
-/** Secciones de Ajustes que no son de un módulo, sino de la app. */
-export const APP_SETTINGS_SECTIONS: Array<{
+/** Cómo se pinta una sección de Ajustes. */
+export type AppSettingsSection = {
   id: SettingsSectionId;
   label: string;
+  /** Frase corta: subtítulo de la tarjeta y de la cabecera. */
   hint: string;
   group: "general" | "modulos" | "sistema";
-}> = [
-  { id: "general", label: "Ajustes Generales", hint: "Tema, seguridad y copias", group: "general" },
-  { id: "aura", label: "Asistente Aura", hint: "Telegram y habilidades", group: "general" },
-  { id: "finance", label: "Finanzas y Presupuestos", hint: "Corte, categorías y captura", group: "modulos" },
-  { id: "transport", label: "Transporte", hint: "Vehículos y combustible", group: "modulos" },
-  { id: "health", label: "Salud", hint: "Medicamentos y recordatorios", group: "modulos" },
-  { id: "pantry", label: "Despensa", hint: "Productos y listas", group: "modulos" },
-  { id: "admin", label: "Administración", hint: "Sistema y usuarios", group: "sistema" },
+  /** Ícono de la tarjeta. */
+  icon: LucideIcon;
+  /** Gradiente del cuadro del ícono. */
+  gradient: string;
+  /** Sombra de color bajo el ícono. */
+  glow: string;
+  /** Borde de la tarjeta al pasar el cursor. */
+  hover: string;
+  /** La tarjeta ocupa las dos columnas del grid. */
+  wide?: boolean;
+  /** Solo se muestra a administradores. */
+  adminOnly?: boolean;
+};
+
+/** Secciones de Ajustes que no son de un módulo, sino de la app. */
+export const APP_SETTINGS_SECTIONS: AppSettingsSection[] = [
+  {
+    id: "general",
+    label: "Ajustes Generales",
+    hint: "Apariencia, tema, seguridad y copias",
+    group: "general",
+    icon: Globe,
+    gradient: "bg-gradient-to-br from-emerald-500 to-teal-500",
+    glow: "shadow-emerald-500/10",
+    hover: "hover:border-emerald-500/20 dark:hover:border-emerald-400/20",
+  },
+  {
+    id: "aura",
+    label: "Asistente Aura AI",
+    hint: "Telegram, habilidades y comportamiento",
+    group: "general",
+    icon: Send,
+    gradient: "bg-gradient-to-br from-blue-500 to-indigo-500",
+    glow: "shadow-blue-500/10",
+    hover: "hover:border-blue-500/20 dark:hover:border-blue-400/20",
+  },
+  {
+    id: "finance",
+    label: "Finanzas y Presupuestos",
+    hint: "Corte, cuentas, categorías e importación",
+    group: "modulos",
+    icon: Wallet,
+    gradient: "bg-gradient-to-br from-teal-500 to-cyan-500",
+    glow: "shadow-teal-500/10",
+    hover: "hover:border-teal-500/20 dark:hover:border-teal-400/20",
+  },
+  {
+    id: "transport",
+    label: "Transporte y Vehículos",
+    hint: "Combustible, recordatorios y documentos",
+    group: "modulos",
+    icon: Car,
+    gradient: "bg-gradient-to-br from-violet-500 to-purple-500",
+    glow: "shadow-violet-500/10",
+    hover: "hover:border-violet-500/20 dark:hover:border-violet-400/20",
+  },
+  {
+    id: "health",
+    label: "Salud y Medicamentos",
+    hint: "Medicinas, stock mínimo y citas",
+    group: "modulos",
+    icon: Heart,
+    gradient: "bg-gradient-to-br from-rose-500 to-pink-500",
+    glow: "shadow-rose-500/10",
+    hover: "hover:border-rose-500/20 dark:hover:border-rose-400/20",
+  },
+  {
+    id: "pantry",
+    label: "Despensa y Recetas",
+    hint: "Márgenes, unidades y perfiles",
+    group: "modulos",
+    icon: ShoppingCart,
+    gradient: "bg-gradient-to-br from-amber-500 to-orange-500",
+    glow: "shadow-amber-500/10",
+    hover: "hover:border-amber-500/20 dark:hover:border-amber-400/20",
+  },
+  {
+    id: "admin",
+    label: "Administración del Sistema",
+    hint: "Servidor, usuarios y base de datos",
+    group: "sistema",
+    icon: ShieldCheck,
+    gradient: "bg-gradient-to-br from-slate-600 to-zinc-700",
+    glow: "shadow-slate-500/10",
+    hover: "hover:border-slate-500/20 dark:hover:border-slate-400/20",
+    wide: true,
+    adminOnly: true,
+  },
 ];
 
 /** Devuelve el módulo que configura cierta sección de ajustes. */

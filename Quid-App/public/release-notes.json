@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.22",
+  "currentVersion": "1.1.23",
   "releases": [
+    {
+      "version": "1.1.23",
+      "date": "2026-11-07",
+      "title": "Quid 1.1.23",
+      "changes": [
+        "Menu y Ajustes desde el registro",
+        "Cada modulo abre con Abrir y agrupa sus acciones",
+        "Finanzas y Generales en filas de un tema"
+      ]
+    },
     {
       "version": "1.1.22",
       "date": "2026-11-07",

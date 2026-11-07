@@ -280,7 +280,7 @@ export function GeneralSettings({
         <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
           <AccordionItem value="personalizacion" className="border-0">
             <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800/50">
-              <SectionHeader icon={Palette} iconColor="text-emerald-600" iconBg="bg-emerald-100 dark:bg-emerald-900/30" title="Personalización" />
+              <SectionHeader icon={Palette} iconColor="text-emerald-600" iconBg="bg-emerald-100 dark:bg-emerald-900/30" title="Apariencia" />
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4 space-y-3">
               {/* Tema */}
@@ -441,8 +441,17 @@ export function GeneralSettings({
                   </div>
                 </CardContent>
               </Card>
+            </AccordionContent>
+          </AccordionItem>
+        </Card>
 
-              {/* Notificaciones de la app */}
+        {/* Alertas en la app */}
+        <Card className="border-0 shadow-sm rounded-xl overflow-hidden">
+          <AccordionItem value="alertas" className="border-0">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <SectionHeader icon={Bell} iconColor="text-amber-600" iconBg="bg-amber-100 dark:bg-amber-900/30" title="Alertas en la app" />
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 space-y-3">
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between">

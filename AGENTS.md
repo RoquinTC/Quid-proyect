@@ -50,7 +50,7 @@ No empieces por los componentes grandes sin leer lo anterior:
 cd Quid-App
 npm install
 docker compose up --build -d quid-app     # local en http://localhost:3000
-npx vitest run                            # 742 pruebas
+npx vitest run                            # 744 pruebas
 npx tsc --noEmit                          # tipos
 ```
 
@@ -151,7 +151,7 @@ git add .                    # NO — arrastra docs/
 |---|---|
 | Versión producción | **1.1.22** |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
-| Pruebas | 742 en 44 archivos |
+| Pruebas | 744 en 43 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
 
@@ -167,14 +167,22 @@ Entregado en las últimas sesiones:
 
 **Pendiente, en este orden:**
 
-1. **Cablear la hamburguesa al registro** — `app-sidebar.tsx` tiene ~40 líneas
-   de arreglo escrito a mano; reemplazar por `QUID_MODULES`. Ya tiene iconos y
-   verbos.
-2. **Cablear Ajustes al registro** — `settings-page.tsx`: 7 tarjetas a mano →
-   `.map()` sobre `APP_SETTINGS_SECTIONS` agrupado por `group`.
-3. **Plegar las tarjetas sueltas de Ajustes** — en Finanzas hay 4 acordeones
-   cerrados pero 8 tarjetas fuera de ellos; Generales tiene 16 tarjetas sin
-   agrupar. **Este es el delicado** (ver §5, primera fila).
+1. ✅ **Hamburguesa cableada al registro** (2026-11-07) — `app-sidebar.tsx`
+   ya hace `.map()` sobre `QUID_MODULES`; cada módulo abre con "Abrir ⟨módulo⟩"
+   y sus acciones agrupadas por verbo (CREAR / REGISTRAR / GESTIONAR). El
+   registro ahora tipa `id` contra `ModuleType` y `SidebarAction`, así que una
+   acción nueva no compila si ninguna página la atiende.
+2. ✅ **Ajustes cableado al registro** (2026-11-07) — `settings-page.tsx`
+   arma las 7 tarjetas con `.map()` sobre `APP_SETTINGS_SECTIONS` agrupado por
+   `group`. La tarjeta (icono, gradiente, borde, ancho, solo-admin) vive en el
+   registro, y `Record<SettingsSectionId, …>` obliga a que toda sección nueva
+   tenga su pantalla.
+3. ✅ **Ajustes plegados** (2026-11-07) — Finanzas pasa de 4 filas (una con 8
+   bloques dentro) a **7 filas de un tema cada una**: Ciclo y fechas ·
+   Presentación · Captura automática · Corte y reinicio · Cuentas · Categorías
+   · Importación. Generales: "Personalización" (5 tarjetas) se parte en
+   "Apariencia" y "Alertas en la app"; quedan 7 filas. Transporte ya tenía una
+   fila por tema (5). Salud 3, Despensa 2, Aura 4.
 4. **Portada de Análisis** — el donut de "dónde se va la plata", en pesos.
 5. **Consejos con IA** — Aura redacta sobre cifras que Quid calcula
    (nunca al revés). Puente existente: `/api/aura/tools` con `x-aura-token`.
@@ -261,22 +269,34 @@ archivos.
 
 ### Hecho
 - `src/lib/modules/registry.ts` — 5 módulos, 18 acciones (con icono y verbo),
-  7 secciones de ajustes, 8 pruebas de invariantes.
+  7 secciones de ajustes, 9 pruebas de invariantes.
 - Ajustes agrupado: **GENERAL** (generales, Aura) · **MÓDULOS** (Finanzas,
   Transporte, Salud, Despensa) · **SISTEMA** (administración).
 - Finanzas salió de "tu cuenta" y quedó donde corresponde.
+- **Hamburguesa cableada al registro** (`app-sidebar.tsx`, 2026-11-07): se
+  borraron las ~130 líneas de lista escrita a mano. Cada módulo abre con
+  "Abrir ⟨módulo⟩" y sus acciones agrupadas por verbo. El registro tipa `id`
+  contra `ModuleType` y `SidebarAction`: una acción nueva no compila si ninguna
+  página la atiende.
+- **Ajustes cableado al registro** (`settings-page.tsx`, 2026-11-07): las 7
+  tarjetas se pintan con `.map()` sobre `APP_SETTINGS_SECTIONS` agrupado por
+  `group`. Icono, gradiente, borde, ancho y "solo admin" viven en el registro.
+  El título y el subtítulo de cada pantalla salen de `label`/`hint` (ya no hay
+  ocho ternarios ni un `if` por pestaña). `Record<SettingsSectionId, …>` impide
+  agregar una sección sin pantalla: no compila.
+- **Ajustes plegados** (`finance-settings.tsx`, `general-settings.tsx`,
+  2026-11-07): cada tema tiene su propia fila plegable.
+  Finanzas: 4 filas → **7** (Ciclo y fechas · Presentación · Captura automática
+  · Corte y reinicio · Cuentas · Categorías · Importación). La fila "Ciclo"
+  tenía 8 tarjetas dentro; ahora ninguna fila pasa de tres.
+  Generales: "Personalización" (5 tarjetas) → "Apariencia" + "Alertas en la
+  app"; quedan 7 filas. Transporte ya estaba bien (5 filas); Salud 3,
+  Despensa 2, Aura 4.
 
-### Pendiente, en orden
-1. **Hamburguesa → registro.** `app-sidebar.tsx` tiene ~40 líneas de arreglo
-   a mano; reemplazar por `QUID_MODULES`. Ya trae iconos y `verb`, así que el
-   menú puede agrupar por intención (CREAR / REGISTRAR / GESTIONAR) en vez de
-   ser una lista plana de 18 cosas. **Falta el handler `SidebarAction`** para
-   las acciones nuevas.
-2. **Ajustes → registro.** `settings-page.tsx`: 7 tarjetas a mano → `.map()`
-   sobre `APP_SETTINGS_SECTIONS` agrupado por `group`.
-3. **Plegar las tarjetas sueltas.** En Finanzas hay 4 acordeones cerrados pero
-   **8 tarjetas fuera** de ellos; Generales tiene 16 sin agrupar y Transporte
-   10. Ese es el desorden que se ve al entrar. **Es el paso delicado** (§5).
+### Pendiente (cosmético, no urgente)
+1. **Quitar la tarjeta anidada** dentro de cada fila: al abrir una fila se ve
+   una `Card` dentro de la `Card` del acordeón (borde doble). Recortarlo no
+   cambia la estructura, solo el acabado.
 
 ### Objetivo visual
 Cada pestaña de módulo con la misma estructura:

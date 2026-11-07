@@ -60,6 +60,17 @@ describe("registro de módulos", () => {
     expect(groups.gestionar[0].label).toBe("Gestionar Categorías");
   });
 
+  it("cada sección de ajustes trae su tarjeta completa", () => {
+    for (const section of APP_SETTINGS_SECTIONS) {
+      expect(section.label).toBeTruthy();
+      expect(section.hint).toBeTruthy();
+      expect(section.icon).toBeTruthy();
+      expect(section.gradient).toContain("bg-gradient-to-br");
+      expect(section.glow).toContain("shadow-");
+      expect(section.hover).toContain("hover:border-");
+    }
+  });
+
   it("los grupos de ajustes son solo los tres esperados", () => {
     const groups = new Set(APP_SETTINGS_SECTIONS.map((s) => s.group));
     expect([...groups].sort()).toEqual(["general", "modulos", "sistema"]);
