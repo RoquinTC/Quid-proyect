@@ -15,7 +15,13 @@
  * entrada aquí: los dos menús lo toman solos.
  */
 
-import { Home, Wallet, Car, Heart, ShoppingCart, type LucideIcon } from "lucide-react";
+import {
+  Home, Wallet, Car, Heart, ShoppingCart,
+  ArrowLeftRight, Banknote, Receipt, PiggyBank, CreditCard, Clock, Tag,
+  PlusCircle, Fuel, Wrench, Shield, Landmark,
+  Pill, Stethoscope, Refrigerator, ListPlus, ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 
 /** Las secciones de configuración que puede exponer un módulo. */
 export type SettingsSectionId =
@@ -31,6 +37,8 @@ export type SettingsSectionId =
 export type ModuleAction = {
   id: string;
   label: string;
+  /** Ícono del menú hamburguesa. */
+  icon: LucideIcon;
   /** Verbo de la acción, para agrupar en el menú: crear, registrar, gestionar. */
   verb: "crear" | "registrar" | "gestionar";
 };
@@ -75,14 +83,14 @@ export const QUID_MODULES: QuidModule[] = [
     color: "text-teal-600 dark:text-teal-400",
     bg: "bg-teal-100 dark:bg-teal-900/30",
     actions: [
-      { id: "create-transaction", label: "Nueva Transacción", verb: "crear" },
-      { id: "create-account", label: "Nueva Cuenta", verb: "crear" },
-      { id: "create-budget", label: "Nuevo Presupuesto", verb: "crear" },
-      { id: "create-savings-goal", label: "Nueva Meta de Ahorro", verb: "crear" },
-      { id: "create-debt", label: "Nueva Deuda", verb: "crear" },
-      { id: "create-cdt", label: "Nuevo CDT", verb: "crear" },
-      { id: "create-recurring", label: "Nuevo Pago Recurrente", verb: "crear" },
-      { id: "manage-categories", label: "Gestionar Categorías", verb: "gestionar" },
+      { id: "create-transaction", icon: ArrowLeftRight, label: "Nueva Transacción", verb: "crear" },
+      { id: "create-account", icon: Banknote, label: "Nueva Cuenta", verb: "crear" },
+      { id: "create-budget", icon: Receipt, label: "Nuevo Presupuesto", verb: "crear" },
+      { id: "create-savings-goal", icon: PiggyBank, label: "Nueva Meta de Ahorro", verb: "crear" },
+      { id: "create-debt", icon: CreditCard, label: "Nueva Deuda", verb: "crear" },
+      { id: "create-cdt", icon: CreditCard, label: "Nuevo CDT", verb: "crear" },
+      { id: "create-recurring", icon: Clock, label: "Nuevo Pago Recurrente", verb: "crear" },
+      { id: "manage-categories", icon: Tag, label: "Gestionar Categorías", verb: "gestionar" },
     ],
     settings: "finance",
   },
@@ -94,11 +102,11 @@ export const QUID_MODULES: QuidModule[] = [
     color: "text-blue-600 dark:text-blue-400",
     bg: "bg-blue-100 dark:bg-blue-900/30",
     actions: [
-      { id: "create-vehicle", label: "Nuevo Vehículo", verb: "crear" },
-      { id: "log-fuel", label: "Registrar Recarga", verb: "registrar" },
-      { id: "log-maintenance", label: "Registrar Mantenimiento", verb: "registrar" },
-      { id: "register-document", label: "Registrar Documento", verb: "registrar" },
-      { id: "update-fuel-price", label: "Actualizar Precio Combustible", verb: "registrar" },
+      { id: "create-vehicle", icon: PlusCircle, label: "Nuevo Vehículo", verb: "crear" },
+      { id: "log-fuel", icon: Fuel, label: "Registrar Recarga", verb: "registrar" },
+      { id: "log-maintenance", icon: Wrench, label: "Registrar Mantenimiento", verb: "registrar" },
+      { id: "register-document", icon: Shield, label: "Registrar Documento", verb: "registrar" },
+      { id: "update-fuel-price", icon: Landmark, label: "Actualizar Precio Combustible", verb: "registrar" },
     ],
     settings: "transport",
   },
@@ -110,8 +118,8 @@ export const QUID_MODULES: QuidModule[] = [
     color: "text-rose-600 dark:text-rose-400",
     bg: "bg-rose-100 dark:bg-rose-900/30",
     actions: [
-      { id: "create-medication", label: "Nuevo Medicamento", verb: "crear" },
-      { id: "create-appointment", label: "Nueva Cita Médica", verb: "crear" },
+      { id: "create-medication", icon: Pill, label: "Nuevo Medicamento", verb: "crear" },
+      { id: "create-appointment", icon: Stethoscope, label: "Nueva Cita Médica", verb: "crear" },
     ],
     settings: "health",
   },
@@ -123,9 +131,9 @@ export const QUID_MODULES: QuidModule[] = [
     color: "text-amber-600 dark:text-amber-400",
     bg: "bg-amber-100 dark:bg-amber-900/30",
     actions: [
-      { id: "create-pantry-item", label: "Nuevo Producto", verb: "crear" },
-      { id: "create-shopping-list", label: "Nueva Lista de Mercado", verb: "crear" },
-      { id: "create-health-profile", label: "Perfil de Salud", verb: "crear" },
+      { id: "create-pantry-item", icon: Refrigerator, label: "Nuevo Producto", verb: "crear" },
+      { id: "create-shopping-list", icon: ListPlus, label: "Nueva Lista de Mercado", verb: "crear" },
+      { id: "create-health-profile", icon: ShieldCheck, label: "Perfil de Salud", verb: "crear" },
     ],
     settings: "pantry",
   },

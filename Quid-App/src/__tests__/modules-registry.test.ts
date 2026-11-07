@@ -27,6 +27,15 @@ describe("registro de módulos", () => {
     }
   });
 
+  it("cada acción tiene icono y verbo", () => {
+    for (const module of QUID_MODULES) {
+      for (const action of module.actions) {
+        expect(action.icon).toBeTruthy();
+        expect(["crear", "registrar", "gestionar"]).toContain(action.verb);
+      }
+    }
+  });
+
   it("los ids de acción no se repiten entre módulos", () => {
     const all = QUID_MODULES.flatMap((m) => m.actions.map((a) => a.id));
     expect(new Set(all).size).toBe(all.length);
