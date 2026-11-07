@@ -1,6 +1,15 @@
 {
-  "currentVersion": "1.1.24",
+  "currentVersion": "1.1.25",
   "releases": [
+    {
+      "version": "1.1.25",
+      "date": "2026-11-07",
+      "title": "Quid 1.1.25",
+      "changes": [
+        "La campanita deja de acumular recordatorios viejos",
+        "Los avisos caducan por tipo y antiguedad"
+      ]
+    },
     {
       "version": "1.1.24",
       "date": "2026-11-07",
