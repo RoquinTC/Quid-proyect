@@ -150,7 +150,7 @@ git add .                    # NO — arrastra docs/
 | | |
 |---|---|
 | Versión producción | **1.1.22** |
-| Último commit | `20ea577` |
+| Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
 | Pruebas | 742 en 44 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
@@ -193,3 +193,110 @@ git status --porcelain    # que no queden restos
 Y si el cambio es visual, **míralo**: el teléfono del dueño se conecta por
 USB (`adb`) y produce capturas reales. No declares una pantalla arreglada sin
 haberla visto.
+
+---
+
+## 11. Roadmap por fases
+
+Del mapa (`docs/finanzas-backlog-mapa.md` §4). **Ya no inventes el orden: está fijado.**
+
+### ✅ FASE 0 — "Una tarde cada una" · COMPLETA
+`F-29` edición solo-este/futuros · `F-42` ciclo presupuestal + quincena ·
+`F-03` calculadora en el alta · `F-45` saldo corrido · `F-51` preferencias
+(decimales, inicio de semana)
+
+### ✅ FASE 1 — "El núcleo del HOY" · COMPLETA
+`F-39` separar Gasto de Pago · `F-28` instancias de recurrentes ·
+`F-06` vencidos vs próximos · `F-43` grupos de categorías ·
+`F-05` Safe to Spend · `F-38` anatomía del disponible
+
+### ✅ FASE 2 — "Captura sin fricción" · COMPLETA
+`F-49` bandeja unificada · `F-01` SMS opt-in · `F-22` correo con token ·
+`F-36` reglas texto→categoría · `F-41` proyección del saldo ·
+`F-02` voz → **ya cubierta por Aura** (Whisper en Telegram, verificado)
+
+Pendiente menor de esta fase: `F-04` onboarding de permisos.
+
+### 🔄 FASE 3 — "Que valga volver" · EN CURSO
+Añadido por el dueño, fuera del mapa: **rediseño de menús** (§12).
+Después, en el orden del mapa:
+
+| | Idea | Nota |
+|---|---|---|
+| 1 | `F-10` Insights | Conecta con la zona de consejos IA |
+| 2 | `F-09` Reporte mensual compartible | |
+| 3 | `F-23` Detección de suscripciones | |
+| 4 | `F-21` Chat IA con acciones | El puente `/api/aura/tools` ya existe |
+| 5 | `F-30` Privacidad de montos | |
+| 6 | `F-16` PIN / biometría | El plugin nativo ya está |
+| 7 | `F-17` Export + respaldo cifrado | |
+
+Sueltos al final de la fase: `F-32` portapapeles · `F-33` release notes
+in-app · `F-44` bolsillos · `F-47` naturalezas de cuenta.
+
+### ⏳ FASE 4 — "Diferenciación"
+`F-24` patrimonio neto → `F-25` préstamos/me deben → `F-26`/`F-27` pareja y
+workspaces → `F-50` viajes → `F-13` recurrencia granular → `F-12` multi-moneda
+→ `F-14` ledger verificable → `F-11` widgets de inicio
+
+### ⏳ FASE 5 — "Largo plazo"
+`F-19` contrato de datos para agentes · `F-34` simulación premium ·
+`F-37` infra de producto
+
+### Decisión cerrada
+`F-15` unidades menores → **no migrar**. Los montos se guardan como están.
+
+---
+
+## 12. Rediseño de menús (en curso, pedido del dueño)
+
+**Motivo:** el menú hamburguesa y los ajustes se armaban con listas escritas
+a mano en cada archivo, y se desincronizaron. Finanzas terminó dentro de
+"TU CUENTA" aunque es un módulo completo. Además, la hamburguesa solo ofrece
+acciones de *crear*, sin ninguna de *ir al módulo*.
+
+**Principio:** una sola fuente de verdad, abierta a futuro. Agregar un módulo
+(Viajes, Inversiones, Pareja) debe ser **agregar una entrada**, no editar tres
+archivos.
+
+### Hecho
+- `src/lib/modules/registry.ts` — 5 módulos, 18 acciones (con icono y verbo),
+  7 secciones de ajustes, 8 pruebas de invariantes.
+- Ajustes agrupado: **GENERAL** (generales, Aura) · **MÓDULOS** (Finanzas,
+  Transporte, Salud, Despensa) · **SISTEMA** (administración).
+- Finanzas salió de "tu cuenta" y quedó donde corresponde.
+
+### Pendiente, en orden
+1. **Hamburguesa → registro.** `app-sidebar.tsx` tiene ~40 líneas de arreglo
+   a mano; reemplazar por `QUID_MODULES`. Ya trae iconos y `verb`, así que el
+   menú puede agrupar por intención (CREAR / REGISTRAR / GESTIONAR) en vez de
+   ser una lista plana de 18 cosas. **Falta el handler `SidebarAction`** para
+   las acciones nuevas.
+2. **Ajustes → registro.** `settings-page.tsx`: 7 tarjetas a mano → `.map()`
+   sobre `APP_SETTINGS_SECTIONS` agrupado por `group`.
+3. **Plegar las tarjetas sueltas.** En Finanzas hay 4 acordeones cerrados pero
+   **8 tarjetas fuera** de ellos; Generales tiene 16 sin agrupar y Transporte
+   10. Ese es el desorden que se ve al entrar. **Es el paso delicado** (§5).
+
+### Objetivo visual
+Cada pestaña de módulo con la misma estructura:
+
+```
+▸ Ciclo y fechas
+▸ Captura automática       (SMS · correo · reglas)
+▸ Presentación             (decimales · inicio de semana)
+▸ Cuentas e importación
+▸ Categorías
+```
+
+Y la hamburguesa:
+
+```
+Finanzas ▸
+   CREAR       Nueva Transacción · Cuenta · Presupuesto · Meta · Deuda · CDT · Pago
+   GESTIONAR   Categorías
+```
+
+### Lo que NO se toca
+El dueño decidió **mantener dos menús** (hamburguesa = trabajar, ajustes =
+configurar). No unificar en uno. Solo hay que hacer evidente la diferencia.
