@@ -740,9 +740,15 @@ export function FinanceOverview() {
   };
 
   // Visible widgets in order
+  // F-41b · El análisis arranca plegado en el Resumen.
+  const [showAnalysis, setShowAnalysis] = useState(false);
+
   const visibleWidgets = widgetConfig
     .filter((w) => w.visible)
     .sort((a, b) => a.order - b.order);
+
+  // Todo lo que no es el balance cuenta como análisis.
+  const analysisWidgetsCount = visibleWidgets.filter((w) => w.id !== "balance").length;
 
   // ============================================================
   // LOADING STATE
@@ -838,8 +844,33 @@ export function FinanceOverview() {
           <SafeToSpendCard />
         </motion.div>
 
+        {/*
+          El análisis arranca plegado. Antes el Resumen apilaba ocho bloques de
+          ~400px (gráficos, salud, gastos, pagos) y había que bajar tres
+          pantallas para ver el balance. Ahora arriba queda el disponible y el
+          balance; el resto se abre cuando se pide. Nada desaparece.
+        */}
+        {analysisWidgetsCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAnalysis((prev) => !prev)}
+            className="w-full mb-4 flex items-center justify-between px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700/60 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            aria-expanded={showAnalysis}
+          >
+            <span className="flex items-center gap-1.5">
+              {showAnalysis ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+              {showAnalysis ? "Ocultar análisis" : "Ver análisis"}
+            </span>
+            <span className="text-[11px] text-gray-400">
+              {analysisWidgetsCount} bloque{analysisWidgetsCount === 1 ? "" : "s"}
+            </span>
+          </button>
+        )}
+
         <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
         {visibleWidgets.map((w) => {
+          // Solo el balance se muestra siempre; lo demás es análisis.
+          if (!showAnalysis && w.id !== "balance") return null;
           switch (w.id) {
             // ============================================================
             // BALANCE CARD

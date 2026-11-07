@@ -105,16 +105,25 @@ interface WidgetConfig {
   order: number;
 }
 
+/**
+ * Orden por defecto de la pestaña Cuentas.
+ *
+ * Antes "Mis Cuentas" era el séptimo bloque: la pantalla llamada Cuentas
+ * mostraba primero cinco cifras y dos gráficos, y las cuentas quedaban a
+ * varias pantallas de scroll. Ahora las cuentas van justo debajo del
+ * disponible, y el análisis (cascada, evolución, gastos, mapa) llega apagado:
+ * se enciende desde "Personalizar" cuando se quiere ver.
+ */
 const DEFAULT_WIDGET_ORDER: WidgetConfig[] = [
   { id: "balance", label: "Disponible", visible: true, order: 0 },
-  { id: "quickActions", label: "Acciones Rápidas", visible: true, order: 1 },
-  { id: "waterfall", label: "Gráfico de Cascada", visible: true, order: 2 },
-  { id: "evolution", label: "Evolución Financiera", visible: true, order: 3 },
-  { id: "expenses", label: "Tus Gastos", visible: true, order: 4 },
-  { id: "heatmap", label: "Mapa de Gastos", visible: true, order: 5 },
-  { id: "accounts", label: "Mis Cuentas", visible: true, order: 6 },
-  { id: "transactions", label: "Transacciones", visible: true, order: 7 },
-  { id: "yields", label: "Rendimientos", visible: true, order: 8 },
+  { id: "accounts", label: "Mis Cuentas", visible: true, order: 1 },
+  { id: "quickActions", label: "Acciones Rápidas", visible: true, order: 2 },
+  { id: "transactions", label: "Transacciones", visible: true, order: 3 },
+  { id: "yields", label: "Rendimientos", visible: true, order: 4 },
+  { id: "waterfall", label: "Gráfico de Cascada", visible: false, order: 5 },
+  { id: "evolution", label: "Evolución Financiera", visible: false, order: 6 },
+  { id: "expenses", label: "Tus Gastos", visible: false, order: 7 },
+  { id: "heatmap", label: "Mapa de Gastos", visible: false, order: 8 },
 ];
 
 // ============================================
@@ -196,7 +205,9 @@ const itemVariants = {
 // LOCAL STORAGE HELPERS
 // ============================================
 
-const WIDGET_STORAGE_KEY = "quid-accounts-widgets";
+// v2: el orden guardado con la versión anterior taparía el nuevo por defecto
+// (con "Mis Cuentas" en séptimo lugar), así que se estrena clave.
+const WIDGET_STORAGE_KEY = "quid-accounts-widgets-v2";
 
 function loadWidgetConfig(): WidgetConfig[] {
   if (typeof window === "undefined") return DEFAULT_WIDGET_ORDER;
