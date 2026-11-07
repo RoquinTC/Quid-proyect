@@ -159,7 +159,7 @@ export function TransactionForm({
   useEffect(() => {
     if (editTransaction) {
       setType(editTransaction.type);
-      setAmount(editTransaction.amount.toString());
+      setAmount(maskAmountInput(editTransaction.amount.toString()));
       setDescription(editTransaction.description);
       setAccountId(editTransaction.accountId || "");
       setSubAccountId(editTransaction.subAccountId || "");
@@ -231,7 +231,7 @@ export function TransactionForm({
   // F-49 · Prellenar desde una captura de la bandeja (solo al crear).
   useEffect(() => {
     if (!open || !prefill || editTransaction) return;
-    if (prefill.amount) setAmount(prefill.amount);
+    if (prefill.amount) setAmount(maskAmountInput(prefill.amount));
     if (prefill.category) setCategory(prefill.category);
     if (prefill.date) setDate(prefill.date);
     // Retiro en cajero: la cuenta destino es la de efectivo (por tipo, no por
@@ -613,7 +613,7 @@ export function TransactionForm({
             <button
               key={qa}
               type="button"
-              onClick={() => setAmount(qa.toString())}
+              onClick={() => setAmount(maskAmountInput(qa.toString()))}
               className="flex-1 py-2 bg-gray-50 dark:bg-gray-800 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
               {formatCurrency(qa)}
