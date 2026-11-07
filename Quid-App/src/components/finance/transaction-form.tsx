@@ -14,6 +14,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { maskAmountInput } from "@/lib/format/money-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -585,7 +586,13 @@ export function TransactionForm({
             autoComplete="off"
             placeholder="0 o una operación: 12000/3"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => {
+              const raw = e.target.value;
+              // La calculadora admite operadores (12000/3): si hay alguno se
+              // respeta lo escrito y no se aplica la máscara de miles.
+              const hasOperator = /[+\-*/()]/.test(raw);
+              setAmount(hasOperator ? raw : maskAmountInput(raw));
+            }}
             className="pl-7 pr-10 text-xl font-bold rounded-xl h-14"
           />
           {amount !== "" && (
