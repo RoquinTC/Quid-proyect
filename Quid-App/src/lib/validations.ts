@@ -1101,6 +1101,9 @@ export const settingsUpdateSchema = z.object({
   smsCaptureEnabled: z.boolean().optional(),
   /** F-22 · Captura por correo (opt-in). */
   inboxEmailEnabled: z.boolean().optional(),
+  /** F-51 · Presentación. */
+  showDecimals: z.boolean().optional(),
+  weekStartsOn: z.number().int().min(0).max(1).optional(),
   countryCode: z.string().optional(),
   notificationsEnabled: z.boolean().optional(),
   lockOnResume: z.boolean().optional(),

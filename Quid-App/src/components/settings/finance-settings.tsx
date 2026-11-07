@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { setShowDecimals } from "@/lib/preferences";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { DaySelect } from "@/components/ui/day-select";
@@ -31,6 +32,8 @@ import {
   Database,
   Lock,
   MessageSquare,
+  Coins,
+  CalendarDays,
 } from "lucide-react";
 import { AccountManager } from "@/components/finance/account-manager";
 import { CategoriesManager } from "@/components/finance/categories-manager";
@@ -46,6 +49,8 @@ type AppSettings = {
   respectHolidays: boolean;
   smsCaptureEnabled: boolean;
   inboxEmailEnabled: boolean;
+  showDecimals?: boolean;
+  weekStartsOn?: number;
   needsBudgetReset: boolean;
   lastBudgetReset?: string | null;
   currentPeriod?: {
@@ -290,6 +295,55 @@ export function FinanceSettings({
 
               {/* F-43 · Grupos de categorías */}
               <CategoryGroupsManager />
+
+              {/* F-51 · Presentación */}
+              <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">
+                <CardContent className="p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="size-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                        <Coins className="size-3.5 text-slate-600 dark:text-slate-300" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">Mostrar centavos</p>
+                        <p className="text-xs text-gray-400">
+                          {settings.showDecimals === false ? "$ 5.843.279" : "$ 5.843.278,81"}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={settings.showDecimals !== false}
+                      onCheckedChange={(value) => {
+                        // Se aplica de inmediato y se recarga: los importes ya
+                        // dibujados no se vuelven a formatear solos.
+                        setShowDecimals(value);
+                        updateSetting("showDecimals", value);
+                        window.location.reload();
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="size-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                        <CalendarDays className="size-3.5 text-slate-600 dark:text-slate-300" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-900 dark:text-white">La semana empieza en</p>
+                        <p className="text-xs text-gray-400">Calendarios y resúmenes semanales</p>
+                      </div>
+                    </div>
+                    <select
+                      value={String(settings.weekStartsOn ?? 1)}
+                      onChange={(e) => updateSetting("weekStartsOn", Number(e.target.value))}
+                      className="h-8 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-2"
+                    >
+                      <option value="1">Lunes</option>
+                      <option value="0">Domingo</option>
+                    </select>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* F-01 · Captura por SMS (opt-in) */}
               <Card className="border border-gray-100 dark:border-gray-700/50 shadow-none rounded-xl">

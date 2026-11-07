@@ -1372,6 +1372,10 @@ model UserSettings {
   inboxEmailEnabled   Boolean   @default(false)
   /// Token que autoriza el POST a /api/inbox/email (uno por usuario).
   inboxEmailToken     String?
+  // F-51 · Presentación: decimales en el dinero y primer día de la semana.
+  showDecimals        Boolean   @default(true)
+  /// 0 = domingo, 1 = lunes.
+  weekStartsOn        Int       @default(1)
   countryCode         String    @default("CO") // For holiday calculations
   lastBudgetReset     DateTime? // When budgets were last reset
   notificationsEnabled Boolean  @default(true) // Global notifications toggle

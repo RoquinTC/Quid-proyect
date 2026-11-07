@@ -81,6 +81,8 @@ export async function PUT(req: NextRequest) {
       respectHolidays,
       smsCaptureEnabled,
       inboxEmailEnabled,
+      showDecimals,
+      weekStartsOn,
       countryCode,
       notificationsEnabled,
       lockOnResume,
@@ -144,6 +146,8 @@ export async function PUT(req: NextRequest) {
     if (respectHolidays !== undefined) data.respectHolidays = respectHolidays;
     if (smsCaptureEnabled !== undefined) data.smsCaptureEnabled = smsCaptureEnabled;
     if (inboxEmailEnabled !== undefined) data.inboxEmailEnabled = inboxEmailEnabled;
+    if (showDecimals !== undefined) data.showDecimals = showDecimals;
+    if (weekStartsOn !== undefined) data.weekStartsOn = weekStartsOn;
     if (countryCode !== undefined) data.countryCode = countryCode;
     if (notificationsEnabled !== undefined) data.notificationsEnabled = notificationsEnabled;
     if (lockOnResume !== undefined) data.lockOnResume = lockOnResume;

@@ -427,6 +427,9 @@ export interface UserSettings {
   smsCaptureEnabled: boolean;
   /** F-22 · Captura por correo (opt-in). */
   inboxEmailEnabled: boolean;
+  /** F-51 · Presentación. */
+  showDecimals: boolean;
+  weekStartsOn: number;
   countryCode: string;
   lastBudgetReset?: string | null;
   notificationsEnabled: boolean;

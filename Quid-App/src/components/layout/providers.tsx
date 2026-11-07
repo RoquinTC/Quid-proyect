@@ -6,6 +6,7 @@ import { PWAProvider } from "@/components/pwa";
 import { AutoBackupHandler } from "@/components/settings/auto-backup-handler";
 import { NativeDeviceBridge } from "@/components/native/native-device-bridge";
 import { installNativeApiFetchBridge } from "@/lib/api-url";
+import { usePreferencesSync } from "@/hooks/use-preferences-sync";
 
 function resolveSessionBasePath(): string {
   if (typeof window !== "undefined") {
@@ -32,6 +33,8 @@ function resolveSessionBasePath(): string {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const basePath = resolveSessionBasePath();
+  // F-51 · Carga las preferencias de presentación (decimales) al arrancar.
+  usePreferencesSync();
 
   return (
     <SessionProvider

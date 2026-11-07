@@ -1,3 +1,4 @@
+import { getShowDecimals } from "@/lib/preferences";
 // ============================================
 // OFFLINE-AWARE API FETCH
 // ============================================
@@ -669,11 +670,14 @@ export function formatCurrency(amount: number | string | null | undefined, curre
   if (Number.isNaN(num) || !Number.isFinite(num)) {
     return formatCurrency(0, currency);
   }
+  // F-51 · Los centavos se ocultan cuando el usuario lo prefiere. La
+  // preferencia vive en un módulo para no pasarla por props en 44 lugares.
+  const digits = getShowDecimals() ? 2 : 0;
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(num);
 }
 
