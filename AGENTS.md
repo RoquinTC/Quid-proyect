@@ -1,0 +1,195 @@
+# AGENTS.md — Quid
+
+Guía para quien retome este proyecto. Léela completa antes de tocar código:
+son ~200 líneas que ahorran horas de redescubrimiento.
+
+---
+
+## 1. Qué es esto
+
+**Quid** es una app de finanzas personales (Colombia). Web + Android.
+
+| | |
+|---|---|
+| Stack | Next.js 16 (App Router), React 19, TypeScript strict, Prisma 6, Tailwind v4, Zustand, Zod 4, Vitest 4 |
+| Móvil | Capacitor 8 (requiere Node ≥ 22) |
+| Producción | `https://quid.roquintc.app` (túnel Cloudflare) |
+| Servidor | Oracle `ubuntu@157.137.231.170`, repo en `~/proyectos/quid-proyect` |
+| Local | Docker: `quid-app` (:3000), `quid-cron`, `quid-postgres` |
+| Repo | `github.com/RoquinTC/Quid-proyect` |
+
+**La app móvil es un shell remoto:** `capacitor.config.json` apunta
+`server.url` a producción. El contenido (pantallas, lógica) siempre viene del
+servidor; la APK solo aporta el contenedor y los plugins nativos. Por eso una
+APK vieja sigue mostrando la versión nueva.
+
+---
+
+## 2. Orden de lectura (lo que importa, en orden)
+
+1. **Este archivo.**
+2. `docs/finanzas-backlog-mapa.md` — el mapa maestro de 51 ideas (F-01…F-51)
+   con prioridad, tamaño, dependencias y estado. **Está sin rastrear en git
+   a propósito** (ver §7). Si no existe en tu copia, pídelo al usuario.
+3. `docs/finanzas-rea-maestro-v3.md` — análisis de apps de la competencia.
+   **Solo inspiración**, nunca clonar.
+4. `prisma/schema.prisma` — la verdad del modelo de datos (y sus gemelos
+   `schema.postgres.prisma`, `schema.sqlite.prisma`, ver §6).
+5. `src/lib/modules/registry.ts` — fuente única de módulos, acciones y
+   secciones de ajustes.
+6. `src/components/finance/finance-page.tsx` — las pestañas del módulo.
+
+No empieces por los componentes grandes sin leer lo anterior:
+`finance-overview.tsx` y `accounts-view.tsx` pasan de 1.500 líneas.
+
+---
+
+## 3. Arrancar
+
+```bash
+cd Quid-App
+npm install
+docker compose up --build -d quid-app     # local en http://localhost:3000
+npx vitest run                            # 742 pruebas
+npx tsc --noEmit                          # tipos
+```
+
+**Cada cambio de versión se hace con el script, nunca a mano:**
+
+```bash
+node scripts/sync-version.mjs --bump patch --notes "texto|otra línea"
+```
+
+Ese script actualiza `package.json`, `sw.js`, `release-notes.json`,
+`version.json` y `android/app/build.gradle`.
+
+---
+
+## 4. Desplegar
+
+```bash
+# 1. bump de versión (obligatorio si cambió el front)
+cd Quid-App && node scripts/sync-version.mjs --bump patch --notes "..."
+
+# 2. commit + push
+cd .. && git add Quid-App/ && git commit -m "..." && git push origin main
+
+# 3. servidor
+ssh -i ~/.ssh/quid_oracle_codex.key ubuntu@157.137.231.170 \
+  'cd ~/proyectos/quid-proyect && git pull --ff-only && docker compose up --build -d quid-app'
+
+# 4. verificar
+curl -s https://quid.roquintc.app/version.json | head -c 40
+```
+
+**Sin el bump de versión el service worker sirve JS viejo.** No es opcional.
+
+**La APK se publica sola:** el workflow `.github/workflows/android-apk.yml`
+compara la versión de `package.json` con los releases y publica el que falte
+en cada push a `main`. No hace falta crear tags.
+
+---
+
+## 5. Trampas que ya costaron tiempo
+
+| Trampa | Qué pasa | Prevención |
+|---|---|---|
+| **Editar JSX por número de línea** | Inserté bloques en el componente equivocado y rompí el archivo 3 veces | Usa la herramienta `edit` con anclas de texto exactas; lee el bloque completo antes de envolverlo; `npx tsc --noEmit` después de **cada** cambio |
+| `@unique` nuevo en Prisma | `db push` se niega sin `--accept-data-loss` y el contenedor entra en bucle de reinicio (**tumba producción**) | Nunca agregues `@unique` a una columna existente. Usa índice simple y valida en código. **Nunca** pases `--accept-data-loss` |
+| Rutas nuevas en `/api` | El proxy (`src/proxy.ts`) devuelve 401 antes de llegar al handler | Si la ruta se autentica sola (token propio), agrégala a `PUBLIC_ROUTES` |
+| `localStorage` de widgets | El orden guardado tapa los valores por defecto nuevos | Al cambiar el orden/visibilidad por defecto, sube la clave (`...-v2`) |
+| Fechas `YYYY-MM-DD` | `new Date("2026-11-17")` se interpreta UTC y en Bogotá cae el 16 | Construye con `new Date(y, m-1, d)` |
+| `build-mobile.mjs` | Mueve `src/app/api` → `api-backup` durante el export; si muere a medias, deja la API secuestrada | Verifica que `src/app/api` exista y que no haya `api-backup` |
+| Datos de dinero | En producción hay transacciones **reales** del usuario | Nunca borres datos sin respaldo; informa antes |
+| Credenciales | La app no guarda contraseñas de correo | Usa tokens por usuario, nunca IMAP con password |
+
+---
+
+## 6. Reglas de datos
+
+**Tres esquemas Prisma en paralelo**, los tres deben cambiarse juntos:
+`schema.prisma`, `schema.postgres.prisma`, `schema.sqlite.prisma`.
+
+Si agregas un modelo, además:
+1. `src/lib/data-registry.ts`
+2. `scripts/migrate-sqlite-to-postgres.mjs`
+
+Hay una prueba que falla si lo olvidas (`data-registry.test.ts`).
+
+**Migraciones:** el entrypoint del contenedor corre `prisma db push
+--skip-generate` y luego migraciones idempotentes en Node. No hay carpeta
+`migrations/` para Postgres.
+
+---
+
+## 7. `docs/` está sin rastrear a propósito
+
+Contiene el análisis REA de APKs de terceros (competencia). **No lo subas a
+GitHub.** Al `git add`, usa rutas concretas:
+
+```bash
+git add Quid-App/            # sí
+git add .                    # NO — arrastra docs/
+```
+
+---
+
+## 8. Principios de trabajo del dueño
+
+- Trabajo **por fases**, con verificación local antes de desplegar.
+- Quiere saber **el comando exacto** y **qué cambio visible** esperar.
+- Prefiere explicaciones en texto plano, honestas: si algo falló, decirlo.
+- **Nunca** borrar datos en silencio.
+- Nunca publicar montos o nombres de cuentas reales en resúmenes.
+- La inspiración de otras apps es para **mejorar**, no para copiar.
+
+---
+
+## 9. Estado al 2026-11-07
+
+| | |
+|---|---|
+| Versión producción | **1.1.22** |
+| Último commit | `20ea577` |
+| Pruebas | 742 en 44 archivos |
+
+**Fases 0, 1 y 2 completas.** Fase 3 en curso.
+
+Entregado en las últimas sesiones:
+- F-49 Bandeja de capturas (SMS, correo, pegado) con clasificador y duplicados
+- F-01 Captura por SMS opt-in · F-22 Captura por correo con token
+- F-36 Reglas texto → categoría/cuenta
+- F-41 Proyección del saldo (punto más ajustado)
+- F-51 Decimales + F-51b máscara de miles en los montos
+- Reestructura: 19 widgets duplicados → Resumen (3) + Cuentas (4) + Análisis (nuevo)
+- Ajustes agrupados en GENERAL / MÓDULOS / SISTEMA
+- `src/lib/modules/registry.ts` creado
+
+**Pendiente, en este orden:**
+
+1. **Cablear la hamburguesa al registro** — `app-sidebar.tsx` tiene ~40 líneas
+   de arreglo escrito a mano; reemplazar por `QUID_MODULES`. Ya tiene iconos y
+   verbos.
+2. **Cablear Ajustes al registro** — `settings-page.tsx`: 7 tarjetas a mano →
+   `.map()` sobre `APP_SETTINGS_SECTIONS` agrupado por `group`.
+3. **Plegar las tarjetas sueltas de Ajustes** — en Finanzas hay 4 acordeones
+   cerrados pero 8 tarjetas fuera de ellos; Generales tiene 16 tarjetas sin
+   agrupar. **Este es el delicado** (ver §5, primera fila).
+4. **Portada de Análisis** — el donut de "dónde se va la plata", en pesos.
+5. **Consejos con IA** — Aura redacta sobre cifras que Quid calcula
+   (nunca al revés). Puente existente: `/api/aura/tools` con `x-aura-token`.
+
+---
+
+## 10. Verificar antes de decir "listo"
+
+```bash
+cd Quid-App
+npx tsc --noEmit          # obligatorio
+npx vitest run            # obligatorio
+git status --porcelain    # que no queden restos
+```
+
+Y si el cambio es visual, **míralo**: el teléfono del dueño se conecta por
+USB (`adb`) y produce capturas reales. No declares una pantalla arreglada sin
+haberla visto.
