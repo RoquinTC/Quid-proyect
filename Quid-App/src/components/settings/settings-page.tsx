@@ -231,6 +231,7 @@ export function SettingsPage() {
       {/* ===== MENU ROUTER ===== */}
       {activeTab === "menu" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+          <p className="col-span-full text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-1 first:mt-0">TU CUENTA</p>
           {/* Card: General */}
           <Card
             className="border border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-900/30 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.01] hover:border-emerald-500/20 dark:hover:border-emerald-400/20 cursor-pointer transition-all duration-200 overflow-hidden"
@@ -299,6 +300,8 @@ export function SettingsPage() {
             </CardContent>
           </Card>
 
+
+          <p className="col-span-full text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-1 first:mt-0">MÓDULOS</p>
           {/* Card: Transporte */}
           <Card
             className="border border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-900/30 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.01] hover:border-violet-500/20 dark:hover:border-violet-400/20 cursor-pointer transition-all duration-200 overflow-hidden"
@@ -356,6 +359,8 @@ export function SettingsPage() {
             </CardContent>
           </Card>
 
+
+          <p className="col-span-full text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-1 first:mt-0">SISTEMA</p>
           {/* Card: Admin (conditional) */}
           {settings.isAdmin && (
             <Card
