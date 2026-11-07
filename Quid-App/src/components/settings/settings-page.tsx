@@ -231,7 +231,7 @@ export function SettingsPage() {
       {/* ===== MENU ROUTER ===== */}
       {activeTab === "menu" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-          <p className="col-span-full text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-1 first:mt-0">TU CUENTA</p>
+          <p className="col-span-full text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-1 first:mt-0">GENERAL</p>
           {/* Card: General */}
           <Card
             className="border border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-900/30 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.01] hover:border-emerald-500/20 dark:hover:border-emerald-400/20 cursor-pointer transition-all duration-200 overflow-hidden"
@@ -245,25 +245,6 @@ export function SettingsPage() {
                 <div>
                   <p className="text-sm font-bold text-gray-900 dark:text-white">Ajustes Generales</p>
                   <p className="text-[11px] text-gray-400 leading-snug">Personalización, tema, seguridad y copias</p>
-                </div>
-              </div>
-              <ChevronRight className="size-4 text-gray-300 dark:text-gray-600 shrink-0 ml-2" />
-            </CardContent>
-          </Card>
-
-          {/* Card: Finanzas */}
-          <Card
-            className="border border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-900/30 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.01] hover:border-teal-500/20 dark:hover:border-teal-400/20 cursor-pointer transition-all duration-200 overflow-hidden"
-            onClick={() => setActiveTab("finance")}
-          >
-            <CardContent className="p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3.5">
-                <div className="size-11 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-teal-500/10 shrink-0">
-                  <Wallet className="size-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold text-gray-900 dark:text-white">Finanzas y Presupuestos</p>
-                  <p className="text-[11px] text-gray-400 leading-snug">Corte, cuentas, categorías e importador</p>
                 </div>
               </div>
               <ChevronRight className="size-4 text-gray-300 dark:text-gray-600 shrink-0 ml-2" />
@@ -302,6 +283,25 @@ export function SettingsPage() {
 
 
           <p className="col-span-full text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-1 first:mt-0">MÓDULOS</p>
+
+          {/* Card: Finanzas */}
+          <Card
+            className="border border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-900/30 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.01] hover:border-teal-500/20 dark:hover:border-teal-400/20 cursor-pointer transition-all duration-200 overflow-hidden"
+            onClick={() => setActiveTab("finance")}
+          >
+            <CardContent className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="size-11 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-teal-500/10 shrink-0">
+                  <Wallet className="size-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white">Finanzas y Presupuestos</p>
+                  <p className="text-[11px] text-gray-400 leading-snug">Corte, cuentas, categorías e importador</p>
+                </div>
+              </div>
+              <ChevronRight className="size-4 text-gray-300 dark:text-gray-600 shrink-0 ml-2" />
+            </CardContent>
+          </Card>
           {/* Card: Transporte */}
           <Card
             className="border border-gray-100 dark:border-gray-800 bg-white/50 dark:bg-gray-900/30 rounded-2xl shadow-sm hover:shadow-md hover:scale-[1.01] hover:border-violet-500/20 dark:hover:border-violet-400/20 cursor-pointer transition-all duration-200 overflow-hidden"

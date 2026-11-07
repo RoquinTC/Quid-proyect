@@ -1,6 +1,14 @@
 {
-  "currentVersion": "1.1.21",
+  "currentVersion": "1.1.22",
   "releases": [
+    {
+      "version": "1.1.22",
+      "date": "2026-11-07",
+      "title": "Quid 1.1.22",
+      "changes": [
+        "Finanzas es un modulo: su configuracion sale de GENERAL"
+      ]
+    },
     {
       "version": "1.1.21",
       "date": "2026-11-07",
