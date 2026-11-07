@@ -145,6 +145,7 @@ async function sendRecurringPaymentReminders(scope: { userId?: string }, todayKe
       userId: true,
       description: true,
       amount: true,
+      type: true,
       scheduledDate: true,
       account: { select: { name: true } },
       debt: { select: { name: true } },
@@ -160,6 +161,8 @@ async function sendRecurringPaymentReminders(scope: { userId?: string }, todayKe
     days: number;
     band: PaymentBand;
     source: string;
+    /** Un ingreso no se suma con lo que sale: son direcciones distintas. */
+    isIncome: boolean;
   };
 
   const byUserAndBand = new Map<string, { userId: string; band: PaymentBand; entries: Entry[] }>();
@@ -181,6 +184,7 @@ async function sendRecurringPaymentReminders(scope: { userId?: string }, todayKe
       days,
       band,
       source: payment.debt?.name || payment.account?.name || "",
+      isIncome: payment.type === "income",
     };
 
     const group = byUserAndBand.get(groupKey);
@@ -194,6 +198,18 @@ async function sendRecurringPaymentReminders(scope: { userId?: string }, todayKe
     entries.sort((a, b) => a.days - b.days);
 
     const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
+    const outTotal = entries.filter((entry) => !entry.isIncome).reduce((sum, entry) => sum + entry.amount, 0);
+    const inTotal = entries.filter((entry) => entry.isIncome).reduce((sum, entry) => sum + entry.amount, 0);
+    const hasIncome = inTotal > 0;
+
+    // Sumar ingresos con gastos daría un total que no significa nada.
+    const amountText = outTotal > 0 && hasIncome
+      ? `${formatMoney(outTotal)} a pagar y ${formatMoney(inTotal)} por recibir`
+      : hasIncome
+        ? `${formatMoney(inTotal)} por recibir`
+        : formatMoney(outTotal);
+    const noun = hasIncome ? "movimiento" : "pago";
+
     const shown = entries.slice(0, 3).map((entry) => {
       const when = entry.days === 0
         ? "hoy"
@@ -207,20 +223,20 @@ async function sendRecurringPaymentReminders(scope: { userId?: string }, todayKe
     const lines = [...shown, moreCount > 0 ? `• y ${moreCount} más` : ""].filter(Boolean).join("\n");
 
     const title = band === "upcoming"
-      ? `Pagos en ${PAYMENT_UPCOMING_DAYS} días (${entries.length})`
+      ? `${hasIncome ? "Movimientos" : "Pagos"} en ${PAYMENT_UPCOMING_DAYS} días (${entries.length})`
       : band === "due"
-        ? `Pagos que vencen hoy (${entries.length})`
-        : `Pagos vencidos (${entries.length})`;
+        ? `${hasIncome ? "Movimientos" : "Pagos"} que vencen hoy (${entries.length})`
+        : `${hasIncome ? "Movimientos" : "Pagos"} vencidos (${entries.length})`;
 
     const headline = band === "upcoming"
-      ? `Se acerca${entries.length > 1 ? "n" : ""} ${entries.length} pago${entries.length > 1 ? "s" : ""} por ${formatMoney(total)}:`
+      ? `Se acerca${entries.length > 1 ? "n" : ""} ${entries.length} ${noun}${entries.length > 1 ? "s" : ""} — ${amountText}:`
       : band === "due"
-        ? `Vence${entries.length > 1 ? "n" : ""} hoy ${entries.length} pago${entries.length > 1 ? "s" : ""} por ${formatMoney(total)}:`
-        : `Sigue${entries.length > 1 ? "n" : ""} pendiente${entries.length > 1 ? "s" : ""} ${entries.length} pago${entries.length > 1 ? "s" : ""} por ${formatMoney(total)}:`;
+        ? `Vence${entries.length > 1 ? "n" : ""} hoy ${entries.length} ${noun}${entries.length > 1 ? "s" : ""} — ${amountText}:`
+        : `Sigue${entries.length > 1 ? "n" : ""} pendiente${entries.length > 1 ? "s" : ""} ${entries.length} ${noun}${entries.length > 1 ? "s" : ""} — ${amountText}:`;
 
     const pushBody = entries.length === 1
       ? `${entries[0].description}: ${formatMoney(entries[0].amount)} · ${formatKeyEs(entries[0].dueKey)}`
-      : `${entries.length} pagos · ${formatMoney(total)} · ${formatKeyEs(entries[0].dueKey)}`;
+      : `${entries.length} ${hasIncome ? "movimientos" : "pagos"} · ${amountText} · ${formatKeyEs(entries[0].dueKey)}`;
 
     const wasSent = await sendReminderOnce({
       userId,
@@ -235,6 +251,8 @@ async function sendRecurringPaymentReminders(scope: { userId?: string }, todayKe
         paymentIds: entries.map((entry) => entry.id),
         dueKeys: entries.map((entry) => entry.dueKey),
         totalAmount: total,
+        outTotal,
+        inTotal,
         count: entries.length,
       },
       since,
