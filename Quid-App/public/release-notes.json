@@ -1,6 +1,15 @@
 {
-  "currentVersion": "1.1.19",
+  "currentVersion": "1.1.20",
   "releases": [
+    {
+      "version": "1.1.20",
+      "date": "2026-11-07",
+      "title": "Quid 1.1.20",
+      "changes": [
+        "Pestana Analisis: los graficos en un solo lugar",
+        "Resumen y Cuentas sin duplicados"
+      ]
+    },
     {
       "version": "1.1.19",
       "date": "2026-11-07",

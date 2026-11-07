@@ -52,6 +52,7 @@ import {
 import type { Account, SubAccount, Transaction, Budget, Debt, RecurringPayment, MonthlyData, MonthlySummaryResponse } from "@/lib/types";
 import { ExpenseHeatmap } from "./expense-heatmap";
 import { SafeToSpendCard } from "./safe-to-spend-card";
+import { ProjectionView } from "./projection-view";
 import { WaterfallChart } from "./waterfall-chart";
 import { HealthScoreWidget } from "./health-score-widget";
 
@@ -79,7 +80,8 @@ const DEFAULT_WIDGETS: WidgetConfig[] = [
   { id: "bills", title: "Próximos Pagos", visible: true, order: 9 },
 ];
 
-const WIDGET_STORAGE_KEY = "quid-finance-widgets";
+// v2: la configuracion guardada antes ocultaria los widgets movidos.
+const WIDGET_STORAGE_KEY = "quid-finance-widgets-v2";
 
 // ============================================================
 // CONSTANTS
@@ -419,7 +421,10 @@ function WidgetCustomizationDialog({
 // MAIN FINANCE OVERVIEW COMPONENT
 // ============================================================
 
-export function FinanceOverview() {
+/** Qué muestra: el resumen del mes o el análisis profundo. */
+export type OverviewMode = "summary" | "analysis";
+
+export function FinanceOverview({ mode = "summary" }: { mode?: OverviewMode } = {}) {
   const { data: session } = useSession();
   const { setFinanceSubView, isOnline } = useAppStore();
 
@@ -740,15 +745,9 @@ export function FinanceOverview() {
   };
 
   // Visible widgets in order
-  // F-41b · El análisis arranca plegado en el Resumen.
-  const [showAnalysis, setShowAnalysis] = useState(false);
-
   const visibleWidgets = widgetConfig
     .filter((w) => w.visible)
     .sort((a, b) => a.order - b.order);
-
-  // Todo lo que no es el balance cuenta como análisis.
-  const analysisWidgetsCount = visibleWidgets.filter((w) => w.id !== "balance").length;
 
   // ============================================================
   // LOADING STATE
@@ -846,9 +845,22 @@ export function FinanceOverview() {
 
 
         <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
+        {mode === "analysis" && (
+          <div className="md:col-span-2">
+            <ProjectionView />
+          </div>
+        )}
+
         {visibleWidgets.map((w) => {
-          // Solo el balance se muestra siempre; lo demás es análisis.
-          if (!showAnalysis && w.id !== "balance") return null;
+          /*
+            Cada bloque vive en un solo lugar. El Resumen muestra el balance,
+            la salud financiera y los últimos movimientos; los gráficos se ven
+            en Análisis. Antes los mismos seis gráficos aparecían a la vez en
+            Resumen y en Cuentas.
+          */
+          const SUMMARY_IDS = ["balance", "health-score", "transactions"];
+          if (mode === "summary" && !SUMMARY_IDS.includes(w.id)) return null;
+          if (mode === "analysis" && SUMMARY_IDS.includes(w.id)) return null;
           switch (w.id) {
             // ============================================================
             // BALANCE CARD
@@ -1551,29 +1563,6 @@ export function FinanceOverview() {
           }
         })}
         </div>
-
-        {/*
-          El análisis arranca plegado. Antes el Resumen apilaba ocho bloques de
-          ~400px (gráficos, salud, gastos, pagos) y había que bajar tres
-          pantallas para ver el balance. Ahora arriba queda el disponible y el
-          balance; el resto se abre cuando se pide. Nada desaparece.
-        */}
-        {analysisWidgetsCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowAnalysis((prev) => !prev)}
-            className="w-full mb-4 flex items-center justify-between px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700/60 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-            aria-expanded={showAnalysis}
-          >
-            <span className="flex items-center gap-1.5">
-              {showAnalysis ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-              {showAnalysis ? "Ocultar análisis" : "Ver análisis"}
-            </span>
-            <span className="text-[11px] text-gray-400">
-              {analysisWidgetsCount} bloque{analysisWidgetsCount === 1 ? "" : "s"}
-            </span>
-          </button>
-        )}
       </motion.div>
     </>
   );
