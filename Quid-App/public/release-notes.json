@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.23",
+  "currentVersion": "1.1.24",
   "releases": [
+    {
+      "version": "1.1.24",
+      "date": "2026-11-07",
+      "title": "Quid 1.1.24",
+      "changes": [
+        "Recordatorios con la fecha real del vencimiento",
+        "Avisos por tramos: 30, 7, 1, 0 y vencido (no diario)",
+        "Un solo motor para push, campanita y tableros"
+      ]
+    },
     {
       "version": "1.1.23",
       "date": "2026-11-07",

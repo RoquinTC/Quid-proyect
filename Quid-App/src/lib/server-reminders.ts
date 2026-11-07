@@ -1,25 +1,31 @@
 import { db } from "@/lib/db";
 import { createAndPushNotification } from "@/lib/push";
-import { getColombiaTodayString, createColombiaDate } from "@/lib/api";
 import { calculateFuelLevel } from "@/lib/fuel-level";
 import { toNumber } from "@/lib/decimal-serializer";
+import {
+  addDaysToKey,
+  bandFor,
+  colombiaTodayKey,
+  dateKeyOf,
+  daysBetweenKeys,
+  dueTextEs,
+  formatKeyEs,
+  mostUrgentBand,
+  PAYMENT_UPCOMING_DAYS,
+  paymentBandFor,
+  reminderKeyFor,
+  type PaymentBand,
+} from "@/lib/reminders/engine";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MEDICATION_REMINDER_WINDOW_MINUTES = 15;
 
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-}
+/** Cuánto se mira hacia atrás para no repetir un aviso ya enviado. */
+const DEDUPE_LOOKBACK_DAYS = 400;
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function daysUntil(date: Date, today: Date) {
-  return Math.ceil((startOfDay(date).getTime() - startOfDay(today).getTime()) / DAY_MS);
-}
+/**
+ * Pagos: aviso a 3 días y el día del vencimiento. Si se pasa, uno al día
+ * siguiente y luego uno por semana — nunca todos los días.
+ */
 
 function formatMoney(value: number) {
   return `$${value.toLocaleString("es-CO")}`;
@@ -111,76 +117,154 @@ async function sendReminderOnce(params: {
   return true;
 }
 
-async function sendRecurringPaymentReminders(today: Date, since: Date) {
-  const tomorrow = addDays(today, 1);
-  const dueToday = await db.recurringPayment.findMany({
+// ───────────────────────────────────────────────────────────────────────────
+// Pagos recurrentes
+// ───────────────────────────────────────────────────────────────────────────
+
+async function sendRecurringPaymentReminders(scope: { userId?: string }, todayKey: string, since: Date) {
+  const from = new Date(Date.UTC(
+    Number(todayKey.slice(0, 4)),
+    Number(todayKey.slice(5, 7)) - 1,
+    Number(todayKey.slice(8, 10)) - 40,
+  ));
+  const to = new Date(Date.UTC(
+    Number(todayKey.slice(0, 4)),
+    Number(todayKey.slice(5, 7)) - 1,
+    Number(todayKey.slice(8, 10)) + 10,
+  ));
+
+  const pending = await db.recurringPayment.findMany({
     where: {
       status: "pending",
-      scheduledDate: { gte: today, lt: tomorrow },
-      user: {
-        settings: { notificationsEnabled: true },
-      },
+      ...(scope.userId ? { userId: scope.userId } : {}),
+      scheduledDate: { gte: from, lte: to },
+      user: { settings: { notificationsEnabled: true } },
     },
-    include: {
+    select: {
+      id: true,
+      userId: true,
+      description: true,
+      amount: true,
+      scheduledDate: true,
       account: { select: { name: true } },
       debt: { select: { name: true } },
     },
     orderBy: { scheduledDate: "asc" },
   });
 
-  const byUser = new Map<string, typeof dueToday>();
-  for (const payment of dueToday) {
-    const list = byUser.get(payment.userId) ?? [];
-    list.push(payment);
-    byUser.set(payment.userId, list);
+  type Entry = {
+    id: string;
+    description: string;
+    amount: number;
+    dueKey: string;
+    days: number;
+    band: PaymentBand;
+    source: string;
+  };
+
+  const byUserAndBand = new Map<string, { userId: string; band: PaymentBand; entries: Entry[] }>();
+
+  for (const payment of pending) {
+    const dueKey = dateKeyOf(payment.scheduledDate);
+    if (!dueKey) continue;
+
+    const days = daysBetweenKeys(todayKey, dueKey);
+    const band = paymentBandFor(days);
+    if (!band) continue;
+
+    const groupKey = `${payment.userId}:${band}`;
+    const entry: Entry = {
+      id: payment.id,
+      description: payment.description,
+      amount: toNumber(payment.amount),
+      dueKey,
+      days,
+      band,
+      source: payment.debt?.name || payment.account?.name || "",
+    };
+
+    const group = byUserAndBand.get(groupKey);
+    if (group) group.entries.push(entry);
+    else byUserAndBand.set(groupKey, { userId: payment.userId, band, entries: [entry] });
   }
 
   let sent = 0;
-  for (const [userId, payments] of byUser) {
-    const totalAmount = payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
-    const paymentList = payments
-      .slice(0, 3)
-      .map((payment) => {
-        const source = payment.debt?.name || payment.account?.name || "";
-        return `${payment.description}${source ? ` (${source})` : ""}`;
-      })
-      .join(", ");
-    const moreCount = payments.length > 3 ? payments.length - 3 : 0;
-    const pushBody = moreCount > 0
-      ? `${paymentList} y ${moreCount} mas. Total: ${formatMoney(totalAmount)}`
-      : `${paymentList}. Total: ${formatMoney(totalAmount)}`;
+
+  for (const { userId, band, entries } of byUserAndBand.values()) {
+    entries.sort((a, b) => a.days - b.days);
+
+    const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
+    const shown = entries.slice(0, 3).map((entry) => {
+      const when = entry.days === 0
+        ? "hoy"
+        : entry.days > 0
+          ? `en ${entry.days} d`
+          : `vencido ${Math.abs(entry.days)} d`;
+      const label = `• ${entry.description}${entry.source ? ` (${entry.source})` : ""}: ${formatMoney(entry.amount)}`;
+      return `${label} — ${when}, ${formatKeyEs(entry.dueKey)}`;
+    });
+    const moreCount = entries.length - shown.length;
+    const lines = [...shown, moreCount > 0 ? `• y ${moreCount} más` : ""].filter(Boolean).join("\n");
+
+    const title = band === "upcoming"
+      ? `Pagos en ${PAYMENT_UPCOMING_DAYS} días (${entries.length})`
+      : band === "due"
+        ? `Pagos que vencen hoy (${entries.length})`
+        : `Pagos vencidos (${entries.length})`;
+
+    const headline = band === "upcoming"
+      ? `Se acerca${entries.length > 1 ? "n" : ""} ${entries.length} pago${entries.length > 1 ? "s" : ""} por ${formatMoney(total)}:`
+      : band === "due"
+        ? `Vence${entries.length > 1 ? "n" : ""} hoy ${entries.length} pago${entries.length > 1 ? "s" : ""} por ${formatMoney(total)}:`
+        : `Sigue${entries.length > 1 ? "n" : ""} pendiente${entries.length > 1 ? "s" : ""} ${entries.length} pago${entries.length > 1 ? "s" : ""} por ${formatMoney(total)}:`;
+
+    const pushBody = entries.length === 1
+      ? `${entries[0].description}: ${formatMoney(entries[0].amount)} · ${formatKeyEs(entries[0].dueKey)}`
+      : `${entries.length} pagos · ${formatMoney(total)} · ${formatKeyEs(entries[0].dueKey)}`;
 
     const wasSent = await sendReminderOnce({
       userId,
-      type: "recurring_due",
-      title: `Pagos pendientes hoy (${payments.length})`,
-      message: `Tienes ${payments.length} pago(s) programado(s) para hoy por un total de ${formatMoney(totalAmount)}. ${moreCount > 0 ? `${paymentList} y ${moreCount} mas.` : paymentList}`,
+      type: band === "upcoming" ? "recurring_upcoming" : "recurring_due",
+      title,
+      message: `${headline}\n${lines}`,
       pushBody,
       url: "/?module=finance&tab=recurring",
-      reminderKey: `recurring:${getColombiaTodayString()}`,
+      reminderKey: `pay:${userId}:${band}:${todayKey}`,
       data: {
-        paymentIds: payments.map((payment) => payment.id),
-        totalAmount,
-        count: payments.length,
+        band,
+        paymentIds: entries.map((entry) => entry.id),
+        dueKeys: entries.map((entry) => entry.dueKey),
+        totalAmount: total,
+        count: entries.length,
       },
       since,
     });
     if (wasSent) sent += 1;
   }
 
-  return { checked: byUser.size, sent };
+  return { checked: pending.length, sent };
 }
 
-async function sendTransportReminders(today: Date, since: Date) {
+// ───────────────────────────────────────────────────────────────────────────
+// Transporte: recordatorios del vehículo y documentos
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Los mantenimientos NO se leen aquí a propósito: al registrarlos ya se crea
+ * su `VehicleReminder` (la obligación pendiente). Leer las dos cosas mostraba
+ * el mismo cambio de aceite dos veces y, con el aviso diario anterior, todos
+ * los días.
+ */
+async function sendTransportReminders(scope: { userId?: string }, todayKey: string, since: Date) {
   const vehicles = await db.vehicle.findMany({
     where: {
+      ...(scope.userId ? { userId: scope.userId } : {}),
       user: {
         settings: { notificationsEnabled: true },
       },
     },
     include: {
       fuelLogs: { orderBy: { date: "desc" } },
-      maintenanceRecords: true,
       documents: true,
       reminders: { where: { isActive: true } },
     },
@@ -215,10 +299,10 @@ async function sendTransportReminders(today: Date, since: Date) {
           userId: vehicle.userId,
           type: "transport_fuel_low",
           title: `Combustible bajo: ${vehicle.name}`,
-          message: `${vehicle.name} esta en ${Math.round(fuelLevel.fuelLevel)}%. Quedan aproximadamente ${fuelLevel.estimatedRange} km de autonomia.`,
+          message: `${vehicle.name} está en ${Math.round(fuelLevel.fuelLevel)}%. Quedan aproximadamente ${fuelLevel.estimatedRange} km de autonomía.`,
           pushBody: `${vehicle.name}: ${Math.round(fuelLevel.fuelLevel)}% de combustible, ~${fuelLevel.estimatedRange} km.`,
           url: "/?module=transport",
-          reminderKey: `fuel-low:${vehicle.id}:${getColombiaTodayString()}`,
+          reminderKey: `fuel-low:${vehicle.id}:${todayKey}`,
           data: {
             vehicleId: vehicle.id,
             fuelLevel: fuelLevel.fuelLevel,
@@ -230,35 +314,41 @@ async function sendTransportReminders(today: Date, since: Date) {
       }
     }
 
-    for (const record of vehicle.maintenanceRecords) {
-      if (!record.reminderEnabled) continue;
-      const kmRemaining = record.nextDueKm ? record.nextDueKm - vehicle.currentKm : null;
-      const dateDays = record.nextDueDate ? daysUntil(record.nextDueDate, today) : null;
-      const isKmDue = kmRemaining !== null && kmRemaining <= 1000;
-      const isDateDue = dateDays !== null && dateDays <= 30;
-      if (!isKmDue && !isDateDue) continue;
+    for (const reminder of vehicle.reminders) {
+      const dueKey = dateKeyOf(reminder.dueDate);
+      const days = dueKey ? daysBetweenKeys(todayKey, dueKey) : null;
+      const kmRemaining = reminder.dueKm != null ? reminder.dueKm - vehicle.currentKm : null;
 
-      const dueText = kmRemaining !== null && kmRemaining <= 0
-        ? "ya esta vencido por kilometraje"
-        : kmRemaining !== null
-          ? `vence en ${Math.max(0, Math.round(kmRemaining)).toLocaleString("es-CO")} km`
-          : dateDays !== null && dateDays <= 0
-            ? "vence hoy"
-            : `vence en ${dateDays} dias`;
+      const dayBand = days === null ? null : bandFor(days, [reminder.warningDays ?? 30, 7, 1, 0]);
+      const kmBand = kmRemaining === null ? null : bandFor(kmRemaining, [reminder.warningKm ?? 500, 300, 50, 0]);
+      const band = mostUrgentBand([dayBand, kmBand]);
+      if (band === null) continue;
 
+      const parts: string[] = [];
+      if (days !== null && dayBand !== null && dueKey) {
+        parts.push(dueTextEs(days, dueKey));
+      }
+      if (kmRemaining !== null && kmBand !== null) {
+        parts.push(kmRemaining <= 0
+          ? "kilometraje cumplido"
+          : `faltan ${Math.round(kmRemaining).toLocaleString("es-CO")} km`);
+      }
+
+      const detail = parts.join(" · ");
       const wasSent = await sendReminderOnce({
         userId: vehicle.userId,
-        type: "transport_maintenance_due",
-        title: `Mantenimiento: ${vehicle.name}`,
-        message: `${record.description || record.type} ${dueText}.`,
-        pushBody: `${vehicle.name}: ${record.description || record.type} ${dueText}.`,
+        type: "transport_custom_reminder_due",
+        title: `Recordatorio: ${vehicle.name}`,
+        message: `${reminder.title}${detail ? `: ${detail}` : ""}.`,
+        pushBody: `${vehicle.name}: ${reminder.title}${detail ? ` (${detail})` : ""}.`,
         url: "/?module=transport",
-        reminderKey: `maintenance:${record.id}:${getColombiaTodayString()}`,
+        reminderKey: reminderKeyFor("vehicle-reminder", reminder.id, band),
         data: {
           vehicleId: vehicle.id,
-          maintenanceId: record.id,
+          reminderId: reminder.id,
+          band,
+          daysUntil: days,
           kmRemaining,
-          daysUntil: dateDays,
         },
         since,
       });
@@ -267,67 +357,28 @@ async function sendTransportReminders(today: Date, since: Date) {
 
     for (const doc of vehicle.documents) {
       if (!doc.reminderEnabled) continue;
-      const remaining = daysUntil(doc.expiryDate, today);
-      if (remaining > doc.reminderDays) continue;
 
-      const dueText = remaining < 0
-        ? `vencio hace ${Math.abs(remaining)} dias`
-        : remaining === 0
-          ? "vence hoy"
-          : `vence en ${remaining} dias`;
+      const dueKey = dateKeyOf(doc.expiryDate);
+      if (!dueKey) continue;
 
+      const remaining = daysBetweenKeys(todayKey, dueKey);
+      const band = bandFor(remaining, [doc.reminderDays ?? 30, 7, 1, 0]);
+      if (band === null) continue;
+
+      const detail = dueTextEs(remaining, dueKey);
       const wasSent = await sendReminderOnce({
         userId: vehicle.userId,
         type: "transport_document_due",
         title: `Documento por vencer: ${vehicle.name}`,
-        message: `${doc.type.toUpperCase()} ${dueText}.`,
-        pushBody: `${vehicle.name}: ${doc.type.toUpperCase()} ${dueText}.`,
+        message: `${doc.type.toUpperCase()} ${detail}.`,
+        pushBody: `${vehicle.name}: ${doc.type.toUpperCase()} ${detail}.`,
         url: "/?module=transport",
-        reminderKey: `document:${doc.id}:${getColombiaTodayString()}`,
+        reminderKey: reminderKeyFor("document", doc.id, band),
         data: {
           vehicleId: vehicle.id,
           documentId: doc.id,
+          band,
           daysUntil: remaining,
-        },
-        since,
-      });
-      if (wasSent) sent += 1;
-    }
-
-    for (const reminder of vehicle.reminders) {
-      const kmRemaining = reminder.dueKm != null ? reminder.dueKm - vehicle.currentKm : null;
-      const dateDays = reminder.dueDate ? daysUntil(reminder.dueDate, today) : null;
-      const isKmDue = kmRemaining !== null && kmRemaining <= (reminder.warningKm ?? 500);
-      const isDateDue = dateDays !== null && dateDays <= reminder.warningDays;
-      if (!isKmDue && !isDateDue) continue;
-
-      const dueParts = [
-        kmRemaining !== null && kmRemaining <= 0
-          ? "ya esta vencido por kilometraje"
-          : kmRemaining !== null
-            ? `faltan ${Math.max(0, Math.round(kmRemaining)).toLocaleString("es-CO")} km`
-            : null,
-        dateDays !== null && dateDays <= 0
-          ? "vence hoy"
-          : dateDays !== null
-            ? `vence en ${dateDays} dias`
-            : null,
-      ].filter(Boolean);
-
-      const dueText = dueParts.join(" y ");
-      const wasSent = await sendReminderOnce({
-        userId: vehicle.userId,
-        type: "transport_custom_reminder_due",
-        title: `Recordatorio: ${vehicle.name}`,
-        message: `${reminder.title}${dueText ? `: ${dueText}` : ""}.`,
-        pushBody: `${vehicle.name}: ${reminder.title}${dueText ? ` (${dueText})` : ""}.`,
-        url: "/?module=transport",
-        reminderKey: `vehicle-reminder:${reminder.id}:${getColombiaTodayString()}`,
-        data: {
-          vehicleId: vehicle.id,
-          reminderId: reminder.id,
-          kmRemaining,
-          daysUntil: dateDays,
         },
         since,
       });
@@ -338,11 +389,16 @@ async function sendTransportReminders(today: Date, since: Date) {
   return { checked, sent };
 }
 
-async function sendMedicationReminders(since: Date) {
+// ───────────────────────────────────────────────────────────────────────────
+// Medicamentos
+// ───────────────────────────────────────────────────────────────────────────
+
+async function sendMedicationReminders(scope: { userId?: string }, todayKey: string, since: Date) {
   const medications = await db.medication.findMany({
     where: {
       isActive: true,
       reminderEnabled: true,
+      ...(scope.userId ? { userId: scope.userId } : {}),
       user: {
         settings: { notificationsEnabled: true },
       },
@@ -376,10 +432,11 @@ async function sendMedicationReminders(since: Date) {
         message: `Toma ${medication.dosage} de ${medication.name} a las ${time}.${instructions}`,
         pushBody: `${medication.name}: ${medication.dosage}.${instructions}`,
         url: "/?module=health&tab=medications",
-        reminderKey: `medication:${medication.id}:${getColombiaTodayString()}:${time}`,
+        reminderKey: `medication:${medication.id}:${todayKey}:${time}`,
         data: {
           medicationId: medication.id,
           scheduledTime: time,
+          band: todayKey,
         },
         since,
       });
@@ -390,22 +447,42 @@ async function sendMedicationReminders(since: Date) {
   return { checked: medications.length, sent };
 }
 
-export async function runServerReminders() {
-  const todayString = getColombiaTodayString();
-  const today = createColombiaDate(todayString);
-  const since = startOfDay(today);
+// ───────────────────────────────────────────────────────────────────────────
+// Entradas
+// ───────────────────────────────────────────────────────────────────────────
+
+function dedupeSince(todayKey: string, days = DEDUPE_LOOKBACK_DAYS): Date {
+  return new Date(`${addDaysToKey(todayKey, -days)}T00:00:00.000Z`);
+}
+
+async function run(scope: { userId?: string }) {
+  const todayKey = colombiaTodayKey();
+  // Los tramos de pago/transporte viven meses; las tomas de medicamento se
+  // identifican por día, así que basta mirar dos días atrás.
+  const since = dedupeSince(todayKey);
+  const medicationSince = dedupeSince(todayKey, 2);
 
   const [recurring, transport, medications] = await Promise.all([
-    sendRecurringPaymentReminders(today, since),
-    sendTransportReminders(today, since),
-    sendMedicationReminders(since),
+    sendRecurringPaymentReminders(scope, todayKey, since),
+    sendTransportReminders(scope, todayKey, since),
+    sendMedicationReminders(scope, todayKey, medicationSince),
   ]);
 
   return {
-    date: todayString,
+    date: todayKey,
     recurring,
     transport,
     medications,
     sent: recurring.sent + transport.sent + medications.sent,
   };
+}
+
+/** Todos los usuarios — lo llama el cron del servidor. */
+export async function runServerReminders() {
+  return run({});
+}
+
+/** Un usuario — lo llama la app al abrir (respaldo del cron). */
+export async function runServerRemindersForUser(userId: string) {
+  return run({ userId });
 }

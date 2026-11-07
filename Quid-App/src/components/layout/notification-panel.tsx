@@ -27,6 +27,9 @@ import {
   Trophy,
   TrendingUp,
   Clock,
+  Fuel,
+  Wrench,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -95,6 +98,14 @@ function getNotificationIcon(type: string, data: Record<string, any> | null) {
       return { Icon: CalendarClock, color: "text-blue-600 dark:text-blue-300", bg: "bg-blue-50 dark:bg-blue-950/60" };
     case "recurring_upcoming":
       return { Icon: Clock, color: "text-indigo-600 dark:text-indigo-300", bg: "bg-indigo-50 dark:bg-indigo-950/60" };
+    case "transport_fuel_low":
+      return { Icon: Fuel, color: "text-amber-600 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/60" };
+    case "transport_maintenance_due":
+      return { Icon: Wrench, color: "text-cyan-600 dark:text-cyan-300", bg: "bg-cyan-50 dark:bg-cyan-950/60" };
+    case "transport_document_due":
+      return { Icon: FileText, color: "text-rose-600 dark:text-rose-300", bg: "bg-rose-50 dark:bg-rose-950/60" };
+    case "transport_custom_reminder_due":
+      return { Icon: Clock, color: "text-cyan-600 dark:text-cyan-300", bg: "bg-cyan-50 dark:bg-cyan-950/60" };
     case "budget_limit":
       return { Icon: AlertTriangle, color: "text-amber-600 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/60" };
     case "goal_completed":
@@ -120,7 +131,7 @@ function getNotificationIcon(type: string, data: Record<string, any> | null) {
  */
 function destinationFor(
   type: string,
-): { module: "dashboard" | "finance" | "health" | "pantry"; finance?: string; health?: string } | null {
+): { module: "dashboard" | "finance" | "transport" | "health" | "pantry"; finance?: string; health?: string } | null {
   switch (type) {
     case "invitation_received":
     case "invitation_accepted":
@@ -139,6 +150,11 @@ function destinationFor(
       return { module: "finance", finance: "savings" };
     case "yield_ready":
       return { module: "finance", finance: "cdts" };
+    case "transport_fuel_low":
+    case "transport_maintenance_due":
+    case "transport_document_due":
+    case "transport_custom_reminder_due":
+      return { module: "transport" };
     default:
       return null;
   }

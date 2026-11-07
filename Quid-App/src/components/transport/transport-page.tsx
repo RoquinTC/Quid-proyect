@@ -23,6 +23,7 @@ import { QuickKmUpdate } from "./quick-km-update";
 import { AuraQuickLog } from "./aura-quick-log";
 import { TransportDashboard } from "./transport-dashboard";
 import { buildUpcoming, describeRelativeDay, describeProjection, estimateKmDueDate } from "@/lib/transport-prediction";
+import { colombiaTodayKey, dateKeyOf, daysBetweenKeys } from "@/lib/reminders/engine";
 import { summarizeEfficiency } from "@/lib/fuel-efficiency";
 import { VehicleIcon } from "./vehicle-icon";
 import {
@@ -1955,9 +1956,12 @@ function ReminderBoard({
     return describeProjection(projection.daysRemaining, projection.confidence);
   };
 
-  const customItems: ReminderBoardItem[] = (vehicle.reminders || []).map((reminder) => {    const daysUntilDue = reminder.dueDate
-      ? Math.ceil((new Date(reminder.dueDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-      : null;
+  const customItems: ReminderBoardItem[] = (vehicle.reminders || []).map((reminder) => {
+    // Fechas de calendario: restar milisegundos contra "ahora" corría el día
+    // por la noche (un vencimiento del 10 se leía como "hoy" el 9).
+    const todayKey = colombiaTodayKey(now);
+    const dueKey = dateKeyOf(reminder.dueDate);
+    const daysUntilDue = dueKey ? daysBetweenKeys(todayKey, dueKey) : null;
     const kmRemaining = reminder.dueKm != null ? reminder.dueKm - vehicle.currentKm : null;
     const isOverdue = reminder.isActive && ((daysUntilDue !== null && daysUntilDue <= 0) || (kmRemaining !== null && kmRemaining <= 0));
     const isSoon = reminder.isActive && !isOverdue && (
@@ -1967,9 +1971,13 @@ function ReminderBoard({
 
     const parts = [
       daysUntilDue !== null
-        ? daysUntilDue <= 0
-          ? "Vence hoy"
-          : `${daysUntilDue} días`
+        ? daysUntilDue < 0
+          ? `Vencido hace ${Math.abs(daysUntilDue)} días`
+          : daysUntilDue === 0
+            ? "Vence hoy"
+            : daysUntilDue === 1
+              ? "Vence mañana"
+              : `${daysUntilDue} días`
         : null,
       kmRemaining !== null
         ? kmRemaining <= 0
@@ -2003,15 +2011,24 @@ function ReminderBoard({
   const documentItems: ReminderBoardItem[] = (vehicle.documents || [])
     .filter((document) => document.reminderEnabled)
     .map((document) => {
-      const daysUntil = Math.ceil((new Date(document.expiryDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      const isOverdue = daysUntil < 0;
-      const isSoon = !isOverdue && daysUntil <= (document.reminderDays || 30);
+      const expiryKey = dateKeyOf(document.expiryDate);
+      const daysUntil = expiryKey ? daysBetweenKeys(colombiaTodayKey(now), expiryKey) : Number.NaN;
+      const isOverdue = Number.isFinite(daysUntil) && daysUntil < 0;
+      const isSoon = Number.isFinite(daysUntil) && !isOverdue && daysUntil <= (document.reminderDays || 30);
       return {
         id: `document-${document.id}`,
         kind: "document",
         title: docTypeLabels[document.type] || "Documento",
         subtitle: document.documentNumber ? `#${document.documentNumber}` : "Documento del vehículo",
-        detail: isOverdue ? `Vencido hace ${Math.abs(daysUntil)} días` : `Vence en ${daysUntil} días`,
+        detail: !Number.isFinite(daysUntil)
+          ? "Sin fecha válida"
+          : isOverdue
+            ? `Vencido hace ${Math.abs(daysUntil)} días`
+            : daysUntil === 0
+              ? "Vence hoy"
+              : daysUntil === 1
+                ? "Vence mañana"
+                : `Vence en ${daysUntil} días`,
         status: isOverdue ? "overdue" : isSoon ? "soon" : "ok",
         documentId: document.id,
         docType: document.type,

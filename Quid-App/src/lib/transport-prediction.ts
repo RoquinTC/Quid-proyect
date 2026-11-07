@@ -121,6 +121,8 @@ const MIN_DAYS_FOR_MEDIUM_CONFIDENCE = 7;
 
 // ─── Date helpers ────────────────────────────────────────────────────
 
+import { colombiaTodayKey, dateKeyOf, daysBetweenKeys } from "@/lib/reminders/engine";
+
 function toDate(value: string | Date | null | undefined): Date | null {
   if (value == null) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -325,6 +327,7 @@ export function describeProjection(
  */
 export function buildUpcoming(input: BuildUpcomingInput): UpcomingItem[] {
   const today = input.today ?? new Date();
+  const todayKey = colombiaTodayKey(today);
   const currentKm = Number(input.currentKm ?? 0);
   const rate = Number(input.avgKmPerDay ?? 0);
   const items: UpcomingItem[] = [];
@@ -351,7 +354,10 @@ export function buildUpcoming(input: BuildUpcomingInput): UpcomingItem[] {
     const warningKm = reminder.warningKm ?? DEFAULT_WARNING_KM;
     const warningDays = reminder.warningDays ?? DEFAULT_WARNING_DAYS;
     const kmRemaining = dueKm != null ? dueKm - currentKm : null;
-    const daysRemaining = dueDate ? daysBetween(today, dueDate) : null;
+    // Por clave de calendario: `dueDate` llega a medianoche UTC y restarle
+    // milisegundos contra "ahora" lo corría un día por la noche.
+    const dueKey = dateKeyOf(dueDate);
+    const daysRemaining = dueKey ? daysBetweenKeys(todayKey, dueKey) : null;
     const projection = project(dueKm);
 
     items.push({
@@ -381,7 +387,8 @@ export function buildUpcoming(input: BuildUpcomingInput): UpcomingItem[] {
     if (!expiry) continue;
 
     const warningDays = doc.reminderDays ?? 30;
-    const daysRemaining = daysBetween(today, expiry);
+    const expiryKey = dateKeyOf(expiry);
+    const daysRemaining = expiryKey ? daysBetweenKeys(todayKey, expiryKey) : 0;
     const label = input.documentLabel?.(doc) ?? doc.type;
 
     items.push({

@@ -50,7 +50,7 @@ No empieces por los componentes grandes sin leer lo anterior:
 cd Quid-App
 npm install
 docker compose up --build -d quid-app     # local en http://localhost:3000
-npx vitest run                            # 744 pruebas
+npx vitest run                            # 754 pruebas
 npx tsc --noEmit                          # tipos
 ```
 
@@ -151,7 +151,7 @@ git add .                    # NO — arrastra docs/
 |---|---|
 | Versión producción | **1.1.22** |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
-| Pruebas | 744 en 43 archivos |
+| Pruebas | 754 en 44 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
 
@@ -164,6 +164,9 @@ Entregado en las últimas sesiones:
 - Reestructura: 19 widgets duplicados → Resumen (3) + Cuentas (4) + Análisis (nuevo)
 - Ajustes agrupados en GENERAL / MÓDULOS / SISTEMA
 - `src/lib/modules/registry.ts` creado
+- Recordatorios: un solo motor (`src/lib/reminders/engine.ts`). Las fechas se
+  comparan por clave `YYYY-MM-DD` (nunca restando milisegundos) y cada aviso
+  suena al cambiar de tramo —30 · 7 · 1 · 0 · vencido—, no todos los días.
 
 **Pendiente, en este orden:**
 

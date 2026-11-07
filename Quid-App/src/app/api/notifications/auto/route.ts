@@ -10,12 +10,15 @@ import { createAndPushNotification } from "@/lib/push";
  * POST /api/notifications/auto
  *
  * Checks and sends push notifications for:
- * 1. Recurring payments due tomorrow (upcoming reminder)
- * 2. Yields ready to confirm (near month end)
- * 3. Savings goals near completion (>=80%)
+ * 1. Yields ready to confirm (near month end)
+ * 2. Savings goals near completion (>=80%)
+ *
+ * Los pagos recurrentes y los recordatorios de transporte NO se generan aquí:
+ * los emite `runServerReminders` con su propia cadencia y su clave de
+ * deduplicación. Duplicarlo aquí producía dos avisos del mismo pago, uno de
+ * ellos con la fecha corrida un día.
  *
  * Called periodically by the client or service worker.
- * Deduplicates by checking for existing unread notifications in the last 24h.
  */
 export async function POST() {
   try {
@@ -26,52 +29,9 @@ export async function POST() {
 
     const userId = session.user.id;
     const now = getColombiaNow();
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     const notifsSent: string[] = [];
 
-    // ── 1. Recurring payments due tomorrow ──
-    try {
-      const dueTomorrow = await db.recurringPayment.findMany({
-        where: {
-          userId,
-          status: "pending",
-          scheduledDate: {
-            gte: now,
-            lte: tomorrow,
-          },
-        },
-        select: { id: true, description: true, amount: true },
-      });
-
-      if (dueTomorrow.length > 0) {
-        // Check if already notified in the last 24h
-        const existingNotif = await db.appNotification.findFirst({
-          where: {
-            userId,
-            type: "recurring_upcoming",
-            read: false,
-            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-          },
-        });
-
-        if (!existingNotif) {
-          const total = dueTomorrow.reduce((s, r) => s + toNumber(r.amount), 0);
-          await createAndPushNotification({
-            userId,
-            type: "recurring_upcoming",
-            title: "Pagos próximos",
-            message: `${dueTomorrow.length} pago${dueTomorrow.length > 1 ? "s" : ""} programado${dueTomorrow.length > 1 ? "s" : ""} para mañana · ${total.toLocaleString("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 0 })}`,
-            pushBody: `${dueTomorrow.length} pago(s) mañana`,
-            url: "/?tab=finance&sub=recurring",
-          });
-          notifsSent.push("recurring_upcoming");
-        }
-      }
-    } catch (e) {
-      console.error("[AutoNotif] Recurring upcoming error:", e);
-    }
-
-    // ── 2. Yields ready to confirm (last 2 days of month) ──
+    // ── 1. Yields ready to confirm (last 2 days of month) ──
     try {
       const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       if (now.getDate() >= lastDay - 1) {
@@ -129,7 +89,7 @@ export async function POST() {
       console.error("[AutoNotif] Yield ready error:", e);
     }
 
-    // ── 3. Savings goals near completion (>=80%) ──
+    // ── 2. Savings goals near completion (>=80%) ──
     try {
       const nearCompletion = await db.savingsGoal.findMany({
         where: {
