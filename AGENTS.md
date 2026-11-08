@@ -50,7 +50,7 @@ No empieces por los componentes grandes sin leer lo anterior:
 cd Quid-App
 npm install
 docker compose up --build -d quid-app     # local en http://localhost:3000
-npx vitest run                            # 754 pruebas
+npx vitest run                            # 763 pruebas
 npx tsc --noEmit                          # tipos
 ```
 
@@ -151,7 +151,7 @@ git add .                    # NO — arrastra docs/
 |---|---|
 | Versión producción | **1.1.22** |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
-| Pruebas | 754 en 44 archivos |
+| Pruebas | 763 en 45 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
 
@@ -167,6 +167,10 @@ Entregado en las últimas sesiones:
 - Recordatorios: un solo motor (`src/lib/reminders/engine.ts`). Las fechas se
   comparan por clave `YYYY-MM-DD` (nunca restando milisegundos) y cada aviso
   suena al cambiar de tramo —30 · 7 · 1 · 0 · vencido—, no todos los días.
+- **F-10 · hallazgos del período**: `src/lib/finance/insights.ts` (reglas puras)
+  + `/api/finance/insights` + panel en Análisis. Seis tarjetas accionables:
+  tasa de ahorro, ritmo de gasto, categoría que subió, presupuestos, gasto más
+  grande y categoría que bajó.
 
 **Pendiente, en este orden:**
 
@@ -234,7 +238,7 @@ Después, en el orden del mapa:
 
 | | Idea | Nota |
 |---|---|---|
-| 1 | `F-10` Insights | Conecta con la zona de consejos IA |
+| 1 | ✅ `F-10` Insights | Hecho: 6 hallazgos accionables en Análisis (`lib/finance/insights.ts`) |
 | 2 | `F-09` Reporte mensual compartible | |
 | 3 | `F-23` Detección de suscripciones | |
 | 4 | `F-21` Chat IA con acciones | El puente `/api/aura/tools` ya existe |
