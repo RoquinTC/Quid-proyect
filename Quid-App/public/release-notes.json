@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.1.27",
+  "currentVersion": "1.1.28",
   "releases": [
+    {
+      "version": "1.1.28",
+      "date": "2026-11-08",
+      "title": "Quid 1.1.28",
+      "changes": [
+        "Reporte mensual en Analisis",
+        "KPIs con cambio, evolucion de 6 meses y dona",
+        "Tablas de gasto e ingreso y hallazgos",
+        "Copiar o compartir el resumen"
+      ]
+    },
     {
       "version": "1.1.27",
       "date": "2026-11-08",
