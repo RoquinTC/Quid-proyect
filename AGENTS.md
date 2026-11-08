@@ -50,7 +50,7 @@ No empieces por los componentes grandes sin leer lo anterior:
 cd Quid-App
 npm install
 docker compose up --build -d quid-app     # local en http://localhost:3000
-npx vitest run                            # 763 pruebas
+npx vitest run                            # 772 pruebas
 npx tsc --noEmit                          # tipos
 ```
 
@@ -151,7 +151,7 @@ git add .                    # NO — arrastra docs/
 |---|---|
 | Versión producción | **1.1.22** |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
-| Pruebas | 763 en 45 archivos |
+| Pruebas | 772 en 46 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
 
@@ -171,6 +171,11 @@ Entregado en las últimas sesiones:
   + `/api/finance/insights` + panel en Análisis. Seis tarjetas accionables:
   tasa de ahorro, ritmo de gasto, categoría que subió, presupuestos, gasto más
   grande y categoría que bajó.
+- **F-09 · reporte mensual**: `lib/finance/monthly-report.ts` (modelo y
+  narrativa) + `/api/finance/monthly-report` + hoja en Análisis. KPIs con
+  cambio, evolución de 6 meses, dona de distribución, tablas de gasto e
+  ingreso y los hallazgos de F-10. Compartir/copiar como texto.
+  **Pendiente:** exportar a imagen o PDF (requiere rasterizar el DOM).
 
 **Pendiente, en este orden:**
 
@@ -239,7 +244,7 @@ Después, en el orden del mapa:
 | | Idea | Nota |
 |---|---|---|
 | 1 | ✅ `F-10` Insights | Hecho: 6 hallazgos accionables en Análisis (`lib/finance/insights.ts`) |
-| 2 | `F-09` Reporte mensual compartible | |
+| 2 | ✅ `F-09` Reporte mensual | Hecho: reporte en Análisis con KPIs, 6 meses, dona, tablas y narrativa; copiar/compartir texto. Imagen/PDF pendiente |
 | 3 | `F-23` Detección de suscripciones | |
 | 4 | `F-21` Chat IA con acciones | El puente `/api/aura/tools` ya existe |
 | 5 | `F-30` Privacidad de montos | |
