@@ -28,6 +28,7 @@ import { CDTForm } from "./cdt-form";
 import { RecurringForm } from "./recurring-form";
 import { TransactionForm } from "./transaction-form";
 import { InboxView } from "./inbox-view";
+import { InsightsPanel } from "./insights-panel";
 import { ProjectionView } from "./projection-view";
 
 // Error boundary component to prevent a single tab crash from breaking the entire app
@@ -223,7 +224,13 @@ export function FinancePage() {
 
     switch (financeSubView) {
       case "analysis":
-        return <FinanceOverview mode="analysis" />;
+        return (
+          <div className="space-y-3">
+            {/* F-10 · Los hallazgos van primero: dicen qué cambió antes que los gráficos. */}
+            <InsightsPanel />
+            <FinanceOverview mode="analysis" />
+          </div>
+        );
       case "inbox":
         // F-01 · Doble guarda: si la captura por SMS está apagada, la bandeja
         // no se muestra aunque el estado haya quedado apuntando ahí.

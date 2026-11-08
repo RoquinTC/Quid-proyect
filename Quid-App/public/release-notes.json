@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.26",
+  "currentVersion": "1.1.27",
   "releases": [
+    {
+      "version": "1.1.27",
+      "date": "2026-11-08",
+      "title": "Quid 1.1.27",
+      "changes": [
+        "Hallazgos del periodo en Analisis",
+        "Que subio, que bajo, ritmo de gasto y presupuestos",
+        "Cada hallazgo lleva a donde se puede actuar"
+      ]
+    },
     {
       "version": "1.1.26",
       "date": "2026-11-07",
