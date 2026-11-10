@@ -50,7 +50,7 @@ No empieces por los componentes grandes sin leer lo anterior:
 cd Quid-App
 npm install
 docker compose up --build -d quid-app     # local en http://localhost:3000
-npx vitest run                            # 772 pruebas
+npx vitest run                            # 781 pruebas
 npx tsc --noEmit                          # tipos
 ```
 
@@ -151,7 +151,7 @@ git add .                    # NO — arrastra docs/
 |---|---|
 | Versión producción | **1.1.22** |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
-| Pruebas | 772 en 46 archivos |
+| Pruebas | 781 en 47 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
 
@@ -176,6 +176,12 @@ Entregado en las últimas sesiones:
   cambio, evolución de 6 meses, dona de distribución, tablas de gasto e
   ingreso y los hallazgos de F-10. Se comparte como texto y como **imagen PNG**
   (`html-to-image`, cargado en diferido: comparte el archivo o lo descarga).
+- **F-23 · suscripciones**: `lib/finance/subscription-detector.ts` (cobros
+  mensuales repetidos: mismo comercio normalizado, intervalo 25–35 días y monto
+  estable) + `/api/finance/subscriptions/detect` y `/dismiss` + cápsula en
+  Análisis. Al crear se elige gasto / ingreso / transferencia y se reusa
+  `POST /api/recurring`. El descarte vive en `subscription_suggestion_dismissals`
+  (base, no dispositivo) para que valga en todos los equipos.
 
 **Pendiente, en este orden:**
 
@@ -245,7 +251,7 @@ Después, en el orden del mapa:
 |---|---|---|
 | 1 | ✅ `F-10` Insights | Hecho: 6 hallazgos accionables en Análisis (`lib/finance/insights.ts`) |
 | 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
-| 3 | `F-23` Detección de suscripciones | |
+| 3 | ✅ `F-23` Suscripciones | Hecho: cápsula en Análisis con candidatos detectados; crea el recurrente eligiendo gasto/ingreso/transferencia; descarte en base |
 | 4 | `F-21` Chat IA con acciones | El puente `/api/aura/tools` ya existe |
 | 5 | `F-30` Privacidad de montos | |
 | 6 | `F-16` PIN / biometría | El plugin nativo ya está |
