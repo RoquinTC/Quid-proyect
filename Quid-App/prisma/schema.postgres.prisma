@@ -74,6 +74,7 @@ model User {
   achievements        AchievementProgress[]
   pendingAuraActions  PendingAuraAction[]
   healthAiReport      HealthAiReport?
+  subscriptionSuggestionDismissals SubscriptionSuggestionDismissal[]
 }
 
 // ============================================
@@ -1700,4 +1701,24 @@ model InboxRule {
 
   @@index([userId, active, priority])
   @@map("inbox_rules")
+}
+
+// ============================================
+// FINANZAS — SUGERENCIAS DE SUSCRIPCIÓN (F-23)
+// ============================================
+
+// Descarte de una sugerencia detectada desde el historial.
+// Vive en la base y no en el dispositivo a propósito: una sugerencia
+// descartada en el portátil no debe reaparecer en el teléfono.
+model SubscriptionSuggestionDismissal {
+  id          String   @id @default(cuid())
+  userId      String
+  // Comercio normalizado; es la identidad de la sugerencia.
+  merchantKey String
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, merchantKey])
+  @@map("subscription_suggestion_dismissals")
 }

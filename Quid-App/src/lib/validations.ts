@@ -304,7 +304,7 @@ export const installmentUpdateSchema = z.object({
 export const recurringCreateSchema = z.object({
   description: z.string().min(1, "La descripción es obligatoria"),
   amount: z.number().positive("El monto debe ser positivo"),
-  type: z.enum(["expense", "transfer"]).optional().default("expense"),
+  type: z.enum(["expense", "transfer", "income"]).optional().default("expense"),
   accountId: z.string().nullable().optional(),
   subAccountId: z.string().nullable().optional(),
   debtId: z.string().nullable().optional(),

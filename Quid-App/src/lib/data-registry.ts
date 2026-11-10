@@ -172,6 +172,9 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
 
   // ── Finanzas: recurrentes y nómina ──────────────────────────────────────
   { model: "RecurringPayment", table: "recurring_payments", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  // F-23 · Descartes de sugerencias de suscripción. Viven en el servidor para
+  // que el descarte valga en todos los equipos; el cliente solo lee el filtro.
+  { model: "SubscriptionSuggestionDismissal", table: "subscription_suggestion_dismissals", scope: "user", strategy: "export", orphanAudit: true, hasUpdatedAt: false },
   { model: "PayrollGroup", table: "payroll_groups", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
 
   // ── Finanzas: ahorro e inversión ────────────────────────────────────────

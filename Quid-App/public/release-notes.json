@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.1.32",
+  "currentVersion": "1.1.33",
   "releases": [
+    {
+      "version": "1.1.33",
+      "date": "2026-11-10",
+      "title": "Quid 1.1.33",
+      "changes": [
+        "Posibles suscripciones en Analisis",
+        "Detecta cobros repetidos y ofrece crearlos",
+        "Elige si es gasto, ingreso o transferencia",
+        "No es: se recuerda en tu cuenta"
+      ]
+    },
     {
       "version": "1.1.32",
       "date": "2026-11-10",

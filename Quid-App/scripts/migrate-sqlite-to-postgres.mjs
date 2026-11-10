@@ -33,6 +33,8 @@ const modelPlan = [
   ["savingsGoalAccount", "SavingsGoalAccount"],
   ["savingsContribution", "SavingsContribution"],
   ["recurringPayment", "RecurringPayment"],
+  // F-23 · descartes de sugerencias de suscripción.
+  ["subscriptionSuggestionDismissal", "SubscriptionSuggestionDismissal"],
   ["cDT", "CDT"],
   ["vehicle", "Vehicle"],
   ["fuelLog", "FuelLog"],

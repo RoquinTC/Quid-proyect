@@ -30,6 +30,7 @@ import { TransactionForm } from "./transaction-form";
 import { InboxView } from "./inbox-view";
 import { InsightsPanel } from "./insights-panel";
 import { MonthlyReportLauncher } from "./monthly-report-launcher";
+import { SubscriptionSuggestions } from "./subscription-suggestions";
 import { ProjectionView } from "./projection-view";
 
 // Error boundary component to prevent a single tab crash from breaking the entire app
@@ -229,6 +230,8 @@ export function FinancePage() {
           <div className="space-y-3">
             {/* F-10 · Los hallazgos van primero: dicen qué cambió antes que los gráficos. */}
             <InsightsPanel />
+            {/* F-23 · Cápsula discreta: solo aparece si hay patrones repetidos. */}
+            <SubscriptionSuggestions />
             <MonthlyReportLauncher />
             <FinanceOverview mode="analysis" />
           </div>
