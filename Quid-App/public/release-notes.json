@@ -1,6 +1,14 @@
 {
-  "currentVersion": "1.1.30",
+  "currentVersion": "1.1.31",
   "releases": [
+    {
+      "version": "1.1.31",
+      "date": "2026-11-10",
+      "title": "Quid 1.1.31",
+      "changes": [
+        "Si la imagen falla, el aviso dice por que"
+      ]
+    },
     {
       "version": "1.1.30",
       "date": "2026-11-10",

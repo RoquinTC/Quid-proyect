@@ -447,7 +447,9 @@ export function MonthlyReportLauncher() {
       toast.success("Imagen descargada");
     } catch (error) {
       console.error("[Reporte] No se pudo generar la imagen:", error);
-      toast.error("No se pudo generar la imagen");
+      // Se muestra el motivo: en el teléfono no hay consola a mano.
+      const detail = error instanceof Error ? error.message : "error desconocido";
+      toast.error(`No se pudo generar la imagen (${detail.slice(0, 70)})`);
     } finally {
       setRenderingImage(false);
     }
