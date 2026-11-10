@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import {
   Loader2,
   Check,
   Sparkles,
+  ImageDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -311,6 +312,8 @@ export function MonthlyReportLauncher() {
   const [report, setReport] = useState<MonthlyReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [renderingImage, setRenderingImage] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -354,6 +357,66 @@ export function MonthlyReportLauncher() {
     await copy();
   };
 
+  /**
+   * Imagen del reporte.
+   *
+   * Se rasteriza el DOM con `html-to-image` (cargado en diferido: no entra en
+   * el arranque ni en el render del servidor). En el teléfono se comparte como
+   * archivo PNG; si el navegador no soporta compartir archivos, se descarga.
+   */
+  const saveImage = async () => {
+    const node = reportRef.current;
+    if (!node || !report || renderingImage) return;
+
+    setRenderingImage(true);
+    try {
+      const { toPng } = await import("html-to-image");
+      const bodyBackground = getComputedStyle(document.body).backgroundColor;
+      const background =
+        bodyBackground && bodyBackground !== "rgba(0, 0, 0, 0)"
+          ? bodyBackground
+          : document.documentElement.classList.contains("dark")
+            ? "#111827"
+            : "#ffffff";
+      const dataUrl = await toPng(node, {
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: background,
+      });
+
+      const blob = await (await fetch(dataUrl)).blob();
+      const filename = `quid-reporte-${report.month}.png`;
+      const file = new File([blob], filename, { type: "image/png" });
+
+      const canShareFiles =
+        typeof navigator !== "undefined" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare({ files: [file] });
+
+      if (canShareFiles) {
+        await navigator.share({
+          files: [file],
+          title: `Finanzas de ${report.label}`,
+          text: report.narrative,
+        });
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast.success("Imagen descargada");
+    } catch (error) {
+      console.error("[Reporte] No se pudo generar la imagen:", error);
+      toast.error("No se pudo generar la imagen");
+    } finally {
+      setRenderingImage(false);
+    }
+  };
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
@@ -378,6 +441,16 @@ export function MonthlyReportLauncher() {
         <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
           <SheetTitle className="text-sm font-bold">Reporte mensual</SheetTitle>
           <div className="flex items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 rounded-xl px-2 text-[11px] gap-1"
+              onClick={() => void saveImage()}
+              disabled={!report || renderingImage}
+            >
+              {renderingImage ? <Loader2 className="size-3 animate-spin" /> : <ImageDown className="size-3" />}
+              Imagen
+            </Button>
             <Button variant="outline" size="sm" className="h-7 rounded-xl px-2 text-[11px] gap-1" onClick={copy} disabled={!report}>
               {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
               Copiar
@@ -405,7 +478,11 @@ export function MonthlyReportLauncher() {
             </div>
           )}
 
-          {!loading && report && <ReportBody report={report} />}
+          {!loading && report && (
+            <div ref={reportRef} className="bg-white dark:bg-gray-900 p-1">
+              <ReportBody report={report} />
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>
