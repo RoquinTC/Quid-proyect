@@ -264,6 +264,92 @@ export const CREAR_PRESUPUESTO: ToolDefinition = {
   ],
 };
 
+export const CONSULTAR_CUOTAS: ToolDefinition = {
+  name: "consultar_cuotas",
+  kind: "read",
+  implemented: true,
+  description: "Lista las cuotas pendientes de tarjetas y créditos con su fecha de pago.",
+  parameters: [],
+};
+
+export const CONSULTAR_ABONOS: ToolDefinition = {
+  name: "consultar_abonos",
+  kind: "read",
+  implemented: true,
+  description: "Historial de abonos hechos a deudas.",
+  parameters: [],
+};
+
+export const CONSULTAR_NOMINA: ToolDefinition = {
+  name: "consultar_nomina",
+  kind: "read",
+  implemented: true,
+  description: "Nómina configurada (sueldo y periodicidad).",
+  parameters: [],
+};
+
+export const CONSULTAR_APORTES: ToolDefinition = {
+  name: "consultar_aportes",
+  kind: "read",
+  implemented: true,
+  description: "Aportes hechos a las metas de ahorro.",
+  parameters: [],
+};
+
+export const CONSULTAR_INVERSIONES: ToolDefinition = {
+  name: "consultar_inversiones",
+  kind: "read",
+  implemented: true,
+  description: "CDT y rendimientos de cuentas, con tasa y vencimiento.",
+  parameters: [],
+};
+
+export const CONSULTAR_TANQUEOS: ToolDefinition = {
+  name: "consultar_tanqueos",
+  kind: "read",
+  implemented: true,
+  description: "Historial de tanqueos con galones, kilómetros y consumo estimado.",
+  parameters: [
+    { name: "limit", type: "number", required: false, defaultValue: 10, description: "Cuántos devolver (1 a 50)." },
+  ],
+};
+
+export const CONSULTAR_MANTENIMIENTOS: ToolDefinition = {
+  name: "consultar_mantenimientos",
+  kind: "read",
+  implemented: true,
+  description: "Historial de mantenimientos por vehículo con costo y próximo vencimiento.",
+  parameters: [
+    { name: "limit", type: "number", required: false, defaultValue: 10, description: "Cuántos devolver (1 a 30)." },
+  ],
+};
+
+export const CONSULTAR_CATEGORIAS: ToolDefinition = {
+  name: "consultar_categorias",
+  kind: "read",
+  implemented: true,
+  description: "Categorías propias, grupos de categorías y cuántas reglas automáticas hay.",
+  parameters: [],
+};
+
+export const CONSULTAR_CAPTURAS: ToolDefinition = {
+  name: "consultar_capturas",
+  kind: "read",
+  implemented: true,
+  description: "Capturas por clasificar de la bandeja (SMS, correo, pegadas).",
+  parameters: [
+    { name: "onlyPending", type: "boolean", required: false, defaultValue: true, description: "Solo las pendientes." },
+  ],
+};
+
+export const CONSULTAR_ORDENES_MEDICAS: ToolDefinition = {
+  name: "consultar_ordenes_medicas",
+  kind: "read",
+  implemented: true,
+  description: "Órdenes médicas pendientes o con entrega parcial.",
+  parameters: [],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice
 // ─────────────────────────────────────────────────────────────────────────────
@@ -285,6 +371,16 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   CONSULTAR_VEHICULOS,
   CONSULTAR_DESPENSA,
   CONSULTAR_RESUMEN,
+  CONSULTAR_CUOTAS,
+  CONSULTAR_ABONOS,
+  CONSULTAR_NOMINA,
+  CONSULTAR_APORTES,
+  CONSULTAR_INVERSIONES,
+  CONSULTAR_TANQUEOS,
+  CONSULTAR_MANTENIMIENTOS,
+  CONSULTAR_CATEGORIAS,
+  CONSULTAR_CAPTURAS,
+  CONSULTAR_ORDENES_MEDICAS,
   CONSULTAR_MEDICAMENTOS,
   CONSULTAR_CITAS,
 ];

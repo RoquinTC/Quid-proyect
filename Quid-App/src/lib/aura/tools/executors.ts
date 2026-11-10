@@ -551,6 +551,323 @@ export async function consultarResumen(
   };
 }
 
+export async function consultarCuotas(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const installments = await db.installment.findMany({
+    where: { debt: { userId: ctx.userId }, isPaid: false },
+    include: { debt: { select: { name: true } } },
+    orderBy: { nextPaymentDate: "asc" },
+    take: 40,
+  });
+
+  if (installments.length === 0) {
+    return { text: "No tienes cuotas pendientes de tarjeta o crédito.", data: { count: 0 } };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  const lines = installments.map((entry) => {
+    return `• ${entry.description} (${entry.debt.name}): cuota ${entry.currentInstallment}/${entry.totalInstallments} de ${COP.format(Number(entry.installmentAmount))} — paga el ${format.format(entry.nextPaymentDate)}`;
+  });
+
+  const monthly = installments.reduce((sum, entry) => sum + Number(entry.installmentAmount), 0);
+
+  return {
+    text: [`Cuotas pendientes (${installments.length}) — ${COP.format(monthly)} al mes:`, ...lines].join("\n"),
+    data: { count: installments.length, monthly },
+  };
+}
+
+export async function consultarAbonos(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const abonos = await db.abono.findMany({
+    where: { userId: ctx.userId, isReversed: false },
+    include: { debt: { select: { name: true } } },
+    orderBy: { date: "desc" },
+    take: 20,
+  });
+
+  if (abonos.length === 0) {
+    return { text: "No tienes abonos registrados a deudas.", data: { count: 0 } };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  const lines = abonos.map(
+    (abono) =>
+      `• ${format.format(abono.date)} · ${abono.debt.name}: ${COP.format(Number(abono.totalAmount))}`
+  );
+  const total = abonos.reduce((sum, abono) => sum + Number(abono.totalAmount), 0);
+
+  return {
+    text: [`Últimos abonos a deudas (${abonos.length}) — ${COP.format(total)}:`, ...lines].join("\n"),
+    data: { count: abonos.length, total },
+  };
+}
+
+export async function consultarNomina(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const groups = await db.payrollGroup.findMany({
+    where: { userId: ctx.userId, isActive: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (groups.length === 0) {
+    return { text: "No tienes nómina configurada.", data: { count: 0 } };
+  }
+
+  const lines = groups.map((group) => {
+    const frequency =
+      group.frequency === "biweekly" ? "quincenal" : group.frequency === "weekly" ? "semanal" : "mensual";
+    return `• ${group.description}: ${COP.format(Number(group.totalAmount))} ${frequency} (${group.category})`;
+  });
+
+  return {
+    text: [`Nómina (${groups.length}):`, ...lines].join("\n"),
+    data: { count: groups.length },
+  };
+}
+
+export async function consultarAportes(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const contributions = await db.savingsContribution.findMany({
+    where: { goal: { userId: ctx.userId } },
+    include: { goal: { select: { name: true } } },
+    orderBy: { date: "desc" },
+    take: 20,
+  });
+
+  if (contributions.length === 0) {
+    return { text: "No hay aportes a metas registrados.", data: { count: 0 } };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short" });
+  const lines = contributions.map(
+    (entry) =>
+      `• ${format.format(entry.date)} · ${entry.goal.name}: ${COP.format(Number(entry.amount))}${entry.description ? ` (${entry.description})` : ""}`
+  );
+  const total = contributions.reduce((sum, entry) => sum + Number(entry.amount), 0);
+
+  return {
+    text: [`Aportes a metas (${contributions.length}) — ${COP.format(total)}:`, ...lines].join("\n"),
+    data: { count: contributions.length, total },
+  };
+}
+
+export async function consultarInversiones(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const [cdts, yields] = await Promise.all([
+    db.cDT.findMany({ where: { userId: ctx.userId }, orderBy: { endDate: "asc" } }),
+    db.yieldRecord.findMany({
+      where: { account: { userId: ctx.userId } },
+      include: { account: { select: { name: true } } },
+      orderBy: { month: "desc" },
+      take: 6,
+    }),
+  ]);
+
+  if (cdts.length === 0 && yields.length === 0) {
+    return { text: "No tienes CDT ni rendimientos registrados.", data: { cdts: 0, yields: 0 } };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  const lines: string[] = [];
+
+  for (const cdt of cdts) {
+    lines.push(
+      `• CDT ${cdt.bank}: ${COP.format(Number(cdt.amount))} al ${Number(cdt.effectiveRate)} % EA, ${cdt.status === "active" ? "vence" : cdt.status} ${format.format(cdt.endDate)}${Number(cdt.interestEarned) > 0 ? ` — interés ${COP.format(Number(cdt.interestEarned))}` : ""}`
+    );
+  }
+
+  for (const record of yields) {
+    const month = format.format(record.month);
+    const value = record.actualYield ?? record.projectedYield;
+    lines.push(
+      `• Rendimiento ${month}${record.account ? ` (${record.account.name})` : ""}: ${COP.format(Number(value))} — ${Number(record.yieldPercentage)} %${record.isConfirmed ? " confirmado" : " proyectado"}`
+    );
+  }
+
+  return {
+    text: [`Inversiones — ${cdts.length} CDT, ${yields.length} rendimiento(s):`, ...lines].join("\n"),
+    data: { cdts: cdts.length, yields: yields.length },
+  };
+}
+
+export async function consultarTanqueos(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const limitRaw = typeof args.limit === "number" ? args.limit : 10;
+  const limit = Math.min(Math.max(Math.round(limitRaw), 1), 50);
+
+  const logs = await db.fuelLog.findMany({
+    where: { vehicle: { userId: ctx.userId } },
+    include: { vehicle: { select: { name: true, currentKm: true } } },
+    orderBy: { date: "desc" },
+    take: limit,
+  });
+
+  if (logs.length === 0) {
+    return { text: "No hay tanqueos registrados.", data: { count: 0 } };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short" });
+  const lines = logs.map((log) => {
+    const efficiency =
+      log.gallons > 0 && log.km > 0 ? ` · ${Math.round(log.km / log.gallons)} km/gal acumulado` : "";
+    return `• ${format.format(log.date)} · ${log.vehicle.name}: ${COP.format(Number(log.amount))}, ${log.gallons} gal, ${Math.round(log.km)} km${efficiency}`;
+  });
+
+  const total = logs.reduce((sum, log) => sum + Number(log.amount), 0);
+
+  return {
+    text: [`Últimos ${logs.length} tanqueo(s) — ${COP.format(total)}:`, ...lines].join("\n"),
+    data: { count: logs.length, total },
+  };
+}
+
+export async function consultarMantenimientos(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const limitRaw = typeof args.limit === "number" ? args.limit : 10;
+  const limit = Math.min(Math.max(Math.round(limitRaw), 1), 30);
+
+  const records = await db.maintenanceRecord.findMany({
+    where: { vehicle: { userId: ctx.userId } },
+    include: { vehicle: { select: { name: true } } },
+    orderBy: { date: "desc" },
+    take: limit,
+  });
+
+  if (records.length === 0) {
+    return { text: "No hay mantenimientos registrados.", data: { count: 0 } };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  const lines = records.map((record) => {
+    const next = [
+      record.nextDueKm ? `próximo a los ${Math.round(record.nextDueKm)} km` : null,
+      record.nextDueDate ? `o el ${format.format(record.nextDueDate)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return `• ${format.format(record.date)} · ${record.vehicle.name}: ${record.description} (${COP.format(Number(record.cost))}, ${Math.round(record.km)} km)${next ? ` — ${next}` : ""}`;
+  });
+
+  const total = records.reduce((sum, record) => sum + Number(record.cost), 0);
+
+  return {
+    text: [`Mantenimientos (${records.length}) — ${COP.format(total)}:`, ...lines].join("\n"),
+    data: { count: records.length, total },
+  };
+}
+
+export async function consultarCategorias(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const [categories, groups, rules] = await Promise.all([
+    db.category.findMany({
+      where: { userId: ctx.userId, hidden: false },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
+    }),
+    db.categoryGroup.findMany({
+      where: { userId: ctx.userId },
+      include: { members: true },
+      orderBy: { name: "asc" },
+    }),
+    db.categoryRule.count({ where: { userId: ctx.userId } }),
+  ]);
+
+  if (categories.length === 0 && groups.length === 0) {
+    return { text: "No hay categorías propias ni grupos configurados.", data: { categories: 0 } };
+  }
+
+  const expenses = categories.filter((category) => category.type === "expense").map((c) => c.name);
+  const incomes = categories.filter((category) => category.type === "income").map((c) => c.name);
+
+  const lines: string[] = [];
+  if (expenses.length > 0) lines.push(`• Gastos (${expenses.length}): ${expenses.slice(0, 25).join(", ")}`);
+  if (incomes.length > 0) lines.push(`• Ingresos (${incomes.length}): ${incomes.slice(0, 25).join(", ")}`);
+  for (const group of groups) {
+    lines.push(`• Grupo ${group.name} (${group.members.length} categorías)`);
+  }
+  lines.push(`• Reglas automáticas activas: ${rules}`);
+
+  return {
+    text: [`Categorías y grupos:`, ...lines].join("\n"),
+    data: { categories: categories.length, groups: groups.length, rules },
+  };
+}
+
+export async function consultarCapturas(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const onlyPending = args.onlyPending !== false;
+
+  const items = await db.inboxItem.findMany({
+    where: { userId: ctx.userId, ...(onlyPending ? { status: "pending" } : {}) },
+    orderBy: { createdAt: "desc" },
+    take: 15,
+  });
+
+  if (items.length === 0) {
+    return {
+      text: onlyPending ? "No tienes capturas pendientes." : "No hay capturas registradas.",
+      data: { count: 0 },
+    };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short" });
+  const lines = items.map((item) => {
+    const amount = item.parsedAmount ? ` ${COP.format(Number(item.parsedAmount))}` : "";
+    const merchant = item.parsedMerchant ? ` — ${item.parsedMerchant}` : "";
+    const text = item.rawText.length > 70 ? `${item.rawText.slice(0, 70)}…` : item.rawText;
+    return `• ${format.format(item.createdAt)}${amount}${merchant}: ${text}`;
+  });
+
+  return {
+    text: [`Capturas por clasificar (${items.length}):`, ...lines].join("\n"),
+    data: { count: items.length },
+  };
+}
+
+export async function consultarOrdenesMedicas(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const orders = await db.medicalOrder.findMany({
+    where: { userId: ctx.userId, status: { in: ["pending", "partial"] } },
+    orderBy: { issueDate: "desc" },
+    take: 15,
+  });
+
+  if (orders.length === 0) {
+    return { text: "No tienes órdenes médicas pendientes.", data: { count: 0 } };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short" });
+  const lines = orders.map((order) => {
+    const claim = order.nextClaimDate ? ` · reclamar el ${format.format(order.nextClaimDate)}` : "";
+    return `• ${order.title}${order.orderNumber ? ` (${order.orderNumber})` : ""} — ${order.status === "partial" ? "entrega parcial" : "pendiente"}${claim}`;
+  });
+
+  return {
+    text: [`Órdenes médicas pendientes (${orders.length}):`, ...lines].join("\n"),
+    data: { count: orders.length },
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
@@ -571,6 +888,16 @@ const READ_EXECUTORS: Record<
   consultar_vehiculos: consultarVehiculos,
   consultar_despensa: consultarDespensa,
   consultar_resumen: consultarResumen,
+  consultar_cuotas: consultarCuotas,
+  consultar_abonos: consultarAbonos,
+  consultar_nomina: consultarNomina,
+  consultar_aportes: consultarAportes,
+  consultar_inversiones: consultarInversiones,
+  consultar_tanqueos: consultarTanqueos,
+  consultar_mantenimientos: consultarMantenimientos,
+  consultar_categorias: consultarCategorias,
+  consultar_capturas: consultarCapturas,
+  consultar_ordenes_medicas: consultarOrdenesMedicas,
 };
 
 export function getReadExecutor(name: string) {
