@@ -50,7 +50,7 @@ No empieces por los componentes grandes sin leer lo anterior:
 cd Quid-App
 npm install
 docker compose up --build -d quid-app     # local en http://localhost:3000
-npx vitest run                            # 781 pruebas
+npx vitest run                            # 785 pruebas
 npx tsc --noEmit                          # tipos
 ```
 
@@ -151,7 +151,7 @@ git add .                    # NO — arrastra docs/
 |---|---|
 | Versión producción | **1.1.22** |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
-| Pruebas | 781 en 47 archivos |
+| Pruebas | 785 en 47 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
 
@@ -182,6 +182,14 @@ Entregado en las últimas sesiones:
   Análisis. Al crear se elige gasto / ingreso / transferencia y se reusa
   `POST /api/recurring`. El descarte vive en `subscription_suggestion_dismissals`
   (base, no dispositivo) para que valga en todos los equipos.
+- **Aura con más herramientas (base de F-21)**: 16 herramientas en
+  `lib/aura/tools/` (12 lectura, 4 escritura). Lectura: movimientos,
+  presupuestos, deudas, metas, pagos pendientes, vehículos, despensa y resumen
+  mensual, además de gastos, saldo, medicamentos y citas. Escritura:
+  transacción, tanqueo, **transferencia** y **presupuesto**, todas por propuesta
+  + confirmación. El `userId` lo resuelve el servidor (sesión o `x-aura-token` +
+  `telegramId`) y nunca se acepta del cliente; hay test de aislamiento entre
+  usuarios.
 
 **Pendiente, en este orden:**
 
@@ -252,7 +260,7 @@ Después, en el orden del mapa:
 | 1 | ✅ `F-10` Insights | Hecho: 6 hallazgos accionables en Análisis (`lib/finance/insights.ts`) |
 | 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
 | 3 | ✅ `F-23` Suscripciones | Hecho: cápsula en Análisis con candidatos detectados; crea el recurrente eligiendo gasto/ingreso/transferencia; descarte en base |
-| 4 | `F-21` Chat IA con acciones | El puente `/api/aura/tools` ya existe |
+| 4 | 🔄 `F-21` Chat IA con acciones | **Herramientas listas**: 12 de lectura + 4 de escritura en `lib/aura/tools/`, todas con `userId` resuelto en el servidor. Falta la conversación que las encadene |
 | 5 | `F-30` Privacidad de montos | |
 | 6 | `F-16` PIN / biometría | El plugin nativo ya está |
 | 7 | `F-17` Export + respaldo cifrado | |
