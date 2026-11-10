@@ -174,8 +174,8 @@ Entregado en las últimas sesiones:
 - **F-09 · reporte mensual**: `lib/finance/monthly-report.ts` (modelo y
   narrativa) + `/api/finance/monthly-report` + hoja en Análisis. KPIs con
   cambio, evolución de 6 meses, dona de distribución, tablas de gasto e
-  ingreso y los hallazgos de F-10. Compartir/copiar como texto.
-  **Pendiente:** exportar a imagen o PDF (requiere rasterizar el DOM).
+  ingreso y los hallazgos de F-10. Se comparte como texto y como **imagen PNG**
+  (`html-to-image`, cargado en diferido: comparte el archivo o lo descarga).
 
 **Pendiente, en este orden:**
 
@@ -244,7 +244,7 @@ Después, en el orden del mapa:
 | | Idea | Nota |
 |---|---|---|
 | 1 | ✅ `F-10` Insights | Hecho: 6 hallazgos accionables en Análisis (`lib/finance/insights.ts`) |
-| 2 | ✅ `F-09` Reporte mensual | Hecho: reporte en Análisis con KPIs, 6 meses, dona, tablas y narrativa; copiar/compartir texto. Imagen/PDF pendiente |
+| 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
 | 3 | `F-23` Detección de suscripciones | |
 | 4 | `F-21` Chat IA con acciones | El puente `/api/aura/tools` ya existe |
 | 5 | `F-30` Privacidad de montos | |
