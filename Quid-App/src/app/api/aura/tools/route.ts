@@ -298,5 +298,25 @@ export function buildProposalDescription(
     return parts.join("\n");
   }
 
+  if (tool === "registrar_transferencia") {
+    const amount = typeof args.amount === "number" ? COP.format(args.amount) : "sin valor";
+    return [
+      `Voy a transferir ${amount}:`,
+      `• Desde: ${(args.fromAccountName as string) ?? "sin especificar"}`,
+      `• Hacia: ${(args.toAccountName as string) ?? "sin especificar"}`,
+      `• Fecha: ${(args.dateText as string) ?? "hoy"}`,
+    ].join("\n");
+  }
+
+  if (tool === "crear_presupuesto") {
+    const amount = typeof args.amount === "number" ? COP.format(args.amount) : "sin valor";
+    return [
+      `Voy a fijar este presupuesto:`,
+      `• Categoría: ${(args.category as string) ?? "sin especificar"}`,
+      `• Límite: ${amount}`,
+      `• Tipo: ${args.type === "income" ? "ingreso" : "gasto"}`,
+    ].join("\n");
+  }
+
   return `Voy a ejecutar la acción "${tool}" con estos datos:\n${JSON.stringify(args, null, 2)}`;
 }

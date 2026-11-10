@@ -18,6 +18,7 @@
 
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
+import { applyBalanceDelta } from "@/lib/finance-ledger";
 import { createCreditCardPurchaseFromAura } from "@/lib/aura/index";
 import type { ExecutionContext, ExecutionResult } from "./executors";
 
@@ -329,6 +330,149 @@ export async function executeRegistrarTanqueo(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// registrar_transferencia
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeRegistrarTransferencia(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const fromName = typeof args.fromAccountName === "string" ? args.fromAccountName : "";
+  const toName = typeof args.toAccountName === "string" ? args.toAccountName : "";
+  const amount = typeof args.amount === "number" ? args.amount : null;
+  const notes = typeof args.notes === "string" ? args.notes : null;
+  const date = resolveRecordDate(args.dateText);
+
+  if (!amount || amount <= 0) {
+    throw new Error("Falta el valor de la transferencia, o no es un monto válido.");
+  }
+
+  const accounts = await listAccounts(ctx.userId);
+  const source = findByMention(fromName, accounts);
+  const destination = findByMention(toName, accounts);
+
+  if (!source) throw new Error(`No encontré ninguna cuenta de origen que coincida con "${fromName}".`);
+  if (!destination) throw new Error(`No encontré ninguna cuenta de destino que coincida con "${toName}".`);
+  if (source.id === destination.id) {
+    throw new Error("El origen y el destino de la transferencia no pueden ser el mismo lugar.");
+  }
+
+  const description = notes?.trim() || `Transferencia a ${destination.name}`;
+
+  const result = await db.$transaction(async (tx) => {
+    const created = await tx.transaction.create({
+      data: {
+        userId: ctx.userId,
+        type: "transfer",
+        amount,
+        description,
+        accountId: source.kind === "subAccount" ? source.parentAccountId! : source.id,
+        subAccountId: source.kind === "subAccount" ? source.id : null,
+        date,
+        sourceModule: "aura",
+        notes: "Transferencia registrada desde Aura",
+        excludeFromBudget: true,
+      },
+    });
+
+    await applyBalanceDelta(tx, {
+      accountId: source.kind === "subAccount" ? source.parentAccountId! : source.id,
+      subAccountId: source.kind === "subAccount" ? source.id : null,
+      amount: -amount,
+    });
+
+    const counterpart = await tx.transaction.create({
+      data: {
+        userId: ctx.userId,
+        type: "income",
+        amount,
+        description: `Transferencia recibida: ${description}`,
+        accountId: destination.kind === "subAccount" ? destination.parentAccountId! : destination.id,
+        subAccountId: destination.kind === "subAccount" ? destination.id : null,
+        category: "Otros",
+        date,
+        notes: `Transferencia desde ${source.name}`,
+        excludeFromBudget: true,
+        relatedTransactionId: created.id,
+      },
+    });
+
+    await tx.transaction.update({
+      where: { id: created.id },
+      data: { relatedTransactionId: counterpart.id },
+    });
+
+    await applyBalanceDelta(tx, {
+      accountId: destination.kind === "subAccount" ? destination.parentAccountId! : destination.id,
+      subAccountId: destination.kind === "subAccount" ? destination.id : null,
+      amount,
+    });
+
+    return created;
+  });
+
+  return {
+    text: `Listo, moví ${COP.format(amount)} de ${source.name} a ${destination.name}.`,
+    data: {
+      transactionId: result.id,
+      from: source.id,
+      to: destination.id,
+      amount,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_presupuesto
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearPresupuesto(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const category = typeof args.category === "string" ? args.category.trim() : "";
+  const amount = typeof args.amount === "number" ? args.amount : null;
+  const type = args.type === "income" ? "income" : "expense";
+  const period = typeof args.period === "string" ? args.period : "monthly";
+
+  if (!category) throw new Error("Falta la categoría del presupuesto.");
+  if (!amount || amount <= 0) throw new Error("Falta el monto del presupuesto, o no es válido.");
+
+  // No hay restricción única en la tabla: se busca a mano para no duplicar.
+  const existing = await db.budget.findFirst({
+    where: { userId: ctx.userId, type, category, subCategory: null },
+  });
+
+  if (existing) {
+    const updated = await db.budget.update({
+      where: { id: existing.id },
+      data: { amount, period },
+    });
+
+    return {
+      text: `Actualicé el presupuesto de ${category}: ${COP.format(amount)} (${period === "monthly" ? "mensual" : period === "weekly" ? "semanal" : "anual"}). Lo ejecutado no cambia.`,
+      data: { budgetId: updated.id, updated: true, amount },
+    };
+  }
+
+  const created = await db.budget.create({
+    data: {
+      userId: ctx.userId,
+      type,
+      category,
+      amount,
+      period,
+      spent: 0,
+    },
+  });
+
+  return {
+    text: `Creé el presupuesto de ${category}: ${COP.format(amount)} (${period === "monthly" ? "mensual" : period === "weekly" ? "semanal" : "anual"}).`,
+    data: { budgetId: created.id, updated: false, amount },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -338,6 +482,8 @@ const WRITE_EXECUTORS: Record<
 > = {
   registrar_transaccion: executeRegistrarTransaccion,
   registrar_tanqueo: executeRegistrarTanqueo,
+  registrar_transferencia: executeRegistrarTransferencia,
+  crear_presupuesto: executeCrearPresupuesto,
 };
 
 /**

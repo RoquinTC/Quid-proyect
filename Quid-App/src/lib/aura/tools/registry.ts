@@ -157,6 +157,113 @@ export const CONSULTAR_CITAS: ToolDefinition = {
   ],
 };
 
+export const CONSULTAR_MOVIMIENTOS: ToolDefinition = {
+  name: "consultar_movimientos",
+  kind: "read",
+  implemented: true,
+  description:
+    "Lista los movimientos más recientes (ingresos, gastos y transferencias) con cuenta, categoría y fecha.",
+  parameters: [
+    { name: "period", type: "enum", required: false, values: ["hoy", "semana", "mes", "año", "todo"], defaultValue: "mes", description: "Período a consultar." },
+    { name: "type", type: "enum", required: false, values: ["todos", "income", "expense", "transfer"], defaultValue: "todos", description: "Tipo de movimiento." },
+    { name: "category", type: "string", required: false, description: "Limita a una categoría." },
+    { name: "search", type: "string", required: false, description: "Texto a buscar en la descripción." },
+    { name: "limit", type: "number", required: false, defaultValue: 15, description: "Cuántos devolver (1 a 50)." },
+  ],
+};
+
+export const CONSULTAR_PRESUPUESTOS: ToolDefinition = {
+  name: "consultar_presupuestos",
+  kind: "read",
+  implemented: true,
+  description: "Devuelve cada presupuesto con lo ejecutado, el límite y cuánto queda.",
+  parameters: [],
+};
+
+export const CONSULTAR_DEUDAS: ToolDefinition = {
+  name: "consultar_deudas",
+  kind: "read",
+  implemented: true,
+  description: "Lista las deudas con saldo, cuota mensual y días de corte y pago.",
+  parameters: [],
+};
+
+export const CONSULTAR_METAS: ToolDefinition = {
+  name: "consultar_metas",
+  kind: "read",
+  implemented: true,
+  description: "Lista las metas de ahorro activas con su progreso y fecha límite.",
+  parameters: [],
+};
+
+export const CONSULTAR_PAGOS_RECURRENTES: ToolDefinition = {
+  name: "consultar_pagos_recurrentes",
+  kind: "read",
+  implemented: true,
+  description: "Lista los pagos recurrentes pendientes de los próximos días con sus totales.",
+  parameters: [
+    { name: "days", type: "number", required: false, defaultValue: 30, description: "Ventana en días (1 a 365)." },
+    { name: "type", type: "enum", required: false, values: ["todos", "expense", "income", "transfer"], defaultValue: "todos", description: "Tipo de pago." },
+  ],
+};
+
+export const CONSULTAR_VEHICULOS: ToolDefinition = {
+  name: "consultar_vehiculos",
+  kind: "read",
+  implemented: true,
+  description: "Lista los vehículos con odómetro, recordatorios activos y documentos por vencer.",
+  parameters: [],
+};
+
+export const CONSULTAR_DESPENSA: ToolDefinition = {
+  name: "consultar_despensa",
+  kind: "read",
+  implemented: true,
+  description: "Lista los productos de la despensa y marca los que están por debajo del mínimo.",
+  parameters: [
+    { name: "onlyLow", type: "boolean", required: false, defaultValue: false, description: "Solo los que están bajo el mínimo." },
+  ],
+};
+
+export const CONSULTAR_RESUMEN: ToolDefinition = {
+  name: "consultar_resumen",
+  kind: "read",
+  implemented: true,
+  description: "Devuelve ingresos, gastos y balance por mes de los últimos meses.",
+  parameters: [
+    { name: "months", type: "number", required: false, defaultValue: 6, description: "Cuántos meses hacia atrás (1 a 12)." },
+  ],
+};
+
+export const REGISTRAR_TRANSFERENCIA: ToolDefinition = {
+  name: "registrar_transferencia",
+  kind: "write",
+  implemented: true,
+  description:
+    "Mueve plata entre dos cuentas o bolsillos del usuario. Los saldos y el movimiento se registran juntos.",
+  parameters: [
+    { name: "fromAccountName", type: "string", required: true, description: "Cuenta o bolsillo de origen." },
+    { name: "toAccountName", type: "string", required: true, description: "Cuenta o bolsillo de destino." },
+    { name: "amount", type: "number", required: true, description: "Valor a transferir, en pesos." },
+    { name: "dateText", type: "string", required: false, description: 'Fecha en lenguaje natural: "hoy", "ayer".' },
+    { name: "notes", type: "string", required: false, description: "Nota opcional del movimiento." },
+  ],
+};
+
+export const CREAR_PRESUPUESTO: ToolDefinition = {
+  name: "crear_presupuesto",
+  kind: "write",
+  implemented: true,
+  description:
+    "Crea o actualiza el presupuesto de una categoría. Si ya existe, cambia el límite sin tocar lo ejecutado.",
+  parameters: [
+    { name: "category", type: "string", required: true, description: "Categoría del presupuesto." },
+    { name: "amount", type: "number", required: true, description: "Límite mensual, en pesos." },
+    { name: "type", type: "enum", required: false, values: ["expense", "income"], defaultValue: "expense", description: "Si el presupuesto es de gasto o de ingreso." },
+    { name: "period", type: "enum", required: false, values: ["monthly", "weekly", "yearly"], defaultValue: "monthly", description: "Periodicidad del presupuesto." },
+  ],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,9 +272,19 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   // Escritura
   REGISTRAR_TRANSACCION,
   REGISTRAR_TANQUEO,
+  REGISTRAR_TRANSFERENCIA,
+  CREAR_PRESUPUESTO,
   // Lectura
   CONSULTAR_GASTOS,
   CONSULTAR_SALDO,
+  CONSULTAR_MOVIMIENTOS,
+  CONSULTAR_PRESUPUESTOS,
+  CONSULTAR_DEUDAS,
+  CONSULTAR_METAS,
+  CONSULTAR_PAGOS_RECURRENTES,
+  CONSULTAR_VEHICULOS,
+  CONSULTAR_DESPENSA,
+  CONSULTAR_RESUMEN,
   CONSULTAR_MEDICAMENTOS,
   CONSULTAR_CITAS,
 ];

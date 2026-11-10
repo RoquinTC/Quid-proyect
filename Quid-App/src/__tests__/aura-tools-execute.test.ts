@@ -242,3 +242,120 @@ describe("ejecutores de lectura", () => {
     expect(result.text).toContain("No tienes medicamentos");
   });
 });
+
+describe("escrituras nuevas", () => {
+  it("registrar_transferencia mueve los dos saldos y deja el par vinculado", async () => {
+    const before = await db.account.findUnique({
+      where: { id: accountId },
+      select: { balance: true },
+    });
+    const beforeSub = await db.subAccount.findUnique({
+      where: { id: subAccountId },
+      select: { balance: true },
+    });
+
+    const result = await executeConfirmedTool(
+      "registrar_transferencia",
+      { fromAccountName: "Cuenta Principal", toAccountName: "Bolsillo Mercado", amount: 25000 },
+      { userId }
+    );
+
+    const after = await db.account.findUnique({
+      where: { id: accountId },
+      select: { balance: true },
+    });
+    const afterSub = await db.subAccount.findUnique({
+      where: { id: subAccountId },
+      select: { balance: true },
+    });
+
+    expect(Number(after!.balance) - Number(before!.balance)).toBe(-25000);
+    expect(Number(afterSub!.balance) - Number(beforeSub!.balance)).toBe(25000);
+
+    const origin = await db.transaction.findUnique({
+      where: { id: String(result.data!.transactionId) },
+    });
+    expect(origin!.type).toBe("transfer");
+    expect(origin!.relatedTransactionId).toBeTruthy();
+
+    const counterpart = await db.transaction.findUnique({
+      where: { id: origin!.relatedTransactionId! },
+    });
+    expect(counterpart!.type).toBe("income");
+    expect(counterpart!.relatedTransactionId).toBe(origin!.id);
+  });
+
+  it("registrar_transferencia rechaza mover a la misma cuenta", async () => {
+    await expect(
+      executeConfirmedTool(
+        "registrar_transferencia",
+        { fromAccountName: "Cuenta Principal", toAccountName: "Cuenta Principal", amount: 1000 },
+        { userId }
+      )
+    ).rejects.toThrow(/mismo lugar/i);
+  });
+
+  it("crear_presupuesto crea y luego actualiza sin tocar lo ejecutado", async () => {
+    const first = await executeConfirmedTool(
+      "crear_presupuesto",
+      { category: "Mascotas", amount: 200000 },
+      { userId }
+    );
+    expect(first.data!.updated).toBe(false);
+
+    const created = await db.budget.findFirst({
+      where: { userId, category: "Mascotas", subCategory: null },
+    });
+    expect(Number(created!.amount)).toBe(200000);
+
+    const second = await executeConfirmedTool(
+      "crear_presupuesto",
+      { category: "Mascotas", amount: 350000 },
+      { userId }
+    );
+    expect(second.data!.updated).toBe(true);
+
+    const updated = await db.budget.findUnique({ where: { id: created!.id } });
+    expect(Number(updated!.amount)).toBe(350000);
+    expect(Number(updated!.spent)).toBe(Number(created!.spent));
+  });
+});
+
+describe("aislamiento entre usuarios", () => {
+  it("las lecturas de un usuario no ven datos de otro", async () => {
+    const other = await db.user.create({
+      data: { email: "aura-otro@quid.local", name: "Otra cuenta", password: "no-usar" },
+    });
+
+    try {
+      const otherAccount = await db.account.create({
+        data: { userId: other.id, name: "Cuenta Ajena", type: "bank", balance: 0 },
+      });
+
+      await db.transaction.create({
+        data: {
+          userId: other.id,
+          type: "expense",
+          amount: 999999,
+          description: "Secreto de otra cuenta",
+          date: new Date(),
+          accountId: otherAccount.id,
+          category: "Otros",
+        },
+      });
+
+      const movimientos = await getReadExecutor("consultar_movimientos")!(
+        { period: "todo", limit: 50 },
+        { userId }
+      );
+      expect(movimientos.text).not.toContain("Secreto de otra cuenta");
+
+      const resumen = await getReadExecutor("consultar_resumen")!({ months: 12 }, { userId });
+      expect(resumen.text).not.toContain("Cuenta Ajena");
+    } finally {
+      await db.transaction.deleteMany({ where: { userId: other.id } });
+      await db.account.deleteMany({ where: { userId: other.id } });
+      await db.user.delete({ where: { id: other.id } });
+    }
+  });
+});
