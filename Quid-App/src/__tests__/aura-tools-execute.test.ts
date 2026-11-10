@@ -319,6 +319,61 @@ describe("escrituras nuevas", () => {
     expect(Number(updated!.amount)).toBe(350000);
     expect(Number(updated!.spent)).toBe(Number(created!.spent));
   });
+
+  it("crear_cuenta registra saldo y rechaza nombres repetidos", async () => {
+    const result = await executeConfirmedTool(
+      "crear_cuenta",
+      { name: "Cuenta Aura", type: "savings", balance: 50000 },
+      { userId }
+    );
+    expect(result.data!.name).toBe("Cuenta Aura");
+
+    const created = await db.account.findFirst({ where: { userId, name: "Cuenta Aura" } });
+    expect(Number(created!.balance)).toBe(50000);
+    expect(created!.type).toBe("savings");
+
+    await expect(
+      executeConfirmedTool("crear_cuenta", { name: "cuenta aura" }, { userId })
+    ).rejects.toThrow(/Ya tienes una cuenta/i);
+  });
+
+  it("crear_deuda arranca con el saldo igual al total", async () => {
+    const result = await executeConfirmedTool(
+      "crear_deuda",
+      { name: "TC Aura", type: "credit_card", totalAmount: 500000, bank: "Banco Aura" },
+      { userId }
+    );
+
+    const debt = await db.debt.findFirst({ where: { userId, name: "TC Aura" } });
+    expect(debt).not.toBeNull();
+    expect(Number(debt!.currentBalance)).toBe(500000);
+    expect(Number(debt!.totalAmount)).toBe(500000);
+    expect(result.data!.debtId).toBe(debt!.id);
+  });
+
+  it("crear_meta y crear_cdt quedan guardados con sus datos", async () => {
+    await executeConfirmedTool(
+      "crear_meta",
+      { name: "Viaje Aura", targetAmount: 1000000, deadline: "2027-06-30" },
+      { userId }
+    );
+    const goal = await db.savingsGoal.findFirst({ where: { userId, name: "Viaje Aura" } });
+    expect(goal).not.toBeNull();
+    expect(Number(goal!.targetAmount)).toBe(1000000);
+    expect(goal!.status).toBe("activa");
+    expect(goal!.deadline).not.toBeNull();
+
+    await executeConfirmedTool(
+      "crear_cdt",
+      { bank: "Banco Aura", amount: 2000000, effectiveRate: 11.5, termDays: 90 },
+      { userId }
+    );
+    const cdt = await db.cDT.findFirst({ where: { userId, bank: "Banco Aura" } });
+    expect(cdt).not.toBeNull();
+    expect(Number(cdt!.amount)).toBe(2000000);
+    expect(cdt!.termDays).toBe(90);
+    expect(cdt!.status).toBe("active");
+  });
 });
 
 describe("aislamiento entre usuarios", () => {

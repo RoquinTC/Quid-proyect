@@ -350,6 +350,60 @@ export const CONSULTAR_ORDENES_MEDICAS: ToolDefinition = {
   parameters: [],
 };
 
+export const CREAR_CUENTA: ToolDefinition = {
+  name: "crear_cuenta",
+  kind: "write",
+  implemented: true,
+  description: "Crea una cuenta o billetera nueva con su saldo inicial.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre de la cuenta." },
+    { name: "type", type: "enum", required: false, values: ["checking", "savings", "cash", "digital_wallet", "credit_card", "other"], defaultValue: "checking", description: "Tipo de cuenta." },
+    { name: "balance", type: "number", required: false, defaultValue: 0, description: "Saldo inicial en pesos." },
+  ],
+};
+
+export const CREAR_DEUDA: ToolDefinition = {
+  name: "crear_deuda",
+  kind: "write",
+  implemented: true,
+  description: "Registra una deuda, tarjeta de crédito o préstamo.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre de la deuda." },
+    { name: "type", type: "enum", required: false, values: ["credit_card", "loan", "other"], defaultValue: "credit_card", description: "Tipo de deuda." },
+    { name: "totalAmount", type: "number", required: true, description: "Monto total, en pesos." },
+    { name: "currentBalance", type: "number", required: false, description: "Saldo actual si difiere del total." },
+    { name: "bank", type: "string", required: false, description: "Banco o emisor." },
+    { name: "monthlyPayment", type: "number", required: false, description: "Cuota mensual." },
+    { name: "cutoffDate", type: "number", required: false, description: "Día de corte (1 a 31)." },
+    { name: "paymentDate", type: "number", required: false, description: "Día de pago (1 a 31)." },
+  ],
+};
+
+export const CREAR_META: ToolDefinition = {
+  name: "crear_meta",
+  kind: "write",
+  implemented: true,
+  description: "Crea una meta de ahorro con su monto objetivo y, si se quiere, fecha límite.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre de la meta." },
+    { name: "targetAmount", type: "number", required: true, description: "Monto objetivo, en pesos." },
+    { name: "deadline", type: "date", required: false, description: "Fecha límite en formato AAAA-MM-DD." },
+  ],
+};
+
+export const CREAR_CDT: ToolDefinition = {
+  name: "crear_cdt",
+  kind: "write",
+  implemented: true,
+  description: "Registra un CDT con banco, monto, tasa efectiva anual y plazo.",
+  parameters: [
+    { name: "bank", type: "string", required: true, description: "Banco emisor." },
+    { name: "amount", type: "number", required: true, description: "Monto invertido, en pesos." },
+    { name: "effectiveRate", type: "number", required: true, description: "Tasa efectiva anual (% EA)." },
+    { name: "termDays", type: "number", required: true, description: "Plazo en días." },
+  ],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice
 // ─────────────────────────────────────────────────────────────────────────────
@@ -360,6 +414,10 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   REGISTRAR_TANQUEO,
   REGISTRAR_TRANSFERENCIA,
   CREAR_PRESUPUESTO,
+  CREAR_CUENTA,
+  CREAR_DEUDA,
+  CREAR_META,
+  CREAR_CDT,
   // Lectura
   CONSULTAR_GASTOS,
   CONSULTAR_SALDO,

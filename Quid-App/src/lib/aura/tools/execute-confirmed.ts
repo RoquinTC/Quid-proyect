@@ -473,6 +473,183 @@ export async function executeCrearPresupuesto(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// crear_cuenta
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ACCOUNT_TYPES = new Set([
+  "checking",
+  "savings",
+  "cash",
+  "digital_wallet",
+  "credit_card",
+  "other",
+]);
+
+export async function executeCrearCuenta(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const rawType = typeof args.type === "string" ? args.type : "checking";
+  const type = ACCOUNT_TYPES.has(rawType) ? rawType : "checking";
+  const balance = typeof args.balance === "number" ? args.balance : 0;
+
+  if (!name) throw new Error("Falta el nombre de la cuenta.");
+
+  // Comparación en JS: `mode: "insensitive"` no existe en el motor SQLite.
+  const accounts = await db.account.findMany({
+    where: { userId: ctx.userId },
+    select: { name: true },
+  });
+  if (accounts.some((account) => account.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error(`Ya tienes una cuenta llamada "${name}".`);
+  }
+
+  const account = await db.account.create({
+    data: {
+      userId: ctx.userId,
+      name,
+      type,
+      balance,
+      color: "#10B981",
+    },
+  });
+
+  return {
+    text: `Creé la cuenta ${name}${balance > 0 ? ` con saldo inicial de ${COP.format(balance)}` : ""}.`,
+    data: { accountId: account.id, name, type, balance },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_deuda
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearDeuda(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const type = args.type === "loan" ? "loan" : args.type === "other" ? "other" : "credit_card";
+  const totalAmount = typeof args.totalAmount === "number" ? args.totalAmount : null;
+  const currentBalance =
+    typeof args.currentBalance === "number" ? args.currentBalance : totalAmount;
+  const bank = typeof args.bank === "string" ? args.bank.trim() : null;
+  const monthlyPayment =
+    typeof args.monthlyPayment === "number" ? args.monthlyPayment : null;
+  const cutoffDate = typeof args.cutoffDate === "number" ? Math.round(args.cutoffDate) : null;
+  const paymentDate = typeof args.paymentDate === "number" ? Math.round(args.paymentDate) : null;
+
+  if (!name) throw new Error("Falta el nombre de la deuda.");
+  if (!totalAmount || totalAmount <= 0) throw new Error("Falta el monto total de la deuda.");
+
+  const debt = await db.debt.create({
+    data: {
+      userId: ctx.userId,
+      name,
+      type,
+      bank,
+      totalAmount,
+      currentBalance: currentBalance ?? totalAmount,
+      monthlyPayment,
+      cutoffDate,
+      paymentDate,
+      color: "#EF4444",
+    },
+  });
+
+  const kind = type === "credit_card" ? "tarjeta" : type === "loan" ? "préstamo" : "deuda";
+  return {
+    text: `Registré la ${kind} ${name}${bank ? ` (${bank})` : ""} por ${COP.format(totalAmount)}.`,
+    data: { debtId: debt.id, name, type, totalAmount },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_meta
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearMeta(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const targetAmount = typeof args.targetAmount === "number" ? args.targetAmount : null;
+  const deadlineRaw = typeof args.deadline === "string" ? args.deadline.trim() : "";
+
+  if (!name) throw new Error("Falta el nombre de la meta.");
+  if (!targetAmount || targetAmount <= 0) throw new Error("Falta el monto objetivo de la meta.");
+
+  let deadline: Date | null = null;
+  if (deadlineRaw) {
+    const parsed = new Date(`${deadlineRaw}T12:00:00Z`);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error(`No entendí la fecha "${deadlineRaw}". Usa el formato AAAA-MM-DD.`);
+    }
+    deadline = parsed;
+  }
+
+  const goal = await db.savingsGoal.create({
+    data: {
+      userId: ctx.userId,
+      name,
+      targetAmount,
+      currentAmount: 0,
+      deadline,
+      status: "activa",
+      type: "general",
+    },
+  });
+
+  return {
+    text: `Creé la meta ${name} por ${COP.format(targetAmount)}${deadline ? `, para el ${deadline.toISOString().slice(0, 10)}` : ""}.`,
+    data: { goalId: goal.id, name, targetAmount },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_cdt
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearCdt(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const bank = typeof args.bank === "string" ? args.bank.trim() : "";
+  const amount = typeof args.amount === "number" ? args.amount : null;
+  const effectiveRate = typeof args.effectiveRate === "number" ? args.effectiveRate : null;
+  const termDays = typeof args.termDays === "number" ? Math.round(args.termDays) : null;
+
+  if (!bank) throw new Error("Falta el banco del CDT.");
+  if (!amount || amount <= 0) throw new Error("Falta el monto del CDT.");
+  if (effectiveRate === null || effectiveRate <= 0) throw new Error("Falta la tasa efectiva anual (% EA) del CDT.");
+  if (!termDays || termDays <= 0) throw new Error("Falta el plazo en días del CDT.");
+
+  const startDate = new Date();
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + termDays);
+
+  const cdt = await db.cDT.create({
+    data: {
+      userId: ctx.userId,
+      bank,
+      amount,
+      effectiveRate,
+      startDate,
+      endDate,
+      termDays,
+      status: "active",
+    },
+  });
+
+  const endKey = endDate.toISOString().slice(0, 10);
+  return {
+    text: `Registré el CDT de ${bank} por ${COP.format(amount)} al ${effectiveRate} % EA, vence el ${endKey}.`,
+    data: { cdtId: cdt.id, bank, amount, effectiveRate, termDays },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -484,6 +661,10 @@ const WRITE_EXECUTORS: Record<
   registrar_tanqueo: executeRegistrarTanqueo,
   registrar_transferencia: executeRegistrarTransferencia,
   crear_presupuesto: executeCrearPresupuesto,
+  crear_cuenta: executeCrearCuenta,
+  crear_deuda: executeCrearDeuda,
+  crear_meta: executeCrearMeta,
+  crear_cdt: executeCrearCdt,
 };
 
 /**

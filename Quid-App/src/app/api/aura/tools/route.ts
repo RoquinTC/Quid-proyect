@@ -318,5 +318,53 @@ export function buildProposalDescription(
     ].join("\n");
   }
 
+  if (tool === "crear_cuenta") {
+    const balance = typeof args.balance === "number" ? COP.format(args.balance) : null;
+    return [
+      `Voy a crear esta cuenta:`,
+      `• Nombre: ${(args.name as string) ?? "sin nombre"}`,
+      `• Tipo: ${(args.type as string) ?? "checking"}`,
+      balance ? `• Saldo inicial: ${balance}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (tool === "crear_deuda") {
+    const total = typeof args.totalAmount === "number" ? COP.format(args.totalAmount) : "sin valor";
+    return [
+      `Voy a registrar esta deuda:`,
+      `• Nombre: ${(args.name as string) ?? "sin nombre"}`,
+      `• Monto total: ${total}`,
+      args.bank ? `• Banco: ${args.bank}` : null,
+      args.monthlyPayment ? `• Cuota: ${COP.format(Number(args.monthlyPayment))}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (tool === "crear_meta") {
+    const target = typeof args.targetAmount === "number" ? COP.format(args.targetAmount) : "sin valor";
+    return [
+      `Voy a crear esta meta:`,
+      `• Nombre: ${(args.name as string) ?? "sin nombre"}`,
+      `• Objetivo: ${target}`,
+      args.deadline ? `• Fecha límite: ${args.deadline}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (tool === "crear_cdt") {
+    const amount = typeof args.amount === "number" ? COP.format(args.amount) : "sin valor";
+    return [
+      `Voy a registrar este CDT:`,
+      `• Banco: ${(args.bank as string) ?? "sin banco"}`,
+      `• Monto: ${amount}`,
+      `• Tasa: ${args.effectiveRate ?? "?"} % EA`,
+      `• Plazo: ${args.termDays ?? "?"} días`,
+    ].join("\n");
+  }
+
   return `Voy a ejecutar la acción "${tool}" con estos datos:\n${JSON.stringify(args, null, 2)}`;
 }
