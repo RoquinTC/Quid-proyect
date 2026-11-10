@@ -26,6 +26,7 @@ import { OfflineLockScreen } from "@/components/security/offline-lock-screen";
 import { ModuleErrorBoundary } from "@/components/layout/module-error-boundary";
 import { DiscoveryCoach } from "@/components/discovery/discovery-coach";
 import { AppDeepLinkHandler } from "@/components/layout/app-deep-link-handler";
+import { AuraChat } from "@/components/aura/aura-chat";
 import { AchievementsProvider } from "@/hooks/use-achievements";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -387,6 +388,7 @@ export function AppShell() {
         <AppSidebar />
         <AppDeepLinkHandler />
         <DiscoveryCoach />
+        <AuraChat />
         {showBackupPrompt && <BackupRestorePrompt />}
         {shouldLock && (
           <div className="fixed inset-0 z-[9999] bg-white dark:bg-gray-950">

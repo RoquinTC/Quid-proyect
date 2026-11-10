@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.35",
+  "currentVersion": "1.1.36",
   "releases": [
+    {
+      "version": "1.1.36",
+      "date": "2026-11-10",
+      "title": "Quid 1.1.36",
+      "changes": [
+        "Chat de Aura en la app, con boton flotante",
+        "Propuestas con botones Confirmar y Cancelar",
+        "Preguntas rapidas para empezar"
+      ]
+    },
     {
       "version": "1.1.35",
       "date": "2026-11-10",
