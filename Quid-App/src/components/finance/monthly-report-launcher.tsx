@@ -395,6 +395,7 @@ export function MonthlyReportLauncher() {
       const filename = `quid-reporte-${report.month}.png`;
 
       // ── Camino nativo (APK) ────────────────────────────────────────────
+      let nativeFailed = false;
       if (Capacitor.isNativePlatform()) {
         try {
           const base64 = dataUrl.split(",")[1] ?? "";
@@ -413,9 +414,15 @@ export function MonthlyReportLauncher() {
           toast.success("Elige dónde guardarlo o con quién compartirlo");
           return;
         } catch (nativeError) {
-          // APK vieja sin los plugins: se intenta la descarga normal.
-          console.warn("[Reporte] Sin plugins nativos, se intenta descargar:", nativeError);
+          // APK vieja sin los plugins: se avisa en vez de fingir una descarga.
+          console.warn("[Reporte] Sin plugins nativos:", nativeError);
+          nativeFailed = true;
         }
+      }
+
+      if (nativeFailed) {
+        toast.error("Tu APK no puede guardar archivos. Actualízala en Ajustes → Buscar actualización.");
+        return;
       }
 
       // ── Navegador ──────────────────────────────────────────────────────

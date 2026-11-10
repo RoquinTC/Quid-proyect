@@ -1,6 +1,14 @@
 {
-  "currentVersion": "1.1.31",
+  "currentVersion": "1.1.32",
   "releases": [
+    {
+      "version": "1.1.32",
+      "date": "2026-11-10",
+      "title": "Quid 1.1.32",
+      "changes": [
+        "Si tu APK no puede guardar, el aviso te dice que la actualices"
+      ]
+    },
     {
       "version": "1.1.31",
       "date": "2026-11-10",
