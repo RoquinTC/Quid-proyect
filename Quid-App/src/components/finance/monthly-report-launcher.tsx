@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { Capacitor } from "@capacitor/core";
+import { Directory, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -361,8 +364,13 @@ export function MonthlyReportLauncher() {
    * Imagen del reporte.
    *
    * Se rasteriza el DOM con `html-to-image` (cargado en diferido: no entra en
-   * el arranque ni en el render del servidor). En el teléfono se comparte como
-   * archivo PNG; si el navegador no soporta compartir archivos, se descarga.
+   * el arranque ni en el render del servidor).
+   *
+   * En el teléfono el `<a download>` de un blob NO guarda nada dentro del
+   * WebView (el aviso anterior mentía). Ahí se escribe el PNG en la caché de la
+   * app y se abre la hoja de compartir de Android, que es la que permite
+   * guardarlo en Archivos, Drive o mandarlo por WhatsApp. En navegador se
+   * mantiene la descarga directa.
    */
   const saveImage = async () => {
     const node = reportRef.current;
@@ -384,8 +392,34 @@ export function MonthlyReportLauncher() {
         backgroundColor: background,
       });
 
-      const blob = await (await fetch(dataUrl)).blob();
       const filename = `quid-reporte-${report.month}.png`;
+
+      // ── Camino nativo (APK) ────────────────────────────────────────────
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const base64 = dataUrl.split(",")[1] ?? "";
+          const saved = await Filesystem.writeFile({
+            path: filename,
+            data: base64,
+            directory: Directory.Cache,
+            recursive: true,
+          });
+
+          await Share.share({
+            title: `Reporte de ${report.label}`,
+            files: [saved.uri],
+            dialogTitle: "Guardar o compartir el reporte",
+          });
+          toast.success("Elige dónde guardarlo o con quién compartirlo");
+          return;
+        } catch (nativeError) {
+          // APK vieja sin los plugins: se intenta la descarga normal.
+          console.warn("[Reporte] Sin plugins nativos, se intenta descargar:", nativeError);
+        }
+      }
+
+      // ── Navegador ──────────────────────────────────────────────────────
+      const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], filename, { type: "image/png" });
 
       const canShareFiles =
@@ -406,7 +440,9 @@ export function MonthlyReportLauncher() {
       const link = document.createElement("a");
       link.href = url;
       link.download = filename;
+      document.body.appendChild(link);
       link.click();
+      link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       toast.success("Imagen descargada");
     } catch (error) {

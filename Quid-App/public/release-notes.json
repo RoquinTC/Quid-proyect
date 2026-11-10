@@ -1,6 +1,15 @@
 {
-  "currentVersion": "1.1.29",
+  "currentVersion": "1.1.30",
   "releases": [
+    {
+      "version": "1.1.30",
+      "date": "2026-11-10",
+      "title": "Quid 1.1.30",
+      "changes": [
+        "Reporte en imagen: en el celular abre la hoja de compartir",
+        "Se acabo el aviso falso de descarga"
+      ]
+    },
     {
       "version": "1.1.29",
       "date": "2026-11-10",
