@@ -151,7 +151,7 @@ git add .                    # NO — arrastra docs/
 |---|---|
 | Versión producción | **1.1.22** |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
-| Pruebas | 785 en 47 archivos |
+| Pruebas | 788 en 47 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
 
@@ -182,15 +182,16 @@ Entregado en las últimas sesiones:
   Análisis. Al crear se elige gasto / ingreso / transferencia y se reusa
   `POST /api/recurring`. El descarte vive en `subscription_suggestion_dismissals`
   (base, no dispositivo) para que valga en todos los equipos.
-- **Aura con más herramientas (base de F-21)**: **26 herramientas** en
-  `lib/aura/tools/` (22 lectura, 4 escritura). Lectura: movimientos, gastos,
+- **Aura con más herramientas (base de F-21)**: **30 herramientas** en
+  `lib/aura/tools/` (22 lectura, 8 escritura). Lectura: movimientos, gastos,
   resumen, cuentas, presupuestos, deudas, cuotas, abonos, nómina, metas,
   aportes, CDT y rendimientos, pagos pendientes, vehículos, tanqueos,
   mantenimientos, despensa, categorías, capturas, órdenes médicas,
-  medicamentos y citas. Escritura: transacción, tanqueo, transferencia y
-  presupuesto, todas por propuesta + confirmación. El `userId` lo resuelve el
-  servidor (sesión o `x-aura-token` + `telegramId`) y nunca se acepta del
-  cliente; hay test de aislamiento entre usuarios.
+  medicamentos y citas. Escritura: transacción, tanqueo, transferencia,
+  presupuesto, **cuenta, deuda, meta y CDT**, todas por propuesta +
+  confirmación. El `userId` lo resuelve el servidor (sesión o `x-aura-token` +
+  `telegramId`) y nunca se acepta del cliente; hay test de aislamiento entre
+  usuarios.
 - **Chat de Aura en la app** (`components/aura/aura-chat.tsx`): botón flotante
   sobre la barra inferior, hoja de conversación con preguntas rápidas, y las
   propuestas de escritura llegan como tarjeta con **Confirmar / Cancelar**.
@@ -267,7 +268,7 @@ Después, en el orden del mapa:
 | 1 | ✅ `F-10` Insights | Hecho: 6 hallazgos accionables en Análisis (`lib/finance/insights.ts`) |
 | 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
 | 3 | ✅ `F-23` Suscripciones | Hecho: cápsula en Análisis con candidatos detectados; crea el recurrente eligiendo gasto/ingreso/transferencia; descarte en base |
-| 4 | 🔄 `F-21` Chat IA con acciones | **Chat y 22 lecturas listas**. Faltan las escrituras restantes (crear cuenta, deuda, meta, CDT, recurrente, cita…) para decir "completa" |
+| 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 22 lecturas + 8 escrituras**. Faltan: abono, aporte a meta, recurrente, nómina, categorías, vehículo/mantenimiento, medicamento/cita, despensa |
 | 5 | `F-30` Privacidad de montos | |
 | 6 | `F-16` PIN / biometría | El plugin nativo ya está |
 | 7 | `F-17` Export + respaldo cifrado | |
