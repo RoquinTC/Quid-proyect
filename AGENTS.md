@@ -151,7 +151,7 @@ git add .                    # NO — arrastra docs/
 |---|---|
 | Versión producción | **1.1.22** |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
-| Pruebas | 800 en 47 archivos |
+| Pruebas | 804 en 47 archivos |
 
 **Fases 0, 1 y 2 completas.** Fase 3 en curso.
 
@@ -182,15 +182,14 @@ Entregado en las últimas sesiones:
   Análisis. Al crear se elige gasto / ingreso / transferencia y se reusa
   `POST /api/recurring`. El descarte vive en `subscription_suggestion_dismissals`
   (base, no dispositivo) para que valga en todos los equipos.
-- **Aura con más herramientas (base de F-21)**: **45 herramientas** en
-  `lib/aura/tools/` (22 lectura, 23 escritura). Cubre los cuatro módulos:
-  finanzas (transacción, transferencia, presupuesto, cuenta, deuda, meta, CDT,
-  abono, aporte, recurrente, nómina, categoría, grupo de categorías),
-  transporte (tanqueo, recordatorio, mantenimiento, documento),
-  salud (cita, medicamento, orden médica) y despensa (ítem, lista de compras,
-  receta). Todas por propuesta + confirmación. El `userId` lo resuelve el
-  servidor (sesión o `x-aura-token` + `telegramId`) y nunca se acepta del
-  cliente; hay test de aislamiento entre usuarios.
+- **Aura con más herramientas (base de F-21)**: **55 herramientas** en
+  `lib/aura/tools/` (29 lectura, 26 escritura), cubriendo los cuatro módulos y
+  los datos transversales (listas, recetas, salud, logros, compartidas,
+  movimientos de despensa, autorizaciones). Todas las escrituras van por
+  propuesta + confirmación. El `userId` lo resuelve el servidor (sesión o
+  `x-aura-token` + `telegramId`) y nunca se acepta del cliente; hay test de
+  aislamiento entre usuarios. **Único flujo sin exponer a propósito:** pagar la
+  cuota de una tarjeta con interés/ciclo (vive en `/api/debts/[id]/pay`).
 - **Chat de Aura en la app** (`components/aura/aura-chat.tsx`): botón flotante
   sobre la barra inferior, hoja de conversación con preguntas rápidas, y las
   propuestas de escritura llegan como tarjeta con **Confirmar / Cancelar**.
@@ -275,7 +274,7 @@ Después, en el orden del mapa:
 | 1 | ✅ `F-10` Insights | Hecho: 6 hallazgos accionables en Análisis (`lib/finance/insights.ts`) |
 | 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
 | 3 | ✅ `F-23` Suscripciones | Hecho: cápsula en Análisis con candidatos detectados; crea el recurrente eligiendo gasto/ingreso/transferencia; descarte en base |
-| 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 22 lecturas + 23 escrituras** de los 4 módulos. Falta: pagar cuota de tarjeta con interés/ciclo y reglas de texto→categoría |
+| 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 29 lecturas + 26 escrituras**. Solo falta exponer el pago de cuota de tarjeta con interés/ciclo |
 | 5 | `F-30` Privacidad de montos | |
 | 6 | `F-16` PIN / biometría | El plugin nativo ya está |
 | 7 | `F-17` Export + respaldo cifrado | |
