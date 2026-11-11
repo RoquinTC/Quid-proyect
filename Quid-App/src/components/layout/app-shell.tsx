@@ -27,6 +27,7 @@ import { ModuleErrorBoundary } from "@/components/layout/module-error-boundary";
 import { DiscoveryCoach } from "@/components/discovery/discovery-coach";
 import { AppDeepLinkHandler } from "@/components/layout/app-deep-link-handler";
 import { AuraChat } from "@/components/aura/aura-chat";
+import { PrivacyModeBoot } from "@/components/privacy/privacy-mode";
 import { AchievementsProvider } from "@/hooks/use-achievements";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -389,6 +390,7 @@ export function AppShell() {
         <AppDeepLinkHandler />
         <DiscoveryCoach />
         <AuraChat />
+        <PrivacyModeBoot />
         {showBackupPrompt && <BackupRestorePrompt />}
         {shouldLock && (
           <div className="fixed inset-0 z-[9999] bg-white dark:bg-gray-950">

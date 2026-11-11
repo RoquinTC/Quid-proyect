@@ -1466,3 +1466,12 @@ html.disable-transitions *::after {
   transition: none !important;
   animation: none !important;
 }
+
+/* F-30 · Modo privacidad: oculta las cifras marcadas con .quid-money. */
+.quid-hide-amounts .quid-money {
+  filter: blur(7px);
+  user-select: none;
+}
+.quid-hide-amounts .quid-money:hover {
+  filter: blur(0);
+}

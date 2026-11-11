@@ -367,7 +367,7 @@ export function DashboardPage() {
                   <Wallet className="size-4 text-emerald-200" />
                   <span className="text-sm text-emerald-100">Balance Total</span>
                 </div>
-                <p className="text-3xl font-bold tracking-tight">
+                <p className="text-3xl font-bold tracking-tight quid-money">
                   {formatCurrency(totalBalance)}
                 </p>
                 <div className="flex items-center gap-4 mt-3">
@@ -377,7 +377,7 @@ export function DashboardPage() {
                     </div>
                     <div>
                       <p className="text-xs text-emerald-200">Ingresos</p>
-                      <p className="text-sm font-semibold">
+                      <p className="text-sm font-semibold quid-money">
                         {formatCurrency(monthlyIncome)}
                       </p>
                     </div>
@@ -388,7 +388,7 @@ export function DashboardPage() {
                     </div>
                     <div>
                       <p className="text-xs text-emerald-200">Gastos</p>
-                      <p className="text-sm font-semibold">
+                      <p className="text-sm font-semibold quid-money">
                         {formatCurrency(monthlyExpenses)}
                       </p>
                     </div>

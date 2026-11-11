@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NotificationPanel } from "@/components/layout/notification-panel";
+import { PrivacyToggle } from "@/components/privacy/privacy-mode";
 
 export function Header() {
   const { session } = useAppSession();
@@ -49,6 +50,8 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* F-30 · Ocultar montos con un toque */}
+          <PrivacyToggle />
           {/* Notifications */}
           <NotificationPanel />
 
