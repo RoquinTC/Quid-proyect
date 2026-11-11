@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -108,23 +109,65 @@ export async function POST(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    const headersList = await headers();
+
+    // El cuerpo se lee una sola vez: sirve para validar y, en el canal de Aura,
+    // para resolver el usuario por `telegramId`.
+    const raw = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    if (!raw) {
+      return NextResponse.json({ error: "Cuerpo de la petición vacío o JSON inválido" }, { status: 400 });
+    }
+
+    const parsed = recurringConfirmSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Datos inválidos",
+          details: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+        },
+        { status: 400 }
+      );
+    }
+
+    let userId = session?.user?.id ?? null;
+
+    // Aura puede confirmar desde Telegram con su token y el telegramId: el
+    // usuario se resuelve contra la base, nunca viene del cliente.
+    if (!userId) {
+      const auraToken = headersList.get("x-aura-token");
+      const isTrustedAuraClient =
+        Boolean(process.env.AURA_API_KEY) && auraToken === process.env.AURA_API_KEY;
+      const telegramId = raw.telegramId;
+
+      if (!isTrustedAuraClient || !telegramId) {
+        return NextResponse.json(
+          { error: "No autorizado. Inicia sesión o usa el canal seguro de Aura." },
+          { status: 401 }
+        );
+      }
+
+      const user = await db.user.findUnique({
+        where: { telegramId: String(telegramId) },
+        select: { id: true },
+      });
+
+      if (!user) {
+        return NextResponse.json(
+          { error: "No encontré ninguna cuenta vinculada a este Telegram ID." },
+          { status: 404 }
+        );
+      }
+
+      userId = user.id;
     }
 
     const { id } = await params;
-    let body;
-    try {
-      body = await validateBody(req, recurringConfirmSchema);
-    } catch (err) {
-      if (err instanceof Response) return err;
-      return NextResponse.json({ error: "Error interno" }, { status: 500 });
-    }
+    const body = parsed.data;
     const { actualAmount, destinationAccountId, destinationSubAccountId } = body;
 
     // Find the recurring payment
     const payment = await db.recurringPayment.findFirst({
-      where: { id, userId: session.user.id },
+      where: { id, userId: userId },
       include: {
         account: true,
         debt: true,
@@ -146,7 +189,10 @@ export async function POST(
       );
     }
 
-    const confirmedAmount = actualAmount !== undefined ? actualAmount : payment.amount;
+    // `payment.amount` es Decimal: se convierte a número para que los cálculos
+    // de saldo y presupuesto no mezclen tipos (antes entraba como `any`).
+    const confirmedAmount =
+      actualAmount !== undefined ? actualAmount : toNumber(payment.amount);
     // Use Colombia date for transaction creation (midnight Colombia = 05:00 UTC)
     // This ensures transactions are stored consistently regardless of server timezone
     const todayColombia = createColombiaDate(getColombiaTodayString());
@@ -159,7 +205,7 @@ export async function POST(
       // Find the savings goal by name
       const goal = await db.savingsGoal.findFirst({
         where: {
-          userId: session.user.id,
+          userId: userId,
           name: payment.subCategory,
           isActive: true,
         },
@@ -195,7 +241,7 @@ export async function POST(
     if (effectiveDestAccountId) entitiesToVerify.push({ type: "account", id: effectiveDestAccountId });
     if (effectiveDestSubAccountId) entitiesToVerify.push({ type: "subAccount", id: effectiveDestSubAccountId });
 
-    const accessError = await verifyEntityMutationAccess(session.user.id, entitiesToVerify);
+    const accessError = await verifyEntityMutationAccess(userId, entitiesToVerify);
     if (accessError) return accessError;
 
     if (sourceSubAccountId) {
@@ -244,7 +290,7 @@ export async function POST(
 
         const transferTx = await tx.transaction.create({
           data: {
-            userId: session.user.id,
+            userId: userId,
             accountId: payment.accountId,
             subAccountId: sourceSubAccountId,
             type: "transfer",
@@ -268,7 +314,7 @@ export async function POST(
 
         const counterpart = await tx.transaction.create({
           data: {
-            userId: session.user.id,
+            userId: userId,
             accountId: effectiveDestAccountId,
             subAccountId: effectiveDestSubAccountId || null,
             type: "income",
@@ -383,7 +429,7 @@ export async function POST(
         const isLoan = payment.debt?.type === "loan";
         if (isLoan) {
           await adjustBudgetSpent({
-            userId: session.user.id,
+            userId: userId,
             category: payment.category || "Deudas",
             subCategory: payment.subCategory || null,
             type: "expense",
@@ -392,7 +438,7 @@ export async function POST(
           });
         } else {
           await applyCreditInstallmentBudgetImpact({
-            userId: session.user.id,
+            userId: userId,
             debtType: payment.debt?.type,
             category: installment.category,
             subCategory: installment.subCategory,
@@ -405,7 +451,7 @@ export async function POST(
         if (payment.accountId) {
           await tx.transaction.create({
             data: {
-              userId: session.user.id,
+              userId: userId,
               accountId: payment.accountId,
               subAccountId: sourceSubAccountId,
               type: "income",
@@ -429,7 +475,7 @@ export async function POST(
         }
 
         await adjustBudgetSpent({
-          userId: session.user.id,
+          userId: userId,
           category: payment.category || "Sueldo",
           subCategory: payment.subCategory || null,
           type: "income",
@@ -440,7 +486,7 @@ export async function POST(
         if (payment.accountId && payment.account) {
           await tx.transaction.create({
             data: {
-              userId: session.user.id,
+              userId: userId,
               accountId: payment.accountId,
               subAccountId: sourceSubAccountId,
               type: "expense",
@@ -464,7 +510,7 @@ export async function POST(
         }
 
         await adjustBudgetSpent({
-          userId: session.user.id,
+          userId: userId,
           category: payment.category || "Pagos Recurrentes",
           subCategory: payment.subCategory || null,
           type: "expense",
@@ -506,7 +552,7 @@ export async function POST(
 
         await tx.recurringPayment.create({
           data: {
-            userId: session.user.id,
+            userId: userId,
             // F-28 · Campos tomados de la DEFINICIÓN cuando existe.
             description: seriesDef?.description ?? payment.description,
             amount: nextAmount,
@@ -539,7 +585,7 @@ export async function POST(
     });
 
     if (shouldSyncSavingsBudget) {
-      await syncSavingsBudget(session.user.id);
+      await syncSavingsBudget(userId);
     }
 
     // Fetch the updated payment with relations for the response

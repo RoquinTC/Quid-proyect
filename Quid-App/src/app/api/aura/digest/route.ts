@@ -75,6 +75,19 @@ async function handleDigest(req: NextRequest) {
     telegramId: string | null;
     name: string;
     message: string;
+    /**
+     * Detalle estructurado para que el bot arme botones por pago.
+     * Cada `recurring` trae su id: con él se confirma con
+     * `POST /api/recurring/{id}/confirm` usando el canal de Aura.
+     */
+    items: Array<{
+      kind: "recurring" | "appointment";
+      id: string;
+      title: string;
+      amount?: number;
+      type?: string;
+      at?: string;
+    }>;
   }> = [];
 
   for (const user of users) {
@@ -93,7 +106,14 @@ async function handleDigest(req: NextRequest) {
           scheduledDate: { gte: start, lt: end },
         },
         orderBy: { scheduledDate: "asc" },
-        select: { description: true, amount: true, actualAmount: true, type: true },
+        select: {
+          id: true,
+          description: true,
+          amount: true,
+          actualAmount: true,
+          type: true,
+          scheduledDate: true,
+        },
       }),
       db.medicalAppointment.findMany({
         where: {
@@ -103,7 +123,13 @@ async function handleDigest(req: NextRequest) {
           date: { gte: start, lt: end },
         },
         orderBy: { date: "asc" },
-        select: { specialty: true, doctorName: true, location: true },
+        select: {
+          id: true,
+          specialty: true,
+          doctorName: true,
+          location: true,
+          date: true,
+        },
       }),
     ]);
 
@@ -133,6 +159,22 @@ async function handleDigest(req: NextRequest) {
       telegramId: user.telegramId,
       name: user.name,
       message,
+      items: [
+        ...recurring.map((item) => ({
+          kind: "recurring" as const,
+          id: item.id,
+          title: item.description,
+          amount: toNumber(item.actualAmount ?? item.amount),
+          type: item.type,
+          at: item.scheduledDate.toISOString(),
+        })),
+        ...appointments.map((item) => ({
+          kind: "appointment" as const,
+          id: item.id,
+          title: item.specialty || "Cita médica",
+          at: item.date.toISOString(),
+        })),
+      ],
     });
   }
 

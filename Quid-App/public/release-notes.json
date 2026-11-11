@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.38",
+  "currentVersion": "1.1.39",
   "releases": [
+    {
+      "version": "1.1.39",
+      "date": "2026-11-11",
+      "title": "Quid 1.1.39",
+      "changes": [
+        "Aura puede confirmar tus pagos desde Telegram",
+        "El radar diario trae el detalle con ids para botones",
+        "Corregido un tipo Decimal en la confirmacion"
+      ]
+    },
     {
       "version": "1.1.38",
       "date": "2026-11-11",
