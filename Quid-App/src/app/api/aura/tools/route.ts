@@ -400,5 +400,55 @@ export function buildProposalDescription(
       .join("\n");
   }
 
+  if (tool === "crear_categoria") {
+    return `Voy a crear la categoría de ${args.type === "income" ? "ingreso" : "gasto"} "${args.name ?? ""}".`;
+  }
+
+  if (tool === "crear_recordatorio") {
+    return [
+      `Voy a crear este recordatorio:`,
+      `• ${(args.title as string) ?? "sin título"}`,
+      args.vehicleName ? `• Vehículo: ${args.vehicleName}` : null,
+      args.dueDate ? `• Fecha: ${args.dueDate}` : null,
+      typeof args.dueKm === "number" ? `• A los ${args.dueKm} km` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (tool === "registrar_mantenimiento") {
+    return [
+      `Voy a registrar este mantenimiento:`,
+      `• ${(args.description as string) ?? "sin descripción"}`,
+      args.vehicleName ? `• Vehículo: ${args.vehicleName}` : null,
+      typeof args.cost === "number" ? `• Costo: ${COP.format(args.cost)}` : null,
+      typeof args.km === "number" ? `• Odómetro: ${args.km} km` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (tool === "crear_cita") {
+    return [
+      `Voy a agendar esta cita:`,
+      `• Fecha: ${(args.date as string) ?? "sin fecha"} ${(args.time as string) ?? "09:00"}`,
+      args.specialty ? `• Especialidad: ${args.specialty}` : null,
+      args.doctorName ? `• Doctor: ${args.doctorName}` : null,
+      args.location ? `• Lugar: ${args.location}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (tool === "crear_medicamento") {
+    return [
+      `Voy a registrar este medicamento:`,
+      `• ${(args.name as string) ?? "sin nombre"}: ${(args.dosage as string) ?? "sin dosis"}`,
+      args.times ? `• Horarios: ${args.times}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   return `Voy a ejecutar la acción "${tool}" con estos datos:\n${JSON.stringify(args, null, 2)}`;
 }

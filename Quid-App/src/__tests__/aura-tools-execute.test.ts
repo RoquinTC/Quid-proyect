@@ -445,6 +445,90 @@ describe("escrituras nuevas", () => {
       )
     ).rejects.toThrow(/origen y de destino/i);
   });
+
+  it("crear_categoria guarda y no repite el mismo nombre", async () => {
+    const name = `Categoría Aura ${Date.now()}`;
+    const result = await executeConfirmedTool(
+      "crear_categoria",
+      { name, type: "expense" },
+      { userId }
+    );
+
+    const category = await db.category.findFirst({ where: { userId, name } });
+    expect(category).not.toBeNull();
+    expect(category!.type).toBe("expense");
+    expect(result.data!.categoryId).toBe(category!.id);
+
+    await expect(
+      executeConfirmedTool("crear_categoria", { name, type: "expense" }, { userId })
+    ).rejects.toThrow(/Ya tienes una categoría/i);
+  });
+
+  it("crear_recordatorio y registrar_mantenimiento trabajan sobre el vehículo", async () => {
+    const tag = Date.now().toString().slice(-6);
+    const vehicle = await db.vehicle.create({
+      data: { userId, name: `Moto Aura ${tag}`, type: "motorcycle", currentKm: 1000 },
+    });
+
+    const reminder = await executeConfirmedTool(
+      "crear_recordatorio",
+      { title: "Cambio de aceite", vehicleName: vehicle.name, dueKm: 2500, warningKm: 200 },
+      { userId }
+    );
+    const savedReminder = await db.vehicleReminder.findUnique({
+      where: { id: String(reminder.data!.reminderId) },
+    });
+    expect(savedReminder!.triggerMode).toBe("km");
+    expect(savedReminder!.dueKm).toBe(2500);
+    expect(savedReminder!.isActive).toBe(true);
+
+    const maintenance = await executeConfirmedTool(
+      "registrar_mantenimiento",
+      { description: "Aceite y filtro", vehicleName: vehicle.name, cost: 120000, km: 3200 },
+      { userId }
+    );
+    const record = await db.maintenanceRecord.findUnique({
+      where: { id: String(maintenance.data!.maintenanceRecordId) },
+    });
+    expect(Number(record!.cost)).toBe(120000);
+    expect(record!.km).toBe(3200);
+
+    const vehicleAfter = await db.vehicle.findUnique({ where: { id: vehicle.id } });
+    expect(vehicleAfter!.currentKm).toBe(3200);
+  });
+
+  it("crear_cita agenda con la hora de Bogotá", async () => {
+    const result = await executeConfirmedTool(
+      "crear_cita",
+      { date: "2027-03-15", time: "14:30", specialty: "Dermatología", doctorName: "Dra. Prueba" },
+      { userId }
+    );
+
+    const appointment = await db.medicalAppointment.findUnique({
+      where: { id: String(result.data!.appointmentId) },
+    });
+    expect(appointment).not.toBeNull();
+    expect(appointment!.status).toBe("scheduled");
+    // 14:30 en Bogotá (UTC-5) = 19:30 UTC.
+    expect(appointment!.date.toISOString()).toBe("2027-03-15T19:30:00.000Z");
+  });
+
+  it("crear_medicamento guarda los horarios de recordatorio", async () => {
+    const name = `Medicamento Aura ${Date.now()}`;
+    const result = await executeConfirmedTool(
+      "crear_medicamento",
+      { name, dosage: "1 tableta", times: "08:00,20:00" },
+      { userId }
+    );
+
+    const medication = await db.medication.findUnique({
+      where: { id: String(result.data!.medicationId) },
+    });
+    expect(medication).not.toBeNull();
+    expect(medication!.isActive).toBe(true);
+    expect(JSON.parse(medication!.reminderTimes!)).toEqual(["08:00", "20:00"]);
+    expect(medication!.frequency).toBe("custom");
+  });
 });
 
 describe("aislamiento entre usuarios", () => {

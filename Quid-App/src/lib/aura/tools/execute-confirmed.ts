@@ -955,6 +955,243 @@ export async function executeCrearRecurrente(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// crear_categoria
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearCategoria(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const type = args.type === "income" ? "income" : "expense";
+
+  if (!name) throw new Error("Falta el nombre de la categoría.");
+
+  const existing = await db.category.findMany({
+    where: { userId: ctx.userId, type },
+    select: { name: true },
+  });
+  if (existing.some((category) => category.name.toLowerCase() === name.toLowerCase())) {
+    throw new Error(`Ya tienes una categoría de ${type === "income" ? "ingreso" : "gasto"} llamada "${name}".`);
+  }
+
+  const category = await db.category.create({
+    data: { userId: ctx.userId, name, type, color: "#10B981" },
+  });
+
+  return {
+    text: `Creé la categoría de ${type === "income" ? "ingreso" : "gasto"} "${name}".`,
+    data: { categoryId: category.id, name, type },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_recordatorio
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearRecordatorio(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const vehicleName = typeof args.vehicleName === "string" ? args.vehicleName : "";
+  const title = typeof args.title === "string" ? args.title.trim() : "";
+  const dueDateRaw = typeof args.dueDate === "string" ? args.dueDate.trim() : "";
+  const dueKm = typeof args.dueKm === "number" ? args.dueKm : null;
+
+  if (!title) throw new Error("Falta el título del recordatorio.");
+  if (!dueDateRaw && dueKm === null) {
+    throw new Error("El recordatorio necesita una fecha o un kilometraje.");
+  }
+
+  const vehicles = await db.vehicle.findMany({
+    where: { userId: ctx.userId },
+    select: { id: true, name: true, plate: true, currentKm: true },
+  });
+  if (vehicles.length === 0) throw new Error("No tienes vehículos registrados.");
+
+  const vehicle = vehicleName
+    ? vehicles.find(
+        (candidate) =>
+          findByMention(vehicleName, [{ name: candidate.name }]) !== undefined ||
+          (candidate.plate ? normalize(candidate.plate) === normalize(vehicleName) : false)
+      )
+    : vehicles[0];
+
+  if (!vehicle) throw new Error(`No encontré ningún vehículo que coincida con "${vehicleName}".`);
+
+  let dueDate: Date | null = null;
+  if (dueDateRaw) {
+    const parsed = new Date(`${dueDateRaw}T05:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error(`No entendí la fecha "${dueDateRaw}". Usa AAAA-MM-DD.`);
+    }
+    dueDate = parsed;
+  }
+
+  const reminder = await db.vehicleReminder.create({
+    data: {
+      vehicleId: vehicle.id,
+      userId: ctx.userId,
+      title,
+      category: "custom",
+      triggerMode: dueDate && dueKm !== null ? "hybrid" : dueKm !== null ? "km" : "date",
+      dueDate,
+      dueKm,
+      warningDays: typeof args.warningDays === "number" ? Math.round(args.warningDays) : 7,
+      warningKm: typeof args.warningKm === "number" ? args.warningKm : 500,
+      isActive: true,
+    },
+  });
+
+  return {
+    text: `Creé el recordatorio "${title}" para ${vehicle.name}.`,
+    data: { reminderId: reminder.id, vehicleId: vehicle.id },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// registrar_mantenimiento
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeRegistrarMantenimiento(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const vehicleName = typeof args.vehicleName === "string" ? args.vehicleName : "";
+  const description = typeof args.description === "string" ? args.description.trim() : "";
+  const cost = typeof args.cost === "number" ? args.cost : 0;
+  const km = typeof args.km === "number" ? args.km : null;
+  const type = typeof args.type === "string" ? args.type : "general";
+  const nextDueKm = typeof args.nextDueKm === "number" ? args.nextDueKm : null;
+  const date = resolveRecordDate(args.dateText);
+
+  if (!description) throw new Error("Falta la descripción del mantenimiento.");
+
+  const vehicles = await db.vehicle.findMany({
+    where: { userId: ctx.userId },
+    select: { id: true, name: true, plate: true, currentKm: true },
+  });
+  if (vehicles.length === 0) throw new Error("No tienes vehículos registrados.");
+
+  const vehicle = vehicleName
+    ? vehicles.find(
+        (candidate) =>
+          findByMention(vehicleName, [{ name: candidate.name }]) !== undefined ||
+          (candidate.plate ? normalize(candidate.plate) === normalize(vehicleName) : false)
+      )
+    : vehicles[0];
+
+  if (!vehicle) throw new Error(`No encontré ningún vehículo que coincida con "${vehicleName}".`);
+
+  const record = await db.maintenanceRecord.create({
+    data: {
+      vehicleId: vehicle.id,
+      type,
+      description,
+      cost,
+      km: km ?? vehicle.currentKm,
+      date,
+      nextDueKm,
+      reminderEnabled: true,
+    },
+  });
+
+  if (km !== null && km > vehicle.currentKm) {
+    await db.vehicle.update({ where: { id: vehicle.id }, data: { currentKm: km } });
+  }
+
+  return {
+    text: `Registré el mantenimiento "${description}" de ${vehicle.name}${cost > 0 ? ` por ${COP.format(cost)}` : ""}.`,
+    data: { maintenanceRecordId: record.id, vehicleId: vehicle.id, cost },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_cita
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearCita(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const dateRaw = typeof args.date === "string" ? args.date.trim() : "";
+  const timeRaw = typeof args.time === "string" ? args.time.trim() : "09:00";
+  const specialty = typeof args.specialty === "string" ? args.specialty.trim() : null;
+  const doctorName = typeof args.doctorName === "string" ? args.doctorName.trim() : null;
+  const location = typeof args.location === "string" ? args.location.trim() : null;
+
+  if (!dateRaw) throw new Error("Falta la fecha de la cita (AAAA-MM-DD).");
+  if (!/^\d{2}:\d{2}$/.test(timeRaw)) throw new Error("La hora debe tener formato HH:MM.");
+
+  // Bogotá es UTC-5 todo el año: se construye el instante exacto.
+  const date = new Date(`${dateRaw}T${timeRaw}:00-05:00`);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`No entendí la fecha "${dateRaw}". Usa AAAA-MM-DD.`);
+  }
+
+  const appointment = await db.medicalAppointment.create({
+    data: {
+      userId: ctx.userId,
+      date,
+      specialty,
+      doctorName,
+      location,
+      status: "scheduled",
+      reminderEnabled: true,
+    },
+  });
+
+  const who = [specialty, doctorName].filter(Boolean).join(" con ");
+  return {
+    text: `Agendé la cita${who ? ` de ${who}` : ""} para el ${dateRaw} a las ${timeRaw}.`,
+    data: { appointmentId: appointment.id, date: date.toISOString() },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_medicamento
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearMedicamento(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const dosage = typeof args.dosage === "string" ? args.dosage.trim() : "";
+  const disease = typeof args.disease === "string" ? args.disease.trim() : null;
+  // El validador del gateway no tiene tipo lista: llega "08:00,20:00".
+  const timesRaw = typeof args.times === "string" ? args.times : "";
+  const times = timesRaw
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => /^\d{2}:\d{2}$/.test(value));
+
+  if (!name) throw new Error("Falta el nombre del medicamento.");
+  if (!dosage) throw new Error("Falta la dosis del medicamento.");
+
+  const frequency =
+    times.length > 1 ? "custom" : times.length === 1 ? "daily" : "daily";
+
+  const medication = await db.medication.create({
+    data: {
+      userId: ctx.userId,
+      name,
+      dosage,
+      frequency,
+      disease,
+      reminderTimes: times.length > 0 ? JSON.stringify(times) : null,
+      isActive: true,
+      reminderEnabled: times.length > 0,
+    },
+  });
+
+  return {
+    text: `Registré ${name} (${dosage})${times.length > 0 ? ` con recordatorios a las ${times.join(", ")}` : ""}.`,
+    data: { medicationId: medication.id, name, times },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -973,6 +1210,11 @@ const WRITE_EXECUTORS: Record<
   registrar_abono: executeRegistrarAbono,
   registrar_aporte_meta: executeRegistrarAporteMeta,
   crear_recurrente: executeCrearRecurrente,
+  crear_categoria: executeCrearCategoria,
+  crear_recordatorio: executeCrearRecordatorio,
+  registrar_mantenimiento: executeRegistrarMantenimiento,
+  crear_cita: executeCrearCita,
+  crear_medicamento: executeCrearMedicamento,
 };
 
 /**

@@ -450,6 +450,75 @@ export const CREAR_RECURRENTE: ToolDefinition = {
   ],
 };
 
+export const CREAR_CATEGORIA: ToolDefinition = {
+  name: "crear_categoria",
+  kind: "write",
+  implemented: true,
+  description: "Crea una categoría de gasto o de ingreso.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre de la categoría." },
+    { name: "type", type: "enum", required: false, values: ["expense", "income"], defaultValue: "expense", description: "Si es de gasto o de ingreso." },
+  ],
+};
+
+export const CREAR_RECORDATORIO: ToolDefinition = {
+  name: "crear_recordatorio",
+  kind: "write",
+  implemented: true,
+  description: "Crea un recordatorio para un vehículo, por fecha, por kilometraje o ambos.",
+  parameters: [
+    { name: "title", type: "string", required: true, description: "Qué hay que recordar." },
+    { name: "vehicleName", type: "string", required: false, description: "Vehículo o placa." },
+    { name: "dueDate", type: "date", required: false, description: "Fecha límite (AAAA-MM-DD)." },
+    { name: "dueKm", type: "number", required: false, description: "Kilometraje objetivo." },
+    { name: "warningDays", type: "number", required: false, defaultValue: 7, description: "Días de aviso antes." },
+    { name: "warningKm", type: "number", required: false, defaultValue: 500, description: "Kilómetros de aviso antes." },
+  ],
+};
+
+export const REGISTRAR_MANTENIMIENTO: ToolDefinition = {
+  name: "registrar_mantenimiento",
+  kind: "write",
+  implemented: true,
+  description: "Registra un mantenimiento hecho a un vehículo, con costo y kilometraje.",
+  parameters: [
+    { name: "description", type: "string", required: true, description: "Qué se hizo." },
+    { name: "vehicleName", type: "string", required: false, description: "Vehículo o placa." },
+    { name: "type", type: "string", required: false, description: "Tipo: oil_change, tire_change, general, etc." },
+    { name: "cost", type: "number", required: false, defaultValue: 0, description: "Costo en pesos." },
+    { name: "km", type: "number", required: false, description: "Odómetro al momento." },
+    { name: "nextDueKm", type: "number", required: false, description: "Kilometraje del próximo servicio." },
+    { name: "dateText", type: "string", required: false, description: 'Fecha en lenguaje natural: "hoy", "ayer".' },
+  ],
+};
+
+export const CREAR_CITA: ToolDefinition = {
+  name: "crear_cita",
+  kind: "write",
+  implemented: true,
+  description: "Agenda una cita médica con fecha y hora.",
+  parameters: [
+    { name: "date", type: "date", required: true, description: "Fecha de la cita (AAAA-MM-DD)." },
+    { name: "time", type: "string", required: false, defaultValue: "09:00", description: "Hora en formato HH:MM." },
+    { name: "specialty", type: "string", required: false, description: "Especialidad." },
+    { name: "doctorName", type: "string", required: false, description: "Nombre del doctor." },
+    { name: "location", type: "string", required: false, description: "Lugar de la cita." },
+  ],
+};
+
+export const CREAR_MEDICAMENTO: ToolDefinition = {
+  name: "crear_medicamento",
+  kind: "write",
+  implemented: true,
+  description: "Registra un medicamento con su dosis y horarios de recordatorio.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre del medicamento." },
+    { name: "dosage", type: "string", required: true, description: "Dosis, por ejemplo '1 tableta'." },
+    { name: "times", type: "string", required: false, description: 'Horarios separados por coma: "08:00,20:00".' },
+    { name: "disease", type: "string", required: false, description: "Para qué es." },
+  ],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice
 // ─────────────────────────────────────────────────────────────────────────────
@@ -467,6 +536,11 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   REGISTRAR_ABONO,
   REGISTRAR_APORTE_META,
   CREAR_RECURRENTE,
+  CREAR_CATEGORIA,
+  CREAR_RECORDATORIO,
+  REGISTRAR_MANTENIMIENTO,
+  CREAR_CITA,
+  CREAR_MEDICAMENTO,
   // Lectura
   CONSULTAR_GASTOS,
   CONSULTAR_SALDO,
