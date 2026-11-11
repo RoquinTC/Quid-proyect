@@ -198,6 +198,14 @@ Entregado en las últimas sesiones:
   Usa el mismo motor que Telegram (`/api/aura/chat`) y el mismo gateway de
   confirmación (`/api/aura/tools/confirm`), así que no hay un segundo camino de
   escritura.
+- **Aura en Telegram (radar diario)**: `GET /api/aura/digest` arma el mensaje
+  del día (pagos pendientes + citas) y devuelve `items` con el **id** de cada
+  pago, para que el bot pueda pintar botones. Es idempotente por día
+  (`appNotification` tipo `aura_daily_digest`). La confirmación desde Telegram
+  usa `POST /api/recurring/{id}/confirm` con `x-aura-token` + `telegramId`: el
+  usuario se resuelve en la base y la lógica de dinero es **la misma** de la app
+  (no hay un segundo camino). Ese cambio además corrigió un `Decimal` que
+  entraba como `any` en `confirmedAmount`.
 
 **Pendiente, en este orden:**
 
