@@ -374,6 +374,77 @@ describe("escrituras nuevas", () => {
     expect(cdt!.termDays).toBe(90);
     expect(cdt!.status).toBe("active");
   });
+
+  it("registrar_abono baja la deuda, baja la cuenta y crea el abono", async () => {
+    const debt = await db.debt.findFirst({ where: { userId, name: "TC Aura" } });
+    const account = await db.account.findFirst({ where: { userId, name: "Cuenta Aura" } });
+    const accountBefore = Number(account!.balance);
+
+    const result = await executeConfirmedTool(
+      "registrar_abono",
+      { debtName: "TC Aura", amount: 100000, accountName: "Cuenta Aura" },
+      { userId }
+    );
+
+    const debtAfter = await db.debt.findUnique({ where: { id: debt!.id } });
+    const accountAfter = await db.account.findUnique({ where: { id: account!.id } });
+
+    expect(Number(debtAfter!.currentBalance)).toBe(400000);
+    expect(Number(accountAfter!.balance)).toBe(accountBefore - 100000);
+    expect(result.data!.amount).toBe(100000);
+
+    const abono = await db.abono.findUnique({ where: { id: String(result.data!.abonoId) } });
+    expect(abono).not.toBeNull();
+    expect(Number(abono!.totalAmount)).toBe(100000);
+  });
+
+  it("registrar_aporte_meta suma a la meta y descuenta la cuenta", async () => {
+    const goal = await db.savingsGoal.findFirst({ where: { userId, name: "Viaje Aura" } });
+    const account = await db.account.findFirst({ where: { userId, name: "Cuenta Principal" } });
+    const accountBefore = Number(account!.balance);
+
+    await executeConfirmedTool(
+      "registrar_aporte_meta",
+      { goalName: "Viaje Aura", amount: 250000, accountName: "Cuenta Principal" },
+      { userId }
+    );
+
+    const goalAfter = await db.savingsGoal.findUnique({ where: { id: goal!.id } });
+    const accountAfter = await db.account.findUnique({ where: { id: account!.id } });
+
+    expect(Number(goalAfter!.currentAmount)).toBe(250000);
+    expect(Number(accountAfter!.balance)).toBe(accountBefore - 250000);
+
+    const contributions = await db.savingsContribution.count({ where: { goalId: goal!.id } });
+    expect(contributions).toBe(1);
+  });
+
+  it("crear_recurrente deja el pago pendiente con su serie", async () => {
+    const result = await executeConfirmedTool(
+      "crear_recurrente",
+      { description: "Arriendo Aura", amount: 900000, type: "expense", day: 15 },
+      { userId }
+    );
+
+    const payment = await db.recurringPayment.findUnique({
+      where: { id: String(result.data!.recurringPaymentId) },
+    });
+    expect(payment).not.toBeNull();
+    expect(payment!.status).toBe("pending");
+    expect(payment!.description).toBe("Arriendo Aura");
+    expect(payment!.seriesId).toBeTruthy();
+    expect(Number(payment!.amount)).toBe(900000);
+  });
+
+  it("crear_recurrente exige cuentas cuando es transferencia", async () => {
+    await expect(
+      executeConfirmedTool(
+        "crear_recurrente",
+        { description: "Mover", amount: 1000, type: "transfer" },
+        { userId }
+      )
+    ).rejects.toThrow(/origen y de destino/i);
+  });
 });
 
 describe("aislamiento entre usuarios", () => {

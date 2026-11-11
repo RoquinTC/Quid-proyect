@@ -404,6 +404,52 @@ export const CREAR_CDT: ToolDefinition = {
   ],
 };
 
+export const REGISTRAR_ABONO: ToolDefinition = {
+  name: "registrar_abono",
+  kind: "write",
+  implemented: true,
+  description:
+    "Registra un abono a una deuda: descuenta el saldo de la deuda y de la cuenta, y reparte el pago en las cuotas pendientes.",
+  parameters: [
+    { name: "debtName", type: "string", required: true, description: "Nombre de la deuda o tarjeta." },
+    { name: "amount", type: "number", required: true, description: "Valor del abono, en pesos." },
+    { name: "accountName", type: "string", required: true, description: "Cuenta o bolsillo de donde sale el dinero." },
+    { name: "dateText", type: "string", required: false, description: 'Fecha en lenguaje natural: "hoy", "ayer".' },
+  ],
+};
+
+export const REGISTRAR_APORTE_META: ToolDefinition = {
+  name: "registrar_aporte_meta",
+  kind: "write",
+  implemented: true,
+  description:
+    "Aporta a una meta de ahorro. Si se indica cuenta, además registra el gasto y descuenta el saldo.",
+  parameters: [
+    { name: "goalName", type: "string", required: true, description: "Nombre de la meta." },
+    { name: "amount", type: "number", required: true, description: "Valor del aporte, en pesos." },
+    { name: "accountName", type: "string", required: false, description: "Cuenta desde la que se aporta." },
+    { name: "dateText", type: "string", required: false, description: 'Fecha en lenguaje natural: "hoy", "ayer".' },
+  ],
+};
+
+export const CREAR_RECURRENTE: ToolDefinition = {
+  name: "crear_recurrente",
+  kind: "write",
+  implemented: true,
+  description:
+    "Crea un pago recurrente mensual (gasto, ingreso o transferencia) con su día de cobro.",
+  parameters: [
+    { name: "description", type: "string", required: true, description: "Nombre del pago." },
+    { name: "amount", type: "number", required: true, description: "Valor, en pesos." },
+    { name: "type", type: "enum", required: false, values: ["expense", "income", "transfer"], defaultValue: "expense", description: "Si es gasto, ingreso o transferencia." },
+    { name: "day", type: "number", required: false, description: "Día del mes (1 a 31)." },
+    { name: "frequency", type: "enum", required: false, values: ["monthly", "weekly", "yearly"], defaultValue: "monthly", description: "Periodicidad." },
+    { name: "fromAccountName", type: "string", required: false, description: "Cuenta de origen (obligatoria si es transferencia)." },
+    { name: "toAccountName", type: "string", required: false, description: "Cuenta de destino (obligatoria si es transferencia)." },
+    { name: "category", type: "string", required: false, description: "Categoría del pago." },
+  ],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice
 // ─────────────────────────────────────────────────────────────────────────────
@@ -418,6 +464,9 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   CREAR_DEUDA,
   CREAR_META,
   CREAR_CDT,
+  REGISTRAR_ABONO,
+  REGISTRAR_APORTE_META,
+  CREAR_RECURRENTE,
   // Lectura
   CONSULTAR_GASTOS,
   CONSULTAR_SALDO,

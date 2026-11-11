@@ -19,6 +19,7 @@
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { applyBalanceDelta } from "@/lib/finance-ledger";
+import { createSeries } from "@/lib/recurring/series";
 import { createCreditCardPurchaseFromAura } from "@/lib/aura/index";
 import type { ExecutionContext, ExecutionResult } from "./executors";
 
@@ -650,6 +651,310 @@ export async function executeCrearCdt(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// registrar_abono
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeRegistrarAbono(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const debtName = typeof args.debtName === "string" ? args.debtName : "";
+  const accountName = typeof args.accountName === "string" ? args.accountName : "";
+  const amount = typeof args.amount === "number" ? args.amount : null;
+  const date = resolveRecordDate(args.dateText);
+
+  if (!amount || amount <= 0) throw new Error("Falta el valor del abono, o no es válido.");
+
+  const debts = await db.debt.findMany({
+    where: { userId: ctx.userId },
+    select: { id: true, name: true, bank: true, currentBalance: true },
+  });
+  const debt =
+    findByMention(debtName, debts.map((entry) => ({ ...entry, name: entry.bank ? `${entry.name} ${entry.bank}` : entry.name }))) ??
+    findByMention(debtName, debts);
+
+  if (!debt) throw new Error(`No encontré ninguna deuda que coincida con "${debtName}".`);
+
+  const accounts = await listAccounts(ctx.userId);
+  const account = findByMention(accountName, accounts);
+  if (!account) {
+    throw new Error(
+      accountName
+        ? `No encontré ninguna cuenta que coincida con "${accountName}".`
+        : "Falta indicar de qué cuenta sale el abono."
+    );
+  }
+
+  const accountIdForRow = account.kind === "subAccount" ? account.parentAccountId! : account.id;
+  const subAccountIdForRow = account.kind === "subAccount" ? account.id : null;
+
+  const result = await db.$transaction(async (tx) => {
+    const abono = await tx.abono.create({
+      data: {
+        userId: ctx.userId,
+        debtId: debt.id,
+        totalAmount: amount,
+        accountId: accountIdForRow,
+        subAccountId: subAccountIdForRow,
+        date,
+      },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId: ctx.userId,
+        type: "expense",
+        amount,
+        description: `Abono a ${debt.name}`,
+        accountId: accountIdForRow,
+        subAccountId: subAccountIdForRow,
+        category: "Deudas",
+        subCategory: debt.name,
+        date,
+        sourceModule: "aura",
+        sourceId: debt.id,
+        notes: "Abono registrado desde Aura",
+        excludeFromBudget: true,
+      },
+    });
+
+    await applyBalanceDelta(tx, {
+      accountId: accountIdForRow,
+      subAccountId: subAccountIdForRow,
+      amount: -amount,
+    });
+
+    // Se reparte en las cuotas pendientes, de la más vieja a la más nueva,
+    // igual que hace la app al abonar.
+    const installments = await tx.installment.findMany({
+      where: { debtId: debt.id, isPaid: false },
+      orderBy: { nextPaymentDate: "asc" },
+    });
+
+    let left = amount;
+    for (const installment of installments) {
+      if (left <= 0) break;
+      const remaining = toNumber(installment.remainingBalance ?? installment.totalAmount);
+      if (remaining <= 0) continue;
+
+      const applied = Math.min(remaining, left);
+      const newRemaining = remaining - applied;
+
+      await tx.installment.update({
+        where: { id: installment.id },
+        data: {
+          remainingBalance: newRemaining,
+          paidAmount: { increment: applied },
+          ...(newRemaining === 0 ? { isPaid: true, installmentAmount: 0 } : {}),
+        },
+      });
+
+      left -= applied;
+    }
+
+    const current = toNumber(debt.currentBalance);
+    await tx.debt.update({
+      where: { id: debt.id },
+      data: { currentBalance: Math.max(current - amount, 0) },
+    });
+
+    return abono;
+  });
+
+  return {
+    text: `Registré el abono de ${COP.format(amount)} a ${debt.name} desde ${account.name}.`,
+    data: { abonoId: result.id, debtId: debt.id, amount, account: account.name },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// registrar_aporte_meta
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeRegistrarAporteMeta(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const goalName = typeof args.goalName === "string" ? args.goalName : "";
+  const accountName = typeof args.accountName === "string" ? args.accountName : "";
+  const amount = typeof args.amount === "number" ? args.amount : null;
+  const date = resolveRecordDate(args.dateText);
+
+  if (!amount || amount <= 0) throw new Error("Falta el valor del aporte, o no es válido.");
+
+  const goals = await db.savingsGoal.findMany({
+    where: { userId: ctx.userId, status: "activa" },
+    select: { id: true, name: true },
+  });
+  const goal = findByMention(goalName, goals);
+  if (!goal) throw new Error(`No encontré ninguna meta activa que coincida con "${goalName}".`);
+
+  let account: ResolvedAccount | undefined;
+  if (accountName) {
+    const accounts = await listAccounts(ctx.userId);
+    account = findByMention(accountName, accounts);
+    if (!account) {
+      throw new Error(`No encontré ninguna cuenta que coincida con "${accountName}".`);
+    }
+  }
+
+  const contribution = await db.$transaction(async (tx) => {
+    const created = await tx.savingsContribution.create({
+      data: {
+        goalId: goal.id,
+        amount,
+        date,
+        description: "Aporte registrado desde Aura",
+        accountId: account
+          ? account.kind === "subAccount"
+            ? account.parentAccountId!
+            : account.id
+          : null,
+      },
+    });
+
+    await tx.savingsGoal.update({
+      where: { id: goal.id },
+      data: { currentAmount: { increment: amount } },
+    });
+
+    if (account) {
+      const accountIdForRow = account.kind === "subAccount" ? account.parentAccountId! : account.id;
+      const subAccountIdForRow = account.kind === "subAccount" ? account.id : null;
+
+      await tx.transaction.create({
+        data: {
+          userId: ctx.userId,
+          type: "expense",
+          amount,
+          description: `Ahorro: ${goal.name}`,
+          accountId: accountIdForRow,
+          subAccountId: subAccountIdForRow,
+          category: "Ahorros",
+          subCategory: goal.name,
+          date,
+          sourceModule: "aura",
+          sourceId: goal.id,
+          notes: "Aporte registrado desde Aura",
+          excludeFromBudget: true,
+        },
+      });
+
+      await applyBalanceDelta(tx, {
+        accountId: accountIdForRow,
+        subAccountId: subAccountIdForRow,
+        amount: -amount,
+      });
+    }
+
+    return created;
+  });
+
+  return {
+    text: `Aporté ${COP.format(amount)} a la meta ${goal.name}${account ? ` desde ${account.name}` : ""}.`,
+    data: { contributionId: contribution.id, goalId: goal.id, amount },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_recurrente
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Próxima fecha para un día del mes (hoy ya cuenta si el día es hoy). */
+function nextDateForDay(day: number): Date {
+  const now = new Date();
+  let year = now.getFullYear();
+  let month = now.getMonth();
+
+  if (day < now.getDate()) {
+    month += 1;
+    if (month > 11) {
+      month = 0;
+      year += 1;
+    }
+  }
+
+  const maxDay = new Date(year, month + 1, 0).getDate();
+  const safeDay = Math.min(Math.max(day, 1), maxDay);
+  return new Date(Date.UTC(year, month, safeDay, 5, 0, 0));
+}
+
+export async function executeCrearRecurrente(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const description = typeof args.description === "string" ? args.description.trim() : "";
+  const amount = typeof args.amount === "number" ? args.amount : null;
+  const type = args.type === "income" || args.type === "transfer" ? args.type : "expense";
+  const day = typeof args.day === "number" ? Math.round(args.day) : null;
+  const frequency = typeof args.frequency === "string" ? args.frequency : "monthly";
+  const fromName = typeof args.fromAccountName === "string" ? args.fromAccountName : "";
+  const toName = typeof args.toAccountName === "string" ? args.toAccountName : "";
+
+  if (!description) throw new Error("Falta la descripción del pago recurrente.");
+  if (!amount || amount <= 0) throw new Error("Falta el monto del pago recurrente.");
+  if (frequency === "monthly" && day !== null && (day < 1 || day > 31)) {
+    throw new Error("El día del mes debe estar entre 1 y 31.");
+  }
+
+  const accounts = await listAccounts(ctx.userId);
+  const source = fromName ? findByMention(fromName, accounts) : undefined;
+  const destination = toName ? findByMention(toName, accounts) : undefined;
+
+  if (type === "transfer") {
+    if (!source || !destination) {
+      throw new Error("Una transferencia recurrente necesita cuenta de origen y de destino.");
+    }
+  }
+
+  const scheduledDate = day !== null ? nextDateForDay(day) : resolveRecordDate(args.dateText);
+
+  const seriesId = await createSeries(ctx.userId, {
+    description,
+    amount,
+    type,
+    accountId: source ? (source.kind === "subAccount" ? source.parentAccountId! : source.id) : null,
+    subAccountId: source?.kind === "subAccount" ? source.id : null,
+    destinationAccountId: destination
+      ? destination.kind === "subAccount"
+        ? destination.parentAccountId!
+        : destination.id
+      : null,
+    destinationSubAccountId: destination?.kind === "subAccount" ? destination.id : null,
+    category: typeof args.category === "string" ? args.category : null,
+    frequency,
+  });
+
+  const payment = await db.recurringPayment.create({
+    data: {
+      userId: ctx.userId,
+      description,
+      amount,
+      type,
+      accountId: source ? (source.kind === "subAccount" ? source.parentAccountId! : source.id) : null,
+      subAccountId: source?.kind === "subAccount" ? source.id : null,
+      destinationAccountId: destination
+        ? destination.kind === "subAccount"
+          ? destination.parentAccountId!
+          : destination.id
+        : null,
+      destinationSubAccountId: destination?.kind === "subAccount" ? destination.id : null,
+      category: typeof args.category === "string" ? args.category : null,
+      scheduledDate,
+      frequency,
+      status: "pending",
+      seriesId,
+    },
+  });
+
+  const when = scheduledDate.toISOString().slice(0, 10);
+  return {
+    text: `Creé el pago recurrente "${description}" por ${COP.format(amount)}, próximo el ${when}.`,
+    data: { recurringPaymentId: payment.id, seriesId, scheduledDate: when },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -665,6 +970,9 @@ const WRITE_EXECUTORS: Record<
   crear_deuda: executeCrearDeuda,
   crear_meta: executeCrearMeta,
   crear_cdt: executeCrearCdt,
+  registrar_abono: executeRegistrarAbono,
+  registrar_aporte_meta: executeRegistrarAporteMeta,
+  crear_recurrente: executeCrearRecurrente,
 };
 
 /**

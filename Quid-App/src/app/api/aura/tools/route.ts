@@ -366,5 +366,39 @@ export function buildProposalDescription(
     ].join("\n");
   }
 
+  if (tool === "registrar_abono") {
+    const amount = typeof args.amount === "number" ? COP.format(args.amount) : "sin valor";
+    return [
+      `Voy a abonar ${amount} a una deuda:`,
+      `• Deuda: ${(args.debtName as string) ?? "sin especificar"}`,
+      `• Desde: ${(args.accountName as string) ?? "sin especificar"}`,
+      `• Fecha: ${(args.dateText as string) ?? "hoy"}`,
+    ].join("\n");
+  }
+
+  if (tool === "registrar_aporte_meta") {
+    const amount = typeof args.amount === "number" ? COP.format(args.amount) : "sin valor";
+    return [
+      `Voy a aportar ${amount} a una meta:`,
+      `• Meta: ${(args.goalName as string) ?? "sin especificar"}`,
+      args.accountName ? `• Desde: ${args.accountName}` : `• Sin descontar de ninguna cuenta`,
+    ].join("\n");
+  }
+
+  if (tool === "crear_recurrente") {
+    const amount = typeof args.amount === "number" ? COP.format(args.amount) : "sin valor";
+    const kind =
+      args.type === "income" ? "ingreso" : args.type === "transfer" ? "transferencia" : "gasto";
+    return [
+      `Voy a crear este pago recurrente:`,
+      `• ${(args.description as string) ?? "sin nombre"} (${kind}): ${amount}`,
+      args.day ? `• Día del mes: ${args.day}` : null,
+      args.fromAccountName ? `• Desde: ${args.fromAccountName}` : null,
+      args.toAccountName ? `• Hacia: ${args.toAccountName}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   return `Voy a ejecutar la acción "${tool}" con estos datos:\n${JSON.stringify(args, null, 2)}`;
 }
