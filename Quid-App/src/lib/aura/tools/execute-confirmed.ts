@@ -1515,6 +1515,121 @@ export async function executeCrearGrupoCategoria(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// crear_regla_categoria
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearReglaCategoria(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const contains = typeof args.contains === "string" ? args.contains.trim() : "";
+  const category = typeof args.category === "string" ? args.category.trim() : "";
+
+  if (!contains) throw new Error("Falta el texto que debe contener el movimiento.");
+  if (!category) throw new Error("Falta la categoría que se va a asignar.");
+
+  const rule = await db.inboxRule.create({
+    data: {
+      userId: ctx.userId,
+      name: name || `Regla ${contains}`,
+      contains,
+      category,
+      subCategory: typeof args.subCategory === "string" ? args.subCategory : null,
+      type: typeof args.type === "string" ? args.type : null,
+      active: true,
+    },
+  });
+
+  return {
+    text: `Creé la regla: si el texto contiene "${contains}", se categoriza como ${category}.`,
+    data: { ruleId: rule.id, contains, category },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_autorizacion_medica
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearAutorizacionMedica(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const specialty = typeof args.specialty === "string" ? args.specialty.trim() : "";
+  const type = typeof args.type === "string" ? args.type : "specialist";
+  const code = typeof args.code === "string" ? args.code.trim() : null;
+  const daysOfValidity = typeof args.daysOfValidity === "number" ? Math.round(args.daysOfValidity) : 30;
+
+  if (!specialty) throw new Error("Falta la especialidad de la autorización.");
+
+  const authorizationDate = new Date();
+  const expirationDate = new Date(authorizationDate);
+  expirationDate.setDate(expirationDate.getDate() + daysOfValidity);
+
+  const authorization = await db.medicalAuthorization.create({
+    data: {
+      userId: ctx.userId,
+      specialty,
+      type,
+      code,
+      status: "authorized",
+      authorizationDate,
+      daysOfValidity,
+      expirationDate,
+    },
+  });
+
+  return {
+    text: `Registré la autorización de ${specialty}, válida ${daysOfValidity} días (vence ${expirationDate.toISOString().slice(0, 10)}).`,
+    data: { authorizationId: authorization.id, specialty, expirationDate: expirationDate.toISOString() },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_condicion_salud
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearCondicionSalud(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const severity = args.severity === "suspected" ? "suspected" : "diagnosed";
+  const notes = typeof args.notes === "string" ? args.notes.trim() : "";
+
+  if (!name) throw new Error("Falta el nombre de la condición.");
+
+  // Se usa el perfil titular; si no existe, se crea.
+  let profile = await db.healthProfile.findFirst({
+    where: { userId: ctx.userId, type: "owner" },
+    select: { id: true, name: true },
+  });
+
+  if (!profile) {
+    profile = await db.healthProfile.create({
+      data: { userId: ctx.userId, name: "Titular", type: "owner" },
+      select: { id: true, name: true },
+    });
+  }
+
+  const condition = await db.healthCondition.create({
+    data: {
+      userId: ctx.userId,
+      profileId: profile.id,
+      name,
+      severity,
+      notes,
+      origin: "manual",
+    },
+  });
+
+  return {
+    text: `Registré ${name} en el perfil de salud de ${profile.name}.`,
+    data: { conditionId: condition.id, profileId: profile.id, name },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1545,6 +1660,9 @@ const WRITE_EXECUTORS: Record<
   crear_documento_vehiculo: executeCrearDocumentoVehiculo,
   crear_orden_medica: executeCrearOrdenMedica,
   crear_grupo_categoria: executeCrearGrupoCategoria,
+  crear_regla_categoria: executeCrearReglaCategoria,
+  crear_autorizacion_medica: executeCrearAutorizacionMedica,
+  crear_condicion_salud: executeCrearCondicionSalud,
 };
 
 /**

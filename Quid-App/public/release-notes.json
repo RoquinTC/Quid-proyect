@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.41",
+  "currentVersion": "1.1.42",
   "releases": [
+    {
+      "version": "1.1.42",
+      "date": "2026-11-11",
+      "title": "Quid 1.1.42",
+      "changes": [
+        "Aura lee listas, recetas, salud, logros y compartidas",
+        "Tambien movimientos de despensa y autorizaciones",
+        "Y crea reglas, autorizaciones y condiciones: 52 herramientas"
+      ]
+    },
     {
       "version": "1.1.41",
       "date": "2026-11-11",

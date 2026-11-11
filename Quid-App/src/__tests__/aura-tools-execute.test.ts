@@ -672,3 +672,62 @@ describe("aislamiento entre usuarios", () => {
     }
   });
 });
+
+describe("reglas, autorizaciones y salud", () => {
+  it("crear_regla_categoria guarda la regla activa", async () => {
+    const result = await executeConfirmedTool(
+      "crear_regla_categoria",
+      { contains: "NETFLIX", category: "Entretenimiento", name: "Netflix Aura" },
+      { userId }
+    );
+
+    const rule = await db.inboxRule.findUnique({ where: { id: String(result.data!.ruleId) } });
+    expect(rule).not.toBeNull();
+    expect(rule!.contains).toBe("NETFLIX");
+    expect(rule!.category).toBe("Entretenimiento");
+    expect(rule!.active).toBe(true);
+  });
+
+  it("crear_autorizacion_medica calcula el vencimiento", async () => {
+    const result = await executeConfirmedTool(
+      "crear_autorizacion_medica",
+      { specialty: "Oftalmología", daysOfValidity: 15 },
+      { userId }
+    );
+
+    const authorization = await db.medicalAuthorization.findUnique({
+      where: { id: String(result.data!.authorizationId) },
+    });
+    expect(authorization!.status).toBe("authorized");
+    expect(authorization!.daysOfValidity).toBe(15);
+    expect(authorization!.expirationDate).not.toBeNull();
+  });
+
+  it("crear_condicion_salud usa el perfil titular", async () => {
+    const result = await executeConfirmedTool(
+      "crear_condicion_salud",
+      { name: "Hipertensión", severity: "diagnosed" },
+      { userId }
+    );
+
+    const condition = await db.healthCondition.findUnique({
+      where: { id: String(result.data!.conditionId) },
+    });
+    expect(condition!.name).toBe("Hipertensión");
+    expect(condition!.origin).toBe("manual");
+  });
+
+  it("las lecturas nuevas devuelven lo creado", async () => {
+    const lists = await getReadExecutor("consultar_listas_compras")!({ onlyOpen: false }, { userId });
+    expect(Number(lists.data!.count)).toBeGreaterThan(0);
+
+    const recipes = await getReadExecutor("consultar_recetas")!({}, { userId });
+    expect(Number(recipes.data!.count)).toBeGreaterThan(0);
+
+    const health = await getReadExecutor("consultar_perfil_salud")!({}, { userId });
+    expect(health.text).toContain("Hipertensión");
+
+    const authorizations = await getReadExecutor("consultar_autorizaciones")!({}, { userId });
+    expect(Number(authorizations.data!.count)).toBeGreaterThan(0);
+  });
+});

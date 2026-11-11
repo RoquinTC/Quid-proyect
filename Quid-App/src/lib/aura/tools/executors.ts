@@ -868,6 +868,211 @@ export async function consultarOrdenesMedicas(
   };
 }
 
+export async function consultarListasCompras(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const onlyOpen = args.onlyOpen !== false;
+  const lists = await db.shoppingList.findMany({
+    where: {
+      userId: ctx.userId,
+      ...(onlyOpen ? { status: { not: "completed" } } : {}),
+    },
+    include: { items: { select: { id: true, isPurchased: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
+
+  if (lists.length === 0) {
+    return { text: onlyOpen ? "No tienes listas de compras abiertas." : "No hay listas de compras.", data: { count: 0 } };
+  }
+
+  const lines = lists.map((list) => {
+    const pending = list.items.filter((item) => !item.isPurchased).length;
+    return `• ${list.name} (${list.status}): ${list.items.length} producto(s), ${pending} por comprar`;
+  });
+
+  return {
+    text: [`Listas de compras (${lists.length}):`, ...lines].join("\n"),
+    data: { count: lists.length },
+  };
+}
+
+export async function consultarRecetas(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const recipes = await db.recipe.findMany({
+    where: { userId: ctx.userId },
+    include: { ingredients: { select: { id: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 15,
+  });
+
+  if (recipes.length === 0) return { text: "No tienes recetas guardadas.", data: { count: 0 } };
+
+  const lines = recipes.map(
+    (recipe) =>
+      `• ${recipe.name}: ${recipe.servings} porción(es), ${recipe.ingredients.length} ingrediente(s)${recipe.cookingTime ? `, ${recipe.cookingTime} min` : ""}`
+  );
+
+  return { text: [`Recetas (${recipes.length}):`, ...lines].join("\n"), data: { count: recipes.length } };
+}
+
+export async function consultarPerfilSalud(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const profiles = await db.healthProfile.findMany({
+    where: { userId: ctx.userId },
+    include: { conditions: true, dietaryProfile: true },
+  });
+
+  if (profiles.length === 0) return { text: "No hay perfiles de salud configurados.", data: { count: 0 } };
+
+  const lines: string[] = [];
+  for (const profile of profiles) {
+    lines.push(`• ${profile.name} (${profile.type})`);
+    for (const condition of profile.conditions) {
+      lines.push(`   - ${condition.name}${condition.severity !== "diagnosed" ? ` (${condition.severity})` : ""}`);
+    }
+    const diet = profile.dietaryProfile;
+    if (diet?.aiSummary) lines.push(`   - Dieta: ${diet.aiSummary}`);
+  }
+
+  return {
+    text: [`Perfiles de salud (${profiles.length}):`, ...lines].join("\n"),
+    data: { count: profiles.length },
+  };
+}
+
+export async function consultarLogros(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const total = await db.achievementProgress.count({ where: { userId: ctx.userId } });
+  const discovered = await db.achievementProgress.count({ where: { userId: ctx.userId, discovered: true } });
+  const pending = await db.achievementProgress.findMany({
+    where: { userId: ctx.userId, discovered: false, dismissed: false },
+    select: { module: true, feature: true },
+    take: 20,
+  });
+
+  if (total === 0) return { text: "Todavía no hay logros registrados.", data: { total: 0 } };
+
+  const lines = pending.slice(0, 10).map((entry) => `• ${entry.module}: ${entry.feature}`);
+
+  return {
+    text: [
+      `Logros: ${discovered} de ${total} descubiertos.`,
+      pending.length > 0 ? "Pendientes por descubrir:" : "No hay pistas pendientes.",
+      ...lines,
+    ].join("\n"),
+    data: { total, discovered, pending: pending.length },
+  };
+}
+
+export async function consultarCompartidas(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const [shared, received, sent] = await Promise.all([
+    db.sharedAccountUser.findMany({
+      where: { userId: ctx.userId },
+      include: { account: { select: { name: true } } },
+    }),
+    db.accountInvitation.findMany({
+      where: { inviteeId: ctx.userId, status: "pending" },
+      include: { account: { select: { name: true } } },
+    }),
+    db.accountInvitation.findMany({
+      where: { inviterId: ctx.userId, status: "pending" },
+      select: { inviteeEmail: true, role: true },
+    }),
+  ]);
+
+  if (shared.length === 0 && received.length === 0 && sent.length === 0) {
+    return { text: "No tienes cuentas compartidas ni invitaciones pendientes.", data: { shared: 0 } };
+  }
+
+  const lines: string[] = [];
+  for (const entry of shared) lines.push(`• Compartida contigo: ${entry.account.name} (${entry.role})`);
+  for (const invitation of received) lines.push(`• Invitación pendiente: ${invitation.account.name} (${invitation.role})`);
+  for (const invitation of sent) lines.push(`• Inviaste a ${invitation.inviteeEmail} (${invitation.role}), sin responder`);
+
+  return {
+    text: ["Cuentas compartidas e invitaciones:", ...lines].join("\n"),
+    data: { shared: shared.length, received: received.length, sent: sent.length },
+  };
+}
+
+export async function consultarMovimientosDespensa(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const limitRaw = typeof args.limit === "number" ? args.limit : 10;
+  const limit = Math.min(Math.max(Math.round(limitRaw), 1), 50);
+
+  const [movements, prices] = await Promise.all([
+    db.pantryMovement.findMany({
+      where: { userId: ctx.userId },
+      include: { item: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    }),
+    db.priceHistory.findMany({
+      where: { userId: ctx.userId },
+      include: { item: { select: { name: true } } },
+      orderBy: { date: "desc" },
+      take: 5,
+    }),
+  ]);
+
+  if (movements.length === 0 && prices.length === 0) {
+    return { text: "No hay movimientos de despensa registrados.", data: { movements: 0, prices: 0 } };
+  }
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short" });
+  const lines = movements.map(
+    (movement) =>
+      `• ${format.format(movement.createdAt)} · ${movement.item.name}: ${movement.type} ${movement.quantity} ${movement.unit ?? ""}`.trim()
+  );
+
+  const priceLines = prices.map(
+    (entry) =>
+      `• Precio ${entry.item.name}: ${COP.format(Number(entry.price))} por ${entry.unit ?? "unidad"} (${format.format(entry.date)})`
+  );
+
+  return {
+    text: [`Movimientos de despensa (${movements.length}):`, ...lines, ...(priceLines.length ? ["", "Últimos precios:", ...priceLines] : [])].join("\n"),
+    data: { movements: movements.length, prices: prices.length },
+  };
+}
+
+export async function consultarAutorizaciones(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const authorizations = await db.medicalAuthorization.findMany({
+    where: { userId: ctx.userId, status: { not: "cancelled" } },
+    orderBy: { createdAt: "desc" },
+    take: 15,
+  });
+
+  if (authorizations.length === 0) return { text: "No tienes autorizaciones médicas registradas.", data: { count: 0 } };
+
+  const format = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  const lines = authorizations.map((entry) => {
+    const expiry = entry.expirationDate ? `, vence ${format.format(entry.expirationDate)}` : "";
+    return `• ${entry.specialty} (${entry.type}): ${entry.status}${expiry}`;
+  });
+
+  return {
+    text: [`Autorizaciones médicas (${authorizations.length}):`, ...lines].join("\n"),
+    data: { count: authorizations.length },
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
@@ -898,6 +1103,13 @@ const READ_EXECUTORS: Record<
   consultar_categorias: consultarCategorias,
   consultar_capturas: consultarCapturas,
   consultar_ordenes_medicas: consultarOrdenesMedicas,
+  consultar_listas_compras: consultarListasCompras,
+  consultar_recetas: consultarRecetas,
+  consultar_perfil_salud: consultarPerfilSalud,
+  consultar_logros: consultarLogros,
+  consultar_compartidas: consultarCompartidas,
+  consultar_movimientos_despensa: consultarMovimientosDespensa,
+  consultar_autorizaciones: consultarAutorizaciones,
 };
 
 export function getReadExecutor(name: string) {

@@ -610,6 +610,106 @@ export const CREAR_GRUPO_CATEGORIA: ToolDefinition = {
   ],
 };
 
+export const CONSULTAR_LISTAS_COMPRAS: ToolDefinition = {
+  name: "consultar_listas_compras",
+  kind: "read",
+  implemented: true,
+  description: "Lista las listas de compras con cuántos productos faltan por comprar.",
+  parameters: [
+    { name: "onlyOpen", type: "boolean", required: false, defaultValue: true, description: "Solo las abiertas." },
+  ],
+};
+
+export const CONSULTAR_RECETAS: ToolDefinition = {
+  name: "consultar_recetas",
+  kind: "read",
+  implemented: true,
+  description: "Lista las recetas guardadas con porciones e ingredientes.",
+  parameters: [],
+};
+
+export const CONSULTAR_PERFIL_SALUD: ToolDefinition = {
+  name: "consultar_perfil_salud",
+  kind: "read",
+  implemented: true,
+  description: "Devuelve los perfiles de salud con sus condiciones y restricciones.",
+  parameters: [],
+};
+
+export const CONSULTAR_LOGROS: ToolDefinition = {
+  name: "consultar_logros",
+  kind: "read",
+  implemented: true,
+  description: "Cuántos logros se descubrieron y cuáles están pendientes.",
+  parameters: [],
+};
+
+export const CONSULTAR_COMPARTIDAS: ToolDefinition = {
+  name: "consultar_compartidas",
+  kind: "read",
+  implemented: true,
+  description: "Cuentas compartidas e invitaciones pendientes (recibidas y enviadas).",
+  parameters: [],
+};
+
+export const CONSULTAR_MOVIMIENTOS_DESPENSA: ToolDefinition = {
+  name: "consultar_movimientos_despensa",
+  kind: "read",
+  implemented: true,
+  description: "Movimientos de despensa recientes y últimos precios pagados.",
+  parameters: [
+    { name: "limit", type: "number", required: false, defaultValue: 10, description: "Cuántos movimientos devolver." },
+  ],
+};
+
+export const CONSULTAR_AUTORIZACIONES: ToolDefinition = {
+  name: "consultar_autorizaciones",
+  kind: "read",
+  implemented: true,
+  description: "Autorizaciones médicas con su estado y vencimiento.",
+  parameters: [],
+};
+
+export const CREAR_REGLA_CATEGORIA: ToolDefinition = {
+  name: "crear_regla_categoria",
+  kind: "write",
+  implemented: true,
+  description:
+    "Crea una regla que categoriza automáticamente los movimientos cuyo texto contenga cierta frase.",
+  parameters: [
+    { name: "contains", type: "string", required: true, description: "Texto que debe contener el movimiento." },
+    { name: "category", type: "string", required: true, description: "Categoría a asignar." },
+    { name: "name", type: "string", required: false, description: "Nombre de la regla." },
+    { name: "subCategory", type: "string", required: false, description: "Subcategoría." },
+    { name: "type", type: "enum", required: false, values: ["income", "expense"], description: "Solo aplica a ese tipo." },
+  ],
+};
+
+export const CREAR_AUTORIZACION_MEDICA: ToolDefinition = {
+  name: "crear_autorizacion_medica",
+  kind: "write",
+  implemented: true,
+  description: "Registra una autorización médica con su vigencia.",
+  parameters: [
+    { name: "specialty", type: "string", required: true, description: "Especialidad autorizada." },
+    { name: "type", type: "enum", required: false, values: ["specialist", "control", "procedure", "other"], defaultValue: "specialist", description: "Tipo de autorización." },
+    { name: "code", type: "string", required: false, description: "Número o código." },
+    { name: "daysOfValidity", type: "number", required: false, defaultValue: 30, description: "Días de vigencia." },
+  ],
+};
+
+export const CREAR_CONDICION_SALUD: ToolDefinition = {
+  name: "crear_condicion_salud",
+  kind: "write",
+  implemented: true,
+  description: "Agrega una condición de salud al perfil (diagnosticada o sospechada).",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre de la condición." },
+    { name: "severity", type: "enum", required: false, values: ["diagnosed", "suspected"], defaultValue: "diagnosed", description: "Diagnosticada o sospechada." },
+    { name: "notes", type: "string", required: false, description: "Notas." },
+  ],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice
 // ─────────────────────────────────────────────────────────────────────────────
@@ -639,6 +739,9 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   CREAR_DOCUMENTO_VEHICULO,
   CREAR_ORDEN_MEDICA,
   CREAR_GRUPO_CATEGORIA,
+  CREAR_REGLA_CATEGORIA,
+  CREAR_AUTORIZACION_MEDICA,
+  CREAR_CONDICION_SALUD,
   // Lectura
   CONSULTAR_GASTOS,
   CONSULTAR_SALDO,
@@ -660,6 +763,13 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   CONSULTAR_CATEGORIAS,
   CONSULTAR_CAPTURAS,
   CONSULTAR_ORDENES_MEDICAS,
+  CONSULTAR_LISTAS_COMPRAS,
+  CONSULTAR_RECETAS,
+  CONSULTAR_PERFIL_SALUD,
+  CONSULTAR_LOGROS,
+  CONSULTAR_COMPARTIDAS,
+  CONSULTAR_MOVIMIENTOS_DESPENSA,
+  CONSULTAR_AUTORIZACIONES,
   CONSULTAR_MEDICAMENTOS,
   CONSULTAR_CITAS,
 ];

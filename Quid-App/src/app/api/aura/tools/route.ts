@@ -459,6 +459,9 @@ export function buildProposalDescription(
     crear_documento_vehiculo: "Voy a registrar este documento del vehículo",
     crear_orden_medica: "Voy a registrar esta orden médica",
     crear_grupo_categoria: "Voy a crear este grupo de categorías",
+    crear_regla_categoria: "Voy a crear esta regla de categorización",
+    crear_autorizacion_medica: "Voy a registrar esta autorización médica",
+    crear_condicion_salud: "Voy a agregar esta condición al perfil de salud",
   };
 
   if (summaryTitles[tool]) {
