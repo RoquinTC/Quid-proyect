@@ -26,6 +26,8 @@ async function cleanup() {
   await db.budget.deleteMany({ where: { userId: user.id } });
   await db.fuelLog.deleteMany({ where: { vehicle: { userId: user.id } } });
   await db.vehicle.deleteMany({ where: { userId: user.id } });
+  // La nómina apunta a la cuenta: hay que soltarla antes de borrar cuentas.
+  await db.payrollGroup.deleteMany({ where: { userId: user.id } });
   await db.subAccount.deleteMany({ where: { account: { userId: user.id } } });
   await db.account.deleteMany({ where: { userId: user.id } });
   await db.user.delete({ where: { id: user.id } });
@@ -528,6 +530,107 @@ describe("escrituras nuevas", () => {
     expect(medication!.isActive).toBe(true);
     expect(JSON.parse(medication!.reminderTimes!)).toEqual(["08:00", "20:00"]);
     expect(medication!.frequency).toBe("custom");
+  });
+
+  it("crear_nomina guarda el calendario de pagos", async () => {
+    await executeConfirmedTool(
+      "crear_nomina",
+      { totalAmount: 3000000, accountName: "Cuenta Principal", days: "15,30" },
+      { userId }
+    );
+
+    const group = await db.payrollGroup.findFirst({
+      where: { userId, description: "Sueldo" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(group).not.toBeNull();
+    const schedules = JSON.parse(group!.schedules);
+    expect(schedules).toHaveLength(2);
+    expect(schedules[0].day).toBe(15);
+    expect(schedules[0].amount).toBe(1500000);
+  });
+
+  it("agregar_item_despensa suma si el producto ya existe", async () => {
+    const name = `Arroz Aura ${Date.now()}`;
+    const first = await executeConfirmedTool(
+      "agregar_item_despensa",
+      { name, quantity: 2, unit: "kg" },
+      { userId }
+    );
+    expect(first.data!.updated).toBe(false);
+
+    const second = await executeConfirmedTool(
+      "agregar_item_despensa",
+      { name, quantity: 3, unit: "kg" },
+      { userId }
+    );
+    expect(second.data!.updated).toBe(true);
+    expect(second.data!.quantity).toBe(5);
+
+    const items = await db.pantryItem.count({ where: { userId, nameNormalized: { not: "" } } });
+    expect(items).toBeGreaterThan(0);
+  });
+
+  it("crear_lista_compras y crear_receta guardan sus ítems", async () => {
+    const list = await executeConfirmedTool(
+      "crear_lista_compras",
+      { name: "Mercado Aura", items: "leche, pan, huevos" },
+      { userId }
+    );
+    expect(list.data!.items).toBe(3);
+
+    const savedList = await db.shoppingListItem.count({
+      where: { shoppingListId: String(list.data!.shoppingListId) },
+    });
+    expect(savedList).toBe(3);
+
+    const recipe = await executeConfirmedTool(
+      "crear_receta",
+      { name: "Arroz Aura", servings: 2, ingredients: "arroz, agua" },
+      { userId }
+    );
+    const savedIngredients = await db.recipeIngredient.count({
+      where: { recipeId: String(recipe.data!.recipeId) },
+    });
+    expect(savedIngredients).toBe(2);
+  });
+
+  it("documento de vehículo, orden médica y grupo de categorías quedan guardados", async () => {
+    const tag = Date.now().toString().slice(-6);
+    const vehicle = await db.vehicle.create({
+      data: { userId, name: `Carro Aura ${tag}`, type: "car", currentKm: 100 },
+    });
+
+    const doc = await executeConfirmedTool(
+      "crear_documento_vehiculo",
+      { type: "soat", expiryDate: "2027-01-31", vehicleName: vehicle.name, cost: 450000 },
+      { userId }
+    );
+    const savedDoc = await db.vehicleDocument.findUnique({
+      where: { id: String(doc.data!.documentId) },
+    });
+    expect(savedDoc!.type).toBe("soat");
+    expect(savedDoc!.expiryDate.toISOString().slice(0, 10)).toBe("2027-01-31");
+
+    const order = await executeConfirmedTool(
+      "crear_orden_medica",
+      { title: "Exámenes de sangre" },
+      { userId }
+    );
+    const savedOrder = await db.medicalOrder.findUnique({
+      where: { id: String(order.data!.medicalOrderId) },
+    });
+    expect(savedOrder!.status).toBe("pending");
+
+    const group = await executeConfirmedTool(
+      "crear_grupo_categoria",
+      { name: `Hogar Aura ${tag}`, categories: "Arriendo, Servicios" },
+      { userId }
+    );
+    const members = await db.categoryGroupMember.count({
+      where: { groupId: String(group.data!.categoryGroupId) },
+    });
+    expect(members).toBe(2);
   });
 });
 

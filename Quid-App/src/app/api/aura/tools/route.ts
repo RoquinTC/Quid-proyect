@@ -450,5 +450,24 @@ export function buildProposalDescription(
       .join("\n");
   }
 
+  // Herramientas cuyo resumen basta con el detalle de sus campos.
+  const summaryTitles: Record<string, string> = {
+    crear_nomina: "Voy a configurar esta nómina",
+    agregar_item_despensa: "Voy a agregar esto a la despensa",
+    crear_lista_compras: "Voy a crear esta lista de compras",
+    crear_receta: "Voy a guardar esta receta",
+    crear_documento_vehiculo: "Voy a registrar este documento del vehículo",
+    crear_orden_medica: "Voy a registrar esta orden médica",
+    crear_grupo_categoria: "Voy a crear este grupo de categorías",
+  };
+
+  if (summaryTitles[tool]) {
+    const detail = Object.entries(args)
+      .filter(([, value]) => value !== null && value !== undefined && value !== "")
+      .map(([key, value]) => `• ${key}: ${String(value)}`)
+      .join("\n");
+    return `${summaryTitles[tool]}:\n${detail}`;
+  }
+
   return `Voy a ejecutar la acción "${tool}" con estos datos:\n${JSON.stringify(args, null, 2)}`;
 }

@@ -519,6 +519,97 @@ export const CREAR_MEDICAMENTO: ToolDefinition = {
   ],
 };
 
+export const CREAR_NOMINA: ToolDefinition = {
+  name: "crear_nomina",
+  kind: "write",
+  implemented: true,
+  description: "Configura la nómina: monto, periodicidad, cuenta donde entra y los días de pago.",
+  parameters: [
+    { name: "totalAmount", type: "number", required: true, description: "Monto de la nómina, en pesos." },
+    { name: "accountName", type: "string", required: true, description: "Cuenta donde se recibe." },
+    { name: "description", type: "string", required: false, defaultValue: "Sueldo", description: "Nombre de la nómina." },
+    { name: "frequency", type: "enum", required: false, values: ["monthly", "biweekly", "weekly"], defaultValue: "monthly", description: "Periodicidad." },
+    { name: "days", type: "string", required: false, description: 'Días de pago separados por coma: "15,30".' },
+    { name: "category", type: "string", required: false, description: "Categoría del ingreso." },
+  ],
+};
+
+export const AGREGAR_ITEM_DESPENSA: ToolDefinition = {
+  name: "agregar_item_despensa",
+  kind: "write",
+  implemented: true,
+  description: "Agrega un producto a la despensa; si ya existe, suma la cantidad.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre del producto." },
+    { name: "quantity", type: "number", required: false, defaultValue: 1, description: "Cantidad." },
+    { name: "unit", type: "string", required: false, defaultValue: "unit", description: "Unidad: unit, kg, l, lb..." },
+    { name: "category", type: "string", required: false, description: "Categoría del producto." },
+    { name: "minStock", type: "number", required: false, description: "Mínimo para avisar stock bajo." },
+  ],
+};
+
+export const CREAR_LISTA_COMPRAS: ToolDefinition = {
+  name: "crear_lista_compras",
+  kind: "write",
+  implemented: true,
+  description: "Crea una lista de compras con sus productos.",
+  parameters: [
+    { name: "name", type: "string", required: false, description: "Nombre de la lista." },
+    { name: "items", type: "string", required: false, description: 'Productos separados por coma: "leche, pan, huevos".' },
+  ],
+};
+
+export const CREAR_RECETA: ToolDefinition = {
+  name: "crear_receta",
+  kind: "write",
+  implemented: true,
+  description: "Guarda una receta con porciones, ingredientes y preparación.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre de la receta." },
+    { name: "servings", type: "number", required: false, defaultValue: 1, description: "Porciones." },
+    { name: "ingredients", type: "string", required: false, description: "Ingredientes separados por coma." },
+    { name: "instructions", type: "string", required: false, description: "Pasos, separados por salto de línea." },
+  ],
+};
+
+export const CREAR_DOCUMENTO_VEHICULO: ToolDefinition = {
+  name: "crear_documento_vehiculo",
+  kind: "write",
+  implemented: true,
+  description: "Registra un documento del vehículo (SOAT, tecnomecánica, seguro, impuesto).",
+  parameters: [
+    { name: "type", type: "string", required: true, description: "soat, tecnomecanica, seguro, impuesto u otro." },
+    { name: "expiryDate", type: "date", required: true, description: "Vencimiento (AAAA-MM-DD)." },
+    { name: "vehicleName", type: "string", required: false, description: "Vehículo o placa." },
+    { name: "issueDate", type: "date", required: false, description: "Fecha de expedición (AAAA-MM-DD)." },
+    { name: "cost", type: "number", required: false, defaultValue: 0, description: "Costo, en pesos." },
+  ],
+};
+
+export const CREAR_ORDEN_MEDICA: ToolDefinition = {
+  name: "crear_orden_medica",
+  kind: "write",
+  implemented: true,
+  description: "Registra una orden médica pendiente de reclamar.",
+  parameters: [
+    { name: "title", type: "string", required: true, description: "Qué ordena (exámenes, medicamentos...)." },
+    { name: "orderNumber", type: "string", required: false, description: "Número de la orden." },
+    { name: "notes", type: "string", required: false, description: "Notas." },
+  ],
+};
+
+export const CREAR_GRUPO_CATEGORIA: ToolDefinition = {
+  name: "crear_grupo_categoria",
+  kind: "write",
+  implemented: true,
+  description: "Crea un grupo de categorías (por ejemplo Vivienda) y le agrega categorías.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre del grupo." },
+    { name: "categories", type: "string", required: false, description: "Categorías separadas por coma." },
+    { name: "type", type: "enum", required: false, values: ["expense", "income"], defaultValue: "expense", description: "Gasto o ingreso." },
+  ],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice
 // ─────────────────────────────────────────────────────────────────────────────
@@ -541,6 +632,13 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   REGISTRAR_MANTENIMIENTO,
   CREAR_CITA,
   CREAR_MEDICAMENTO,
+  CREAR_NOMINA,
+  AGREGAR_ITEM_DESPENSA,
+  CREAR_LISTA_COMPRAS,
+  CREAR_RECETA,
+  CREAR_DOCUMENTO_VEHICULO,
+  CREAR_ORDEN_MEDICA,
+  CREAR_GRUPO_CATEGORIA,
   // Lectura
   CONSULTAR_GASTOS,
   CONSULTAR_SALDO,

@@ -20,6 +20,7 @@ import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { applyBalanceDelta } from "@/lib/finance-ledger";
 import { createSeries } from "@/lib/recurring/series";
+import { normalizeName } from "@/lib/pantry/names";
 import { createCreditCardPurchaseFromAura } from "@/lib/aura/index";
 import type { ExecutionContext, ExecutionResult } from "./executors";
 
@@ -1192,6 +1193,328 @@ export async function executeCrearMedicamento(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// crear_nomina
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearNomina(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const description = typeof args.description === "string" ? args.description.trim() : "Sueldo";
+  const totalAmount = typeof args.totalAmount === "number" ? args.totalAmount : null;
+  const frequency = typeof args.frequency === "string" ? args.frequency : "monthly";
+  const accountName = typeof args.accountName === "string" ? args.accountName : "";
+  const category = typeof args.category === "string" ? args.category : "Sueldo";
+  const daysRaw = typeof args.days === "string" ? args.days : "";
+
+  if (!totalAmount || totalAmount <= 0) throw new Error("Falta el monto de la nómina.");
+
+  const accounts = await listAccounts(ctx.userId);
+  const account = findByMention(accountName, accounts);
+  if (!account) {
+    throw new Error(
+      accountName
+        ? `No encontré ninguna cuenta que coincida con "${accountName}".`
+        : "Falta indicar en qué cuenta se recibe la nómina."
+    );
+  }
+
+  const days = daysRaw
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value) && value >= 1 && value <= 31);
+
+  const effectiveDays = days.length > 0 ? days : [30];
+  const perDay = Math.round(totalAmount / effectiveDays.length);
+
+  const schedules =
+    frequency === "weekly"
+      ? JSON.stringify([{ dayOfWeek: 6, amount: totalAmount }])
+      : JSON.stringify(effectiveDays.map((day) => ({ day, amount: perDay })));
+
+  const group = await db.payrollGroup.create({
+    data: {
+      userId: ctx.userId,
+      description,
+      frequency,
+      totalAmount,
+      accountId: account.kind === "subAccount" ? account.parentAccountId! : account.id,
+      subAccountId: account.kind === "subAccount" ? account.id : null,
+      category,
+      schedules,
+      isActive: true,
+    },
+  });
+
+  return {
+    text: `Configuré la nómina "${description}" por ${COP.format(totalAmount)} ${frequency === "biweekly" ? "quincenal" : frequency === "weekly" ? "semanal" : "mensual"} en ${account.name}.`,
+    data: { payrollGroupId: group.id, totalAmount, days: effectiveDays },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// agregar_item_despensa
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeAgregarItemDespensa(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const quantity = typeof args.quantity === "number" && args.quantity > 0 ? args.quantity : 1;
+  const unit = typeof args.unit === "string" && args.unit ? args.unit : "unit";
+  const category = typeof args.category === "string" ? args.category : null;
+  const minStock = typeof args.minStock === "number" ? args.minStock : null;
+
+  if (!name) throw new Error("Falta el nombre del producto.");
+
+  const normalized = normalizeName(name);
+  if (!normalized) throw new Error("El nombre del producto no es válido.");
+
+  // Si ya existe (mismo nombre normalizado), se suma al stock en vez de duplicar.
+  const existing = await db.pantryItem.findFirst({
+    where: { userId: ctx.userId, nameNormalized: normalized, isActive: true },
+  });
+
+  if (existing) {
+    const updated = await db.pantryItem.update({
+      where: { id: existing.id },
+      data: { quantity: { increment: quantity } },
+    });
+    return {
+      text: `${existing.name} ya estaba en la despensa: ahora tienes ${updated.quantity} ${existing.unit}.`,
+      data: { pantryItemId: existing.id, updated: true, quantity: updated.quantity },
+    };
+  }
+
+  const item = await db.pantryItem.create({
+    data: {
+      userId: ctx.userId,
+      name,
+      nameNormalized: normalized,
+      quantity,
+      unit,
+      category,
+      minStock,
+      location: "nevera",
+      isActive: true,
+    },
+  });
+
+  return {
+    text: `Agregué ${name} a la despensa: ${quantity} ${unit}.`,
+    data: { pantryItemId: item.id, updated: false, quantity },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_lista_compras
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearListaCompras(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : "Lista de Mercado";
+  const itemsRaw = typeof args.items === "string" ? args.items : "";
+
+  const items = itemsRaw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 40);
+
+  const list = await db.shoppingList.create({
+    data: { userId: ctx.userId, name, status: "draft" },
+  });
+
+  if (items.length > 0) {
+    await db.shoppingListItem.createMany({
+      data: items.map((item) => ({
+        shoppingListId: list.id,
+        name: item,
+        nameNormalized: normalizeName(item),
+        quantity: 1,
+        unit: "unit",
+      })),
+    });
+  }
+
+  return {
+    text: `Creé la lista "${name}"${items.length > 0 ? ` con ${items.length} producto(s)` : " vacía"}.`,
+    data: { shoppingListId: list.id, items: items.length },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_receta
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearReceta(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const servings = typeof args.servings === "number" && args.servings > 0 ? Math.round(args.servings) : 1;
+  const instructions = typeof args.instructions === "string" ? args.instructions.trim() : null;
+  const ingredientsRaw = typeof args.ingredients === "string" ? args.ingredients : "";
+
+  if (!name) throw new Error("Falta el nombre de la receta.");
+
+  const ingredients = ingredientsRaw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 40);
+
+  const recipe = await db.recipe.create({
+    data: {
+      userId: ctx.userId,
+      name,
+      servings,
+      instructions: instructions ? JSON.stringify(instructions.split("\n").filter(Boolean)) : null,
+    },
+  });
+
+  if (ingredients.length > 0) {
+    await db.recipeIngredient.createMany({
+      data: ingredients.map((ingredient) => ({
+        recipeId: recipe.id,
+        name: ingredient,
+        nameNormalized: normalizeName(ingredient),
+        quantity: 1,
+      })),
+    });
+  }
+
+  return {
+    text: `Creé la receta "${name}" para ${servings} porción(es)${ingredients.length > 0 ? ` con ${ingredients.length} ingrediente(s)` : ""}.`,
+    data: { recipeId: recipe.id, ingredients: ingredients.length },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_documento_vehiculo
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearDocumentoVehiculo(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const vehicleName = typeof args.vehicleName === "string" ? args.vehicleName : "";
+  const type = typeof args.type === "string" ? args.type : "otro";
+  const expiryRaw = typeof args.expiryDate === "string" ? args.expiryDate.trim() : "";
+  const cost = typeof args.cost === "number" ? args.cost : 0;
+  const issueRaw = typeof args.issueDate === "string" ? args.issueDate.trim() : "";
+
+  if (!expiryRaw) throw new Error("Falta la fecha de vencimiento (AAAA-MM-DD).");
+
+  const expiryDate = new Date(`${expiryRaw}T05:00:00.000Z`);
+  if (Number.isNaN(expiryDate.getTime())) throw new Error(`No entendí la fecha "${expiryRaw}".`);
+
+  const issueDate = issueRaw ? new Date(`${issueRaw}T05:00:00.000Z`) : new Date();
+
+  const vehicles = await db.vehicle.findMany({
+    where: { userId: ctx.userId },
+    select: { id: true, name: true, plate: true },
+  });
+  if (vehicles.length === 0) throw new Error("No tienes vehículos registrados.");
+
+  const vehicle = vehicleName
+    ? vehicles.find(
+        (candidate) =>
+          findByMention(vehicleName, [{ name: candidate.name }]) !== undefined ||
+          (candidate.plate ? normalize(candidate.plate) === normalize(vehicleName) : false)
+      )
+    : vehicles[0];
+
+  if (!vehicle) throw new Error(`No encontré ningún vehículo que coincida con "${vehicleName}".`);
+
+  const document = await db.vehicleDocument.create({
+    data: {
+      vehicleId: vehicle.id,
+      type,
+      issueDate,
+      expiryDate,
+      cost,
+      reminderEnabled: true,
+    },
+  });
+
+  return {
+    text: `Registré el documento ${type} de ${vehicle.name}, vence el ${expiryRaw}.`,
+    data: { documentId: document.id, vehicleId: vehicle.id, expiryDate: expiryRaw },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_orden_medica
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearOrdenMedica(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const title = typeof args.title === "string" ? args.title.trim() : "";
+  const orderNumber = typeof args.orderNumber === "string" ? args.orderNumber.trim() : null;
+  const notes = typeof args.notes === "string" ? args.notes.trim() : null;
+
+  if (!title) throw new Error("Falta el título de la orden médica.");
+
+  const order = await db.medicalOrder.create({
+    data: {
+      userId: ctx.userId,
+      title,
+      orderNumber,
+      notes,
+      status: "pending",
+    },
+  });
+
+  return {
+    text: `Registré la orden médica "${title}"${orderNumber ? ` (${orderNumber})` : ""}.`,
+    data: { medicalOrderId: order.id },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crear_grupo_categoria
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearGrupoCategoria(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const type = args.type === "income" ? "income" : "expense";
+  const categoriesRaw = typeof args.categories === "string" ? args.categories : "";
+
+  if (!name) throw new Error("Falta el nombre del grupo.");
+
+  const categories = categoriesRaw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 30);
+
+  const group = await db.categoryGroup.create({
+    data: {
+      userId: ctx.userId,
+      name,
+      type,
+      members: {
+        create: categories.map((categoryName) => ({ categoryName })),
+      },
+    },
+  });
+
+  return {
+    text: `Creé el grupo "${name}"${categories.length > 0 ? ` con ${categories.length} categoría(s)` : ""}.`,
+    data: { categoryGroupId: group.id, categories: categories.length },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1215,6 +1538,13 @@ const WRITE_EXECUTORS: Record<
   registrar_mantenimiento: executeRegistrarMantenimiento,
   crear_cita: executeCrearCita,
   crear_medicamento: executeCrearMedicamento,
+  crear_nomina: executeCrearNomina,
+  agregar_item_despensa: executeAgregarItemDespensa,
+  crear_lista_compras: executeCrearListaCompras,
+  crear_receta: executeCrearReceta,
+  crear_documento_vehiculo: executeCrearDocumentoVehiculo,
+  crear_orden_medica: executeCrearOrdenMedica,
+  crear_grupo_categoria: executeCrearGrupoCategoria,
 };
 
 /**

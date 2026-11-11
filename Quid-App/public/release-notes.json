@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.40",
+  "currentVersion": "1.1.41",
   "releases": [
+    {
+      "version": "1.1.41",
+      "date": "2026-11-11",
+      "title": "Quid 1.1.41",
+      "changes": [
+        "Aura configura nomina, despensa, listas y recetas",
+        "Tambien documentos de vehiculo, ordenes medicas",
+        "Y grupos de categorias: 45 herramientas"
+      ]
+    },
     {
       "version": "1.1.40",
       "date": "2026-11-11",
