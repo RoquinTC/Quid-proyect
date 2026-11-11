@@ -149,7 +149,7 @@ git add .                    # NO — arrastra docs/
 
 | | |
 |---|---|
-| Versión producción | **1.1.22** |
+| Versión producción | ver `/version.json` (al cierre de esta sesión: **1.1.43**) |
 | Último commit | ver `git log -1` (no lo fijes aquí, se desactualiza) |
 | Pruebas | 804 en 47 archivos |
 
@@ -205,7 +205,22 @@ Entregado en las últimas sesiones:
   (no hay un segundo camino). Ese cambio además corrigió un `Decimal` que
   entraba como `any` en `confirmedAmount`.
 
-**Pendiente, en este orden:**
+- **F-30 · privacidad de montos (parcial)**: botón de ojo en el encabezado,
+  `lib/privacy-mode.ts` (estado en `localStorage`) y la clase `quid-money` que
+  el CSS difumina cuando `<html>` tiene `quid-hide-amounts`. Ya aplicada al
+  tablero (balance, ingresos, gastos). **Pendiente:** marcarla en el resto de
+  pantallas (cuentas, deudas, presupuestos, análisis, reporte).
+
+**Pendiente técnico (importante):**
+
+1. **Extraer el pago de cuota de deuda** a `lib/finance/debt-payment.ts` para
+   que la ruta `/api/debts/[id]/pay` y Aura usen el mismo código. Hoy ese flujo
+   (606 líneas, intereses, ciclos, presupuestos) **no tiene pruebas** y no se
+   expuso a Aura a propósito. Plan acordado: pruebas de caracterización primero,
+   extracción mecánica después, y verificar que las pruebas pasan **sin
+   cambios**.
+
+**Pendiente funcional, en este orden:**
 
 1. ✅ **Hamburguesa cableada al registro** (2026-11-07) — `app-sidebar.tsx`
    ya hace `.map()` sobre `QUID_MODULES`; cada módulo abre con "Abrir ⟨módulo⟩"
@@ -275,7 +290,7 @@ Después, en el orden del mapa:
 | 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
 | 3 | ✅ `F-23` Suscripciones | Hecho: cápsula en Análisis con candidatos detectados; crea el recurrente eligiendo gasto/ingreso/transferencia; descarte en base |
 | 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 29 lecturas + 26 escrituras**. Solo falta exponer el pago de cuota de tarjeta con interés/ciclo |
-| 5 | `F-30` Privacidad de montos | |
+| 5 | 🔄 `F-30` Privacidad de montos | Infra + tablero hechos; falta marcar el resto de pantallas con `quid-money` |
 | 6 | `F-16` PIN / biometría | El plugin nativo ya está |
 | 7 | `F-17` Export + respaldo cifrado | |
 
