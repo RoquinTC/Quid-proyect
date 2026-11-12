@@ -28,7 +28,12 @@ export function getStandardInstallmentCapital({ totalAmount, totalInstallments }
 
 /** Capital actually payable in this cycle. It can never exceed the purchase's remaining capital. */
 export function getEffectiveInstallmentCapital(values: InstallmentPaymentValues) {
-  return Math.min(getScheduledCapital(values), getRemainingCapital(values));
+  const scheduled = getScheduledCapital(values);
+  const remaining = getRemainingCapital(values);
+  // Filas heredadas con el pendiente en 0 (p. ej. pagadas y luego reversadas)
+  // quedaban con capital efectivo 0: el botón de pagar no hacía nada.
+  if (remaining <= 0 && scheduled > 0) return scheduled;
+  return Math.min(scheduled, remaining);
 }
 
 export function getNextInstallmentCapital(values: InstallmentPaymentValues, remainingCapital: number) {

@@ -1,6 +1,15 @@
 {
-  "currentVersion": "1.1.45",
+  "currentVersion": "1.1.46",
   "releases": [
+    {
+      "version": "1.1.46",
+      "date": "2026-11-12",
+      "title": "Quid 1.1.46",
+      "changes": [
+        "La cuota con pendiente en cero vuelve a poder pagarse",
+        "Corrige el caso de un pago reversado"
+      ]
+    },
     {
       "version": "1.1.45",
       "date": "2026-11-12",
