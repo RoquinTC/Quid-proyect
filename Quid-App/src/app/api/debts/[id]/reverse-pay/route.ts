@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { adjustBudgetSpent, applyCreditInstallmentBudgetImpact } from "@/lib/budget-impact";
 import { applyBalanceDelta } from "@/lib/finance-ledger";
+import { syncDebtState } from "@/lib/debts/sync-debt-state";
 
 /**
  * Reverse the last payment made for a debt's installments.
@@ -228,6 +229,8 @@ export async function POST(
           data: { currentBalance: { increment: totalCapitalToRestore } },
         });
       }
+
+      await syncDebtState(tx, debt.id);
 
       // En un préstamo el capital pendiente de la cuota es el saldo de la deuda:
       // así lo calcula también la pantalla de deudas.

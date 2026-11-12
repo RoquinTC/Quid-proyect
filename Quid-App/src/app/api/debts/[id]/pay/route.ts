@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isInstallmentDebt } from "@/lib/debts/debt-types";
+import { syncDebtState } from "@/lib/debts/sync-debt-state";
 import { getColombiaNow, getColombiaTodayString, createColombiaDate } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtPaySchema } from "@/lib/validations";
@@ -391,6 +392,9 @@ export async function POST(
       where: { id },
       data: { currentBalance: { increment: -totalCapital } },
     });
+
+    // La tarjeta de deuda lee estos contadores: se recalculan desde las cuotas.
+    await syncDebtState(tx, id);
 
     // ── Create transactions and handle budget updates ──
     // For CREDIT CARDS: create ONE "transfer" transaction per account group

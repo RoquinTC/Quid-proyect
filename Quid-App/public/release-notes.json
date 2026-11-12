@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.46",
+  "currentVersion": "1.1.47",
   "releases": [
+    {
+      "version": "1.1.47",
+      "date": "2026-11-12",
+      "title": "Quid 1.1.47",
+      "changes": [
+        "La tarjeta de deuda recalcula cuotas restantes y valor",
+        "Se sincroniza al pagar y al reversar",
+        "Adios al 27 restantes con 24 por pagar"
+      ]
+    },
     {
       "version": "1.1.46",
       "date": "2026-11-12",
