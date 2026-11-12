@@ -29,7 +29,14 @@ export async function syncDebtState(
     .filter((installment) => !installment.isPaid)
     .sort((a, b) => a.nextPaymentDate.getTime() - b.nextPaymentDate.getTime());
 
-  const remaining = pending.length;
+  // El plan tiene N cuotas y solo se crea la siguiente al pagar: lo que falta es
+  // total − pagadas, no la cantidad de filas pendientes (que siempre es 1).
+  const totalPlan = installments.reduce(
+    (max, installment) => Math.max(max, installment.totalInstallments),
+    0
+  );
+  const paidCount = installments.filter((installment) => installment.isPaid).length;
+  const remaining = Math.max(0, totalPlan - paidCount);
   const monthlyPayment = pending.length > 0 ? toNumber(pending[0].installmentAmount) : null;
 
   await client.debt.update({
