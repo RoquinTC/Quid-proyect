@@ -211,6 +211,15 @@ Entregado en las últimas sesiones:
   tablero (balance, ingresos, gastos). **Pendiente:** marcarla en el resto de
   pantallas (cuentas, deudas, presupuestos, análisis, reporte).
 
+**Bugs corregidos:**
+
+- **Reverso de pago en deudas** (`/api/debts/[id]/reverse-pay`): el pago deja
+  `remainingBalance = 0`, y el reverso no lo restauraba; la cuota volvía como
+  "pagada" con pendiente $0 y no se podía cobrar otra vez (solo se notaba en
+  préstamos, donde el capital pendiente vive en ese campo). Ahora el reverso
+  devuelve el capital, y en préstamos lo iguala al saldo de la deuda.
+  `reverse-abono` ya lo hacía bien.
+
 **Pendiente técnico (importante):**
 
 1. **Extraer el pago de cuota de deuda** a `lib/finance/debt-payment.ts` para
