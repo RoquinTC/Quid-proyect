@@ -1,4 +1,5 @@
 "use client";
+import { isInstallmentDebt } from "@/lib/debts/debt-types";
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, formatCurrency, formatDate, toColombiaDateString } from "@/lib/api";
@@ -263,7 +264,7 @@ export function DebtDetail() {
     // Use dueInsts if no selection, otherwise use selected
     const instsToPay = selectedDueInsts.length > 0 ? selectedDueInsts : dueInsts;
 
-    const isLoan = debt.type === "loan";
+    const isLoan = isInstallmentDebt(debt.type);
     const isLoanFixed = isLoan && debt.paymentType === "fixed";
 
     // Check if we need to show the confirmation dialog
@@ -579,7 +580,7 @@ export function DebtDetail() {
   }
 
   const isCreditCard = debt.type === "credit_card";
-  const isLoan = debt.type === "loan";
+  const isLoan = isInstallmentDebt(debt.type);
   const isLoanFixed = isLoan && debt.paymentType === "fixed";
   const cupo = debt.totalAmount - debt.currentBalance;
   const today = new Date();

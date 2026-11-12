@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { isInstallmentDebt } from "@/lib/debts/debt-types";
 import { getColombiaNow } from "@/lib/api";
 import { getBudgetPeriod } from "@/lib/holidays";
 import { toNumber } from "@/lib/decimal-serializer";
@@ -84,7 +85,7 @@ export async function applyCreditInstallmentBudgetImpact(params: {
     client = db,
   } = params;
 
-  if (debtType === "loan") return false;
+  if (isInstallmentDebt(debtType)) return false;
   if (!category) return false;
   if (!(await isDateInCurrentBudgetPeriod(userId, nextPaymentDate, client))) return false;
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { isInstallmentDebt } from "@/lib/debts/debt-types";
 import { getColombiaNow, getColombiaTodayString, createColombiaDate } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtPaySchema } from "@/lib/validations";
@@ -201,7 +202,7 @@ export async function POST(
     const paymentResults = new Map<string, { capital: number; interest: number; other: number; total: number; balanceBeforePayment: number }>();
 
     // Determine if this is a loan with fixed cuota
-    const isLoan = debt.type === "loan";
+    const isLoan = isInstallmentDebt(debt.type);
     const isLoanFixed = isLoan && debt.paymentType === "fixed";
     const getLoanPaymentSource = (inst: InstallmentToPay) => ({
       accountId: payAccountId || inst.accountId || debt.accountId || null,

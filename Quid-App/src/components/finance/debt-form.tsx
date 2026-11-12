@@ -1,4 +1,5 @@
 "use client";
+import { DEBT_TYPE_OPTIONS, isInstallmentDebt, isRevolvingDebt } from "@/lib/debts/debt-types";
 
 import { useState, useEffect } from "react";
 import {
@@ -173,8 +174,8 @@ export function DebtForm({ open, onOpenChange, onSuccess, editDebt }: DebtFormPr
     setShowNewSubCategory(false);
   };
 
-  const isCreditCard = type === "credit_card";
-  const isLoan = type === "loan";
+  const isCreditCard = isRevolvingDebt(type);
+  const isLoan = isInstallmentDebt(type);
   const isFixedCuota = isLoan && paymentType === "fixed";
   const totalNum = parseFloat(totalAmount) || 0;
   const balanceNum = parseFloat(currentBalance) || 0;

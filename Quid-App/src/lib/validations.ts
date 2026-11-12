@@ -202,7 +202,7 @@ export const budgetUpdateSchema = z.object({
 // ============================================
 
 export const debtCreateSchema = z.object({
-  type: z.enum(["credit_card", "loan", "other"]),
+  type: z.enum(["credit_card", "store_card", "personal_loan", "auto_loan", "mortgage", "student_loan", "informal_loan", "loan", "other"]),
   name: z.string().min(1, "El nombre es obligatorio"),
   color: z.string().optional().default("#EF4444"),
   icon: z.string().nullable().optional(),
@@ -225,7 +225,7 @@ export const debtCreateSchema = z.object({
 });
 
 export const debtUpdateSchema = z.object({
-  type: z.enum(["credit_card", "loan", "other"]).optional(),
+  type: z.enum(["credit_card", "store_card", "personal_loan", "auto_loan", "mortgage", "student_loan", "informal_loan", "loan", "other"]).optional(),
   name: z.string().optional(),
   color: z.string().optional(),
   icon: z.string().nullable().optional(),

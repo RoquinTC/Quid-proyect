@@ -1,4 +1,5 @@
 "use client";
+import { isInstallmentDebt, isRevolvingDebt } from "@/lib/debts/debt-types";
 
 import { formatCurrency, calcPercentage } from "@/lib/api";
 import { motion } from "framer-motion";
@@ -36,8 +37,8 @@ interface DebtCardProps {
 }
 
 export function DebtCard({ debt, onClick }: DebtCardProps) {
-  const isCreditCard = debt.type === "credit_card";
-  const isLoan = debt.type === "loan";
+  const isCreditCard = isRevolvingDebt(debt.type);
+  const isLoan = isInstallmentDebt(debt.type);
   const isLoanFixed = isLoan && debt.paymentType === "fixed";
   const utilization = calcPercentage(debt.currentBalance, debt.totalAmount);
   const cupo = debt.totalAmount - debt.currentBalance;
