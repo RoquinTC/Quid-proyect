@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.43",
+  "currentVersion": "1.1.44",
   "releases": [
+    {
+      "version": "1.1.44",
+      "date": "2026-11-12",
+      "title": "Quid 1.1.44",
+      "changes": [
+        "Reverso de pago restaura el capital pendiente",
+        "La cuota vuelve a aparecer para cobrar",
+        "Aplica a prestamos y tarjetas"
+      ]
+    },
     {
       "version": "1.1.43",
       "date": "2026-11-11",

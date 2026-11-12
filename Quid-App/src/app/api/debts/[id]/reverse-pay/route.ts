@@ -162,15 +162,24 @@ export async function POST(
 
       let totalReversed = 0;
       const categoryReversals: Record<string, number> = {};
+      // Capital a devolver al saldo de la deuda, por cuota.
+      let totalCapitalToRestore = 0;
+      const reversedInstallments: Array<{ id: string; capitalPaid: number }> = [];
 
       for (const installment of installments) {
-        const reversalAmount = toNumber(installment.paidAmount || installment.installmentAmount);
-        totalReversed += reversalAmount;
+        const paidAmount = toNumber(installment.paidAmount || installment.installmentAmount);
+        const interestPaid = toNumber(installment.interestAmount || 0);
+        const otherPaid = toNumber(installment.otherChargesAmount || 0);
+        const capitalPaid = Math.max(0, paidAmount - interestPaid - otherPaid);
+
+        totalReversed += paidAmount;
+        totalCapitalToRestore += capitalPaid;
+        reversedInstallments.push({ id: installment.id, capitalPaid });
 
         const catKey = installment.category || "Deudas";
         const subCatKey = installment.subCategory || "";
         const budgetKey = subCatKey ? `${catKey}::${subCatKey}` : catKey;
-        categoryReversals[budgetKey] = (categoryReversals[budgetKey] || 0) + reversalAmount;
+        categoryReversals[budgetKey] = (categoryReversals[budgetKey] || 0) + paidAmount;
 
         if (installment.currentInstallment < installment.totalInstallments) {
           const nextInstallment = await tx.installment.findFirst({
@@ -205,20 +214,12 @@ export async function POST(
             interestRate: null,
             interestAmount: null,
             otherChargesAmount: null,
+            // FALTABA: el pago deja `remainingBalance` en 0, y el tablero mide
+            // el pendiente con ese campo. Sin restaurarlo, la cuota volvía como
+            // "pagada" (pendiente $0) y no se podía cobrar otra vez.
+            remainingBalance: capitalPaid,
           },
         });
-      }
-
-      let totalCapitalToRestore = 0;
-      for (const installment of installments) {
-        if (debt.type === "loan") {
-          const paidTotal = toNumber(installment.paidAmount || 0);
-          const interestPaid = toNumber(installment.interestAmount || 0);
-          const otherPaid = toNumber(installment.otherChargesAmount || 0);
-          totalCapitalToRestore += (paidTotal - interestPaid - otherPaid);
-        } else {
-          totalCapitalToRestore += toNumber(installment.installmentAmount);
-        }
       }
 
       if (totalCapitalToRestore > 0) {
@@ -226,6 +227,22 @@ export async function POST(
           where: { id: debt.id },
           data: { currentBalance: { increment: totalCapitalToRestore } },
         });
+      }
+
+      // En un préstamo el capital pendiente de la cuota es el saldo de la deuda:
+      // así lo calcula también la pantalla de deudas.
+      if (debt.type === "loan") {
+        const restored = await tx.debt.findUnique({
+          where: { id: debt.id },
+          select: { currentBalance: true },
+        });
+        const balance = toNumber(restored?.currentBalance ?? 0);
+        for (const entry of reversedInstallments) {
+          await tx.installment.update({
+            where: { id: entry.id },
+            data: { remainingBalance: balance },
+          });
+        }
       }
 
       for (const transaction of batchTransactions) {
