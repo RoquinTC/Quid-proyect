@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.48",
+  "currentVersion": "1.1.49",
   "releases": [
+    {
+      "version": "1.1.49",
+      "date": "2026-11-12",
+      "title": "Quid 1.1.49",
+      "changes": [
+        "Interes de cuota desde la tasa efectiva anual",
+        "Ya no se toma 17,98 como 17,98% del mes",
+        "Calculo verificado contra el extracto del banco"
+      ]
+    },
     {
       "version": "1.1.48",
       "date": "2026-11-12",

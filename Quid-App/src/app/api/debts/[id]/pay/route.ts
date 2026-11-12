@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isInstallmentDebt } from "@/lib/debts/debt-types";
 import { syncDebtState } from "@/lib/debts/sync-debt-state";
+import { interestForPeriod } from "@/lib/debts/interest";
 import { getColombiaNow, getColombiaTodayString, createColombiaDate } from "@/lib/api";
 import { toNumber } from "@/lib/decimal-serializer";
 import { validateBody, debtPaySchema } from "@/lib/validations";
@@ -290,7 +291,9 @@ export async function POST(
         if (installment.totalInstallments > 1 && interestRates[installment.id] !== undefined) {
           // Interest = remainingBalance × (rate / 100)
           interestRate = interestRates[installment.id];
-          interestAmount = effectiveBalance * (interestRate / 100);
+          // La tasa viene como efectiva anual: se convierte al período antes de
+          // multiplicar. Antes se usaba 17,98 como 17,98% del mes.
+          interestAmount = interestForPeriod(effectiveBalance, interestRate);
         }
       }
 
