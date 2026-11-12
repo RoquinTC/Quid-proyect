@@ -101,6 +101,7 @@ en cada push a `main`. No hace falta crear tags.
 | Fechas `YYYY-MM-DD` | `new Date("2026-11-17")` se interpreta UTC y en Bogotá cae el 16 | Construye con `new Date(y, m-1, d)` |
 | `build-mobile.mjs` | Mueve `src/app/api` → `api-backup` durante el export; si muere a medias, deja la API secuestrada | Verifica que `src/app/api` exista y que no haya `api-backup` |
 | Datos de dinero | En producción hay transacciones **reales** del usuario | Nunca borres datos sin respaldo; informa antes |
+| **Tablas sueltas en Postgres** | Crear una tabla que no esté en `schema.prisma` hace que `db push` (entrypoint) falle por "data loss" y el contenedor entra en **bucle de reinicio: producción cae** | Respalda a **archivo** (`pg_dump` a `backups/`), nunca a una tabla temporal. Si ya existe, `drop table` y reinicia `quid-app` |
 | Credenciales | La app no guarda contraseñas de correo | Usa tokens por usuario, nunca IMAP con password |
 
 ---
@@ -210,6 +211,15 @@ Entregado en las últimas sesiones:
   el CSS difumina cuando `<html>` tiene `quid-hide-amounts`. Ya aplicada al
   tablero (balance, ingresos, gastos). **Pendiente:** marcarla en el resto de
   pantallas (cuentas, deudas, presupuestos, análisis, reporte).
+
+- **Catálogo de tipos de deuda** (`lib/debts/debt-types.ts`): ocho tipos —
+  tarjeta de crédito, tarjeta de tienda, personal/libre inversión, vehículo,
+  hipoteca, educativo, informal y "otra"— y cada uno declara su
+  **comportamiento**: `revolving` (corte, pago = transferencia), `installment`
+  (cuotas, interés, pago = gasto) u `open_balance` (saldo sin cuotas). El resto
+  del código pregunta por el comportamiento (`isInstallmentDebt`,
+  `isRevolvingDebt`), no por el nombre; los valores históricos `loan` y `other`
+  siguen funcionando por alias. Sin migración: `debt.type` es texto.
 
 **Bugs corregidos:**
 
