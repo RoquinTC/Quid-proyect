@@ -212,6 +212,11 @@ Entregado en las últimas sesiones:
   tablero (balance, ingresos, gastos). **Pendiente:** marcarla en el resto de
   pantallas (cuentas, deudas, presupuestos, análisis, reporte).
 
+- **F-16 · bloqueo con PIN**: `lib/pin-lock.ts` guarda solo el **hash** SHA-256
+  del PIN en el dispositivo (nunca en la base ni en el servidor) y bloquea al
+  abrir la app o tras 3 minutos de inactividad. El menú de usuario abre
+  "Bloqueo con PIN". La biometría queda pendiente: exige instalar un plugin
+  nativo y reconstruir la APK.
 - **Catálogo de tipos de deuda** (`lib/debts/debt-types.ts`): ocho tipos —
   tarjeta de crédito, tarjeta de tienda, personal/libre inversión, vehículo,
   hipoteca, educativo, informal y "otra"— y cada uno declara su
@@ -309,8 +314,8 @@ Después, en el orden del mapa:
 | 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
 | 3 | ✅ `F-23` Suscripciones | Hecho: cápsula en Análisis con candidatos detectados; crea el recurrente eligiendo gasto/ingreso/transferencia; descarte en base |
 | 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 29 lecturas + 26 escrituras**. Solo falta exponer el pago de cuota de tarjeta con interés/ciclo |
-| 5 | 🔄 `F-30` Privacidad de montos | Infra + tablero hechos; falta marcar el resto de pantallas con `quid-money` |
-| 6 | `F-16` PIN / biometría | El plugin nativo ya está |
+| 5 | 🔄 `F-30` Privacidad de montos | Hecho en tablero y deudas (tarjeta y detalle); falta cuentas, presupuestos, análisis y reporte |
+| 6 | ✅ `F-16` PIN | Bloqueo con PIN local (`lib/pin-lock.ts`), se activa desde el menú de usuario. Biometría **no**: falta plugin nativo y recompilar APK |
 | 7 | `F-17` Export + respaldo cifrado | |
 
 Sueltos al final de la fase: `F-32` portapapeles · `F-33` release notes
