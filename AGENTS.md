@@ -215,8 +215,9 @@ Entregado en las últimas sesiones:
 - **F-17 · respaldo cifrado**: `lib/backup-crypto.ts` cifra el export completo
   con AES-256-GCM y llave derivada por PBKDF2-SHA256 (200.000 vueltas, sal e IV
   por archivo). El archivo `.quid` se descarga o se comparte desde el menú de
-  usuario; la contraseña nunca se guarda ni sale del dispositivo. El **import**
-  de un `.quid` todavía no está en la app (el import en claro ya existía).
+  usuario; la contraseña nunca se guarda ni sale del dispositivo. El descifrado
+  para **restaurar** ocurre en el teléfono y el import pide confirmación en dos
+  toques (reemplaza los datos de la cuenta).
 - **F-16 · bloqueo con PIN**: `lib/pin-lock.ts` guarda solo el **hash** SHA-256
   del PIN en el dispositivo (nunca en la base ni en el servidor) y bloquea al
   abrir la app o tras 3 minutos de inactividad. El menú de usuario abre
@@ -321,7 +322,7 @@ Después, en el orden del mapa:
 | 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 29 lecturas + 26 escrituras**. Solo falta exponer el pago de cuota de tarjeta con interés/ciclo |
 | 5 | 🔄 `F-30` Privacidad de montos | Hecho en tablero, deudas, cuentas y presupuestos. **Análisis y reporte no aplican bien**: los montos van dentro de frases y del PNG exportado, donde el CSS no llega |
 | 6 | ✅ `F-16` PIN | Bloqueo con PIN local (`lib/pin-lock.ts`), se activa desde el menú de usuario. Biometría **no**: falta plugin nativo y recompilar APK |
-| 7 | ✅ `F-17` Respaldo cifrado | `lib/backup-crypto.ts` (AES-256-GCM + PBKDF2 200k) sobre `/api/backup/export`; archivo `.quid` desde el menú de usuario. **Falta**: importar el `.quid` desde la app |
+| 7 | ✅ `F-17` Respaldo cifrado | `lib/backup-crypto.ts` (AES-256-GCM + PBKDF2 200k); crear y **restaurar** `.quid` desde el menú de usuario (el restore pide confirmación en dos toques) |
 
 Sueltos al final de la fase: `F-32` portapapeles · `F-33` release notes
 in-app · `F-44` bolsillos · `F-47` naturalezas de cuenta.
