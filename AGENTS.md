@@ -324,8 +324,15 @@ Después, en el orden del mapa:
 | 6 | ✅ `F-16` PIN | Bloqueo con PIN local (`lib/pin-lock.ts`), se activa desde el menú de usuario. Biometría **no**: falta plugin nativo y recompilar APK |
 | 7 | ✅ `F-17` Respaldo cifrado | `lib/backup-crypto.ts` (AES-256-GCM + PBKDF2 200k); crear y **restaurar** `.quid` desde el menú de usuario (el restore pide confirmación en dos toques) |
 
-Sueltos al final de la fase: `F-32` portapapeles · `F-33` release notes
-in-app · `F-44` bolsillos · `F-47` naturalezas de cuenta.
+Sueltos al final de la fase: `F-32` portapapeles · `F-44` bolsillos ·
+`F-47` naturalezas de cuenta. **`F-33` hecho**: `components/layout/release-notes.tsx`
+lee `public/release-notes.json` y muestra las novedades; se abre una sola vez
+por versión (marca en `localStorage`) y desde el menú de usuario.
+
+**Nota de esa entrega:** los ítems del menú de usuario para PIN y respaldo se
+habían agregado solo como imports, sin la entrada visible. En 1.1.57 el menú
+quedó completo (Novedades · Respaldo cifrado · Bloqueo con PIN · Cerrar sesión).
+Si se agrega una opción ahí, **verificar en pantalla** que aparece.
 
 ### ⏳ FASE 4 — "Diferenciación"
 `F-24` patrimonio neto → `F-25` préstamos/me deben → `F-26`/`F-27` pareja y
