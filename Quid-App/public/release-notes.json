@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.53",
+  "currentVersion": "1.1.54",
   "releases": [
+    {
+      "version": "1.1.54",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.54",
+      "changes": [
+        "Restaurar respaldo .quid desde la app",
+        "Pide confirmacion antes de reemplazar datos",
+        "Descifra en el telefono, nunca en el servidor"
+      ]
+    },
     {
       "version": "1.1.53",
       "date": "2026-11-14",

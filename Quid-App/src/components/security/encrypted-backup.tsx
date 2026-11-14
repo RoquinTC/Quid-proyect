@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, KeyRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Download, KeyRound, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { encryptBackup } from "@/lib/backup-crypto";
+import { decryptBackup, encryptBackup } from "@/lib/backup-crypto";
 
 /**
  * F-17 · Respaldo cifrado.
@@ -29,6 +29,10 @@ export function EncryptedBackupDialog() {
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [restorePassword, setRestorePassword] = useState("");
+  const [restoreName, setRestoreName] = useState("");
+  const [armed, setArmed] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const listener = () => {
@@ -98,6 +102,48 @@ export function EncryptedBackupDialog() {
     }
   };
 
+  const restore = async () => {
+    setError("");
+    setMessage("");
+
+    const file = fileRef.current?.files?.[0];
+    if (!file) {
+      setError("Elige el archivo .quid.");
+      return;
+    }
+    if (!restorePassword) {
+      setError("Escribe la contraseña del respaldo.");
+      return;
+    }
+    if (!armed) {
+      setArmed(true);
+      return;
+    }
+
+    setWorking(true);
+    try {
+      const text = await file.text();
+      const payload = await decryptBackup(text, restorePassword);
+      const response = await fetch("/api/backup/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error ?? "No se pudo restaurar el respaldo.");
+      }
+      setMessage("Respaldo restaurado. Cierra y abre la app para ver los datos.");
+      setRestorePassword("");
+      setArmed(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "No se pudo restaurar.");
+      setArmed(false);
+    } finally {
+      setWorking(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/50 p-4 sm:items-center">
       <div className="w-full max-w-sm space-y-3 rounded-2xl bg-card p-5 shadow-xl">
@@ -135,6 +181,45 @@ export function EncryptedBackupDialog() {
         <Button variant="ghost" className="w-full rounded-xl" onClick={() => setOpen(false)}>
           Cerrar
         </Button>
+
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <Upload className="size-4" />
+            Restaurar un respaldo
+          </p>
+          <p className="text-xs text-rose-500">
+            Reemplaza los datos actuales de tu cuenta. Úsalo solo si tienes el respaldo correcto.
+          </p>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".quid,application/json"
+            onChange={(event) => {
+              setRestoreName(event.target.files?.[0]?.name ?? "");
+              setArmed(false);
+            }}
+            className="w-full text-xs text-muted-foreground"
+          />
+          <input
+            type="password"
+            placeholder="Contraseña del respaldo"
+            value={restorePassword}
+            onChange={(event) => {
+              setRestorePassword(event.target.value);
+              setArmed(false);
+            }}
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+          />
+          {restoreName && <p className="text-xs text-muted-foreground">Archivo: {restoreName}</p>}
+          <Button
+            variant={armed ? "destructive" : "outline"}
+            className="w-full rounded-xl"
+            disabled={working}
+            onClick={() => void restore()}
+          >
+            {armed ? "Sí, reemplazar mis datos" : "Restaurar respaldo"}
+          </Button>
+        </div>
       </div>
     </div>
   );
