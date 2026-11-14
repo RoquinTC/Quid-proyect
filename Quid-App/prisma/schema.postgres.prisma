@@ -1740,9 +1740,32 @@ model PersonLoan {
   notes       String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  accountId   String?
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  installments PersonLoanInstallment[]
 
   @@index([userId])
   @@index([userId, direction])
   @@map("person_loans")
+}
+
+/// F-25b · Cuotas de un préstamo entre personas. El pago genera un movimiento
+/// real en la cuenta y queda enlazado para poder revertirlo.
+model PersonLoanInstallment {
+  id                    String     @id @default(cuid())
+  loanId                String
+  number                Int
+  amount                Decimal
+  paidAmount            Decimal    @default(0)
+  dueDate               DateTime
+  isPaid                Boolean    @default(false)
+  paidAt                DateTime?
+  accountId             String?
+  paymentTransactionId  String?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  loan                  PersonLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  @@index([loanId])
+  @@map("person_loan_installments")
 }

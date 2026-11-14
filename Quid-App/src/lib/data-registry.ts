@@ -177,6 +177,7 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   { model: "SubscriptionSuggestionDismissal", table: "subscription_suggestion_dismissals", scope: "user", strategy: "export", orphanAudit: true, hasUpdatedAt: false },
   { model: "PayrollGroup", table: "payroll_groups", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
   { model: "PersonLoan", table: "person_loans", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  { model: "PersonLoanInstallment", table: "person_loan_installments", scope: "user-child", strategy: "both", orphanAudit: false, hasUpdatedAt: true, parentRelation: "loan" },
 
   // ── Finanzas: ahorro e inversión ────────────────────────────────────────
   { model: "SavingsGoal", table: "savings_goals", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },

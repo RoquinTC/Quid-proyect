@@ -20,6 +20,8 @@ export interface NetWorthInput {
   savings: Array<{ name: string; amount: number }>;
   cdts: Array<{ name: string; amount: number }>;
   debts: Array<{ name: string; balance: number }>;
+  /** F-25 · plata que te deben (activo) o que debes a personas (pasivo). */
+  personLoans?: Array<{ name: string; balance: number; direction: "lent" | "borrowed" }>;
 }
 
 export interface NetWorthResult {
@@ -51,6 +53,17 @@ export function computeNetWorth(input: NetWorthInput): NetWorthResult {
   for (const debt of input.debts) {
     const value = positive(debt.balance);
     if (value > 0) entries.push({ label: debt.name, value, kind: "liability" });
+  }
+
+  for (const loan of input.personLoans ?? []) {
+    const value = positive(loan.balance);
+    if (value > 0) {
+      entries.push({
+        label: loan.direction === "lent" ? `Me deben: ${loan.name}` : `Debo a ${loan.name}`,
+        value,
+        kind: loan.direction === "lent" ? "asset" : "liability",
+      });
+    }
   }
 
   const assets = entries

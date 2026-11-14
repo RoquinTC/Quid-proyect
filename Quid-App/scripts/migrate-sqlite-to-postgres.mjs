@@ -36,6 +36,7 @@ const modelPlan = [
   // F-23 · descartes de sugerencias de suscripción.
   ["subscriptionSuggestionDismissal", "SubscriptionSuggestionDismissal"],
   ["personLoan", "PersonLoan"],
+  ["personLoanInstallment", "PersonLoanInstallment"],
   ["cDT", "CDT"],
   ["vehicle", "Vehicle"],
   ["fuelLog", "FuelLog"],

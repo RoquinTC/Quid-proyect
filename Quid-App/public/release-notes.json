@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.1.58",
+  "currentVersion": "1.1.59",
   "releases": [
+    {
+      "version": "1.1.59",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.59",
+      "changes": [
+        "Prestamos entre personas con cuotas",
+        "Pagar una cuota genera movimiento y debita la cuenta",
+        "Se puede revertir y vuelve a quedar pendiente",
+        "Los prestamos ya suman al patrimonio neto"
+      ]
+    },
     {
       "version": "1.1.58",
       "date": "2026-11-14",

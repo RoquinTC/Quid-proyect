@@ -15,6 +15,12 @@ const createSchema = z.object({
   dueDate: z.string().optional().nullable(),
   description: z.string().trim().max(200).optional().nullable(),
   notes: z.string().trim().max(500).optional().nullable(),
+  /** Cuántas cuotas generar (1 = pago único). */
+  installments: z.number().int().min(1).max(60).optional(),
+  /** Cuenta con la que se cobra o se paga. */
+  accountId: z.string().optional().nullable(),
+  /** Primera fecha de cuota (AAAA-MM-DD). Si falta, se usa hoy + 1 mes. */
+  firstDueDate: z.string().optional().nullable(),
 });
 
 /** F-25 · Préstamos entre personas: listar con totales. */
@@ -95,8 +101,30 @@ export async function POST(req: NextRequest) {
       date,
       dueDate: data.dueDate ? new Date(`${data.dueDate}T05:00:00.000Z`) : null,
       notes: data.notes ?? null,
+      accountId: data.accountId ?? null,
     },
   });
 
-  return NextResponse.json({ id: loan.id }, { status: 201 });
+  // Cuotas: se reparten parejo y la última ajusta el redondeo.
+  const count = data.installments ?? 1;
+  const base = Math.floor((data.amount / count) * 100) / 100;
+  const firstDue = data.firstDueDate
+    ? new Date(`${data.firstDueDate}T05:00:00.000Z`)
+    : new Date(date.getTime());
+  if (!data.firstDueDate) firstDue.setUTCMonth(firstDue.getUTCMonth() + 1);
+
+  const rows = Array.from({ length: count }, (_, index) => {
+    const dueDate = new Date(firstDue.getTime());
+    dueDate.setUTCMonth(dueDate.getUTCMonth() + index);
+    const amount = index === count - 1 ? Math.round((data.amount - base * (count - 1)) * 100) / 100 : base;
+    return {
+      loanId: loan.id,
+      number: index + 1,
+      amount,
+      dueDate,
+    };
+  });
+  await db.personLoanInstallment.createMany({ data: rows });
+
+  return NextResponse.json({ id: loan.id, installments: rows.length }, { status: 201 });
 }

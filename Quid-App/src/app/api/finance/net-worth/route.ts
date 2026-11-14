@@ -16,7 +16,7 @@ export async function GET() {
 
   const userId = session.user.id;
 
-  const [accounts, savings, cdts, debts] = await Promise.all([
+  const [accounts, savings, cdts, debts, personLoans] = await Promise.all([
     db.account.findMany({
       where: { userId },
       select: { name: true, balance: true },
@@ -32,6 +32,10 @@ export async function GET() {
     db.debt.findMany({
       where: { userId },
       select: { name: true, currentBalance: true },
+    }),
+    db.personLoan.findMany({
+      where: { userId, status: { not: "settled" } },
+      select: { personName: true, amount: true, paidAmount: true, direction: true },
     }),
   ]);
 
@@ -51,6 +55,11 @@ export async function GET() {
     debts: debts.map((debt) => ({
       name: debt.name,
       balance: toNumber(debt.currentBalance),
+    })),
+    personLoans: personLoans.map((loan) => ({
+      name: loan.personName,
+      balance: Math.max(0, toNumber(loan.amount) - toNumber(loan.paidAmount)),
+      direction: loan.direction === "lent" ? ("lent" as const) : ("borrowed" as const),
     })),
   });
 
