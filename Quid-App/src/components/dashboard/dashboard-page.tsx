@@ -19,6 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { NetWorthCard } from "@/components/finance/net-worth-card";
 import { openAuraBot } from "@/lib/aura-bot";
 import { formatCurrency } from "@/lib/api";
 import { useMultiQuery, useLocalQuery } from "@/lib/local/hooks/queries";
@@ -397,6 +398,8 @@ export function DashboardPage() {
               </CardContent>
             </Card>
           </motion.div>
+
+          <NetWorthCard />
 
           {/* DYNAMIC WIDGETS RENDERING */}
           {dashboardWidgets?.map(renderWidget)}

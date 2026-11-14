@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.55",
+  "currentVersion": "1.1.56",
   "releases": [
+    {
+      "version": "1.1.56",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.56",
+      "changes": [
+        "El patrimonio neto tambien en el tablero",
+        "Debajo del balance total, con Tienes y Debes",
+        "Respeta el modo privacidad"
+      ]
+    },
     {
       "version": "1.1.55",
       "date": "2026-11-14",
