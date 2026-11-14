@@ -110,7 +110,7 @@ export function DebtCard({ debt, onClick }: DebtCardProps) {
                 {isCreditCard ? "Saldo en Deuda" : "Saldo Actual"}
               </p>
               <p className="text-base font-bold tracking-tight break-all leading-none">
-                {formatCurrency(debt.currentBalance)}
+                <span className="quid-money">{formatCurrency(debt.currentBalance)}</span>
               </p>
             </div>
             <div className="text-right shrink-0">
@@ -118,7 +118,7 @@ export function DebtCard({ debt, onClick }: DebtCardProps) {
                 {isCreditCard ? "Cupo Total" : "Monto Total"}
               </p>
               <p className="text-xs font-semibold text-white/80">
-                {formatCurrency(debt.totalAmount)}
+                <span className="quid-money">{formatCurrency(debt.totalAmount)}</span>
               </p>
             </div>
           </div>
@@ -131,7 +131,7 @@ export function DebtCard({ debt, onClick }: DebtCardProps) {
                   <Wallet className="size-3 text-emerald-300 shrink-0" />
                   <span className="text-[10px] text-white/70 truncate">Cupo:</span>
                   <span className="text-[11px] font-bold text-emerald-300">
-                    {formatCurrency(cupo)}
+                    <span className="quid-money">{formatCurrency(cupo)}</span>
                   </span>
                 </div>
                 {/* Dates */}

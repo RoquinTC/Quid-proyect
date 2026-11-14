@@ -734,7 +734,7 @@ export function DebtDetail() {
               {isCreditCard ? "Saldo en Deuda" : "Saldo Actual"}
             </span>
             <span className="text-lg font-bold text-gray-900 dark:text-white">
-              {formatCurrency(debt.currentBalance)}
+              <span className="quid-money">{formatCurrency(debt.currentBalance)}</span>
             </span>
           </div>
 

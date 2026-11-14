@@ -4,7 +4,7 @@ import { useAppSession } from "@/lib/use-app-session";
 import { useAppStore } from "@/lib/store";
 import { performLogout } from "@/lib/logout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { LogOut, Menu } from "lucide-react";
+import { LogOut, Menu, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { NotificationPanel } from "@/components/layout/notification-panel";
 import { PrivacyToggle } from "@/components/privacy/privacy-mode";
+import { requestPinSetup } from "@/lib/pin-lock";
 
 export function Header() {
   const { session } = useAppSession();

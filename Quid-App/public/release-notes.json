@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.1.50",
+  "currentVersion": "1.1.51",
   "releases": [
+    {
+      "version": "1.1.51",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.51",
+      "changes": [
+        "Bloqueo con PIN: se activa desde el menu de usuario",
+        "Pide el PIN al volver o tras 3 minutos inactivo",
+        "Se guarda solo en el dispositivo, nunca en la nube",
+        "La privacidad de montos cubre deudas"
+      ]
+    },
     {
       "version": "1.1.50",
       "date": "2026-11-14",
