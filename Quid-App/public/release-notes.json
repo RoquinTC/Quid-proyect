@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.56",
+  "currentVersion": "1.1.57",
   "releases": [
+    {
+      "version": "1.1.57",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.57",
+      "changes": [
+        "Novedades dentro de la app, una vez por version",
+        "El menu de usuario ahora tiene Novedades, Respaldo y PIN",
+        "Se corrigen opciones que no aparecian en el menu"
+      ]
+    },
     {
       "version": "1.1.56",
       "date": "2026-11-14",

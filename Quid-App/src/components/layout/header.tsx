@@ -4,7 +4,7 @@ import { useAppSession } from "@/lib/use-app-session";
 import { useAppStore } from "@/lib/store";
 import { performLogout } from "@/lib/logout";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Download, LogOut, Menu, ShieldCheck } from "lucide-react";
+import { Download, LogOut, Menu, ShieldCheck, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +16,7 @@ import { NotificationPanel } from "@/components/layout/notification-panel";
 import { PrivacyToggle } from "@/components/privacy/privacy-mode";
 import { requestPinSetup } from "@/lib/pin-lock";
 import { requestEncryptedBackup } from "@/components/security/encrypted-backup";
+import { requestReleaseNotes } from "@/components/layout/release-notes";
 
 export function Header() {
   const { session } = useAppSession();
@@ -75,13 +76,34 @@ export function Header() {
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-xl">
+            <DropdownMenuContent align="end" className="w-56 rounded-xl">
               <div className="px-2 py-1.5">
                 <p className="text-sm font-medium">{session?.user?.name}</p>
                 <p className="text-xs text-muted-foreground">
                   {session?.user?.email}
                 </p>
               </div>
+              <DropdownMenuItem
+                onClick={() => requestReleaseNotes()}
+                className="cursor-pointer rounded-lg"
+              >
+                <Sparkles className="mr-2 size-4" />
+                Novedades
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => requestEncryptedBackup()}
+                className="cursor-pointer rounded-lg"
+              >
+                <Download className="mr-2 size-4" />
+                Respaldo cifrado
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => requestPinSetup()}
+                className="cursor-pointer rounded-lg"
+              >
+                <ShieldCheck className="mr-2 size-4" />
+                Bloqueo con PIN
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={async () => { await performLogout(); }}
                 className="text-red-600 focus:text-red-600 cursor-pointer rounded-lg"

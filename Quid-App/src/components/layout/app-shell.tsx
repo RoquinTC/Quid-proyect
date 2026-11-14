@@ -30,6 +30,7 @@ import { AuraChat } from "@/components/aura/aura-chat";
 import { PrivacyModeBoot } from "@/components/privacy/privacy-mode";
 import { PinLockGate } from "@/components/security/pin-lock";
 import { EncryptedBackupDialog } from "@/components/security/encrypted-backup";
+import { ReleaseNotesDialog } from "@/components/layout/release-notes";
 import { AchievementsProvider } from "@/hooks/use-achievements";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -395,6 +396,7 @@ export function AppShell() {
         <PrivacyModeBoot />
         <PinLockGate />
         <EncryptedBackupDialog />
+        <ReleaseNotesDialog />
         {showBackupPrompt && <BackupRestorePrompt />}
         {shouldLock && (
           <div className="fixed inset-0 z-[9999] bg-white dark:bg-gray-950">
