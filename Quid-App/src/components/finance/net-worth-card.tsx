@@ -1,107 +1,77 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { apiFetch, formatCurrency } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { Scale } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Wallet, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import { apiFetch, formatCurrency } from "@/lib/api";
 
-interface HistoryData {
-  currentNetWorth: number;
-  previousNetWorth: number;
+interface NetWorthResponse {
+  assets: number;
+  liabilities: number;
+  net: number;
+  entries: Array<{ label: string; value: number; kind: "asset" | "liability" }>;
 }
 
+/** F-24 · Patrimonio neto: lo que tienes menos lo que debes. */
 export function NetWorthCard() {
-  const [data, setData] = useState<HistoryData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const fetchData = useCallback(async () => {
-    try {
-      const result = await apiFetch<HistoryData>("/api/finance/history");
-      setData(result);
-    } catch (error) {
-      console.error("Error fetching net worth:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [data, setData] = useState<NetWorthResponse | null>(null);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    fetchData().then(() => { if (cancelled) return; });
-    return () => { cancelled = true; };
-  }, [fetchData]);
+    let active = true;
+    apiFetch<NetWorthResponse>("/api/finance/net-worth")
+      .then((result) => {
+        if (active) setData(result);
+      })
+      .catch(() => {
+        if (active) setFailed(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  if (loading) {
+  if (failed) return null;
+  if (!data) {
     return (
-      <Card className="border-0 shadow-sm rounded-2xl animate-pulse">
+      <Card className="border-0 shadow-sm rounded-2xl">
         <CardContent className="p-4">
-          <div className="h-[60px] bg-gray-100 dark:bg-gray-800 rounded-xl" />
+          <div className="h-20 rounded-xl bg-gray-100 dark:bg-gray-800 animate-pulse" />
         </CardContent>
       </Card>
     );
   }
 
-  if (!data) return null;
-
-  const { currentNetWorth, previousNetWorth } = data;
-  const difference = currentNetWorth - previousNetWorth;
-  const percentageChange =
-    previousNetWorth !== 0
-      ? Math.round((difference / Math.abs(previousNetWorth)) * 100)
-      : 0;
-  const isPositive = difference > 0;
-  const isNeutral = difference === 0;
+  const positive = data.net >= 0;
 
   return (
     <Card className="border-0 shadow-sm rounded-2xl">
-      <CardContent className="p-4">
+      <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
-              <Wallet className="size-4 text-white" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Patrimonio Neto
-              </p>
-              <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
-                {formatCurrency(currentNetWorth)}
-              </p>
-            </div>
-          </div>
-          <div className="text-right">
-            {!isNeutral && (
-              <div
-                className={`flex items-center gap-0.5 ${
-                  isPositive
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-rose-600 dark:text-rose-400"
-                }`}
-              >
-                {isPositive ? (
-                  <ArrowUpRight className="size-3.5" />
-                ) : (
-                  <ArrowDownRight className="size-3.5" />
-                )}
-                <span className="text-xs font-bold">
-                  {isPositive ? "+" : ""}
-                  {formatCurrency(difference)}
-                </span>
-              </div>
-            )}
-            {isNeutral && (
-              <div className="flex items-center gap-0.5 text-gray-400">
-                <Minus className="size-3.5" />
-                <span className="text-xs font-bold">Sin cambio</span>
-              </div>
-            )}
-            <p className="text-[11px] text-gray-400">
-              vs periodo anterior · {isPositive ? "+" : ""}{percentageChange}%
+            <Scale className="size-4 text-emerald-500" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              Patrimonio neto
             </p>
           </div>
+          <span className={`text-lg font-bold quid-money ${positive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+            {formatCurrency(data.net)}
+          </span>
         </div>
-        <p className="text-[11px] text-gray-400 mt-1.5">
-          Balance total menos deudas activas
+
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 p-2">
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-300">Tienes</p>
+            <p className="font-semibold quid-money">{formatCurrency(data.assets)}</p>
+          </div>
+          <div className="rounded-xl bg-rose-50 dark:bg-rose-500/10 p-2">
+            <p className="text-[11px] text-rose-700 dark:text-rose-300">Debes</p>
+            <p className="font-semibold quid-money">{formatCurrency(data.liabilities)}</p>
+          </div>
+        </div>
+
+        <p className="text-[11px] text-gray-400">
+          Cuentas + ahorros + CDT, menos el saldo de tus deudas.
         </p>
       </CardContent>
     </Card>

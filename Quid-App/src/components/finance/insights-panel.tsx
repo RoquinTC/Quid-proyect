@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Insight, InsightTone } from "@/lib/finance/insights";
+import { NetWorthCard } from "@/components/finance/net-worth-card";
 
 type InsightsResponse = {
   period: { label: string; start: string; end: string; today: string };
@@ -106,6 +107,7 @@ export function InsightsPanel() {
 
   return (
     <div className="space-y-2">
+      <NetWorthCard />
       <div className="flex items-center justify-between gap-2 px-1">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-emerald-500" />
