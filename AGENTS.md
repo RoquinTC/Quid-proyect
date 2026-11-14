@@ -344,12 +344,15 @@ workspaces → `F-50` viajes → `F-13` recurrencia granular → `F-12` multi-mo
 ahorros + CDT (capital + interés); pasivos = deudas; el neto se muestra con
 "Tienes" y "Debes". Falta el histórico (evolución mes a mes).
 
-**F-25 · préstamos entre personas (hecho)**: modelo `PersonLoan`
-(`person_loans`) con `direction` (`lent` = me deben · `borrowed` = debo),
-monto, abonos y estado. API `/api/person-loans` (listar con totales y crear) y
-`/api/person-loans/[id]` (abonar/saldar, borrar). Tarjeta en Análisis. No se
-mezcla con las deudas de banco: sin corte, ciclo ni cuotas. Falta el histórico
-de abonos por persona y llevarlo al patrimonio neto como activo/pasivo.
+**F-25 · préstamos entre personas (hecho)**: modelos `PersonLoan`
+(`person_loans`) y `PersonLoanInstallment` (`person_loan_installments`), con
+`direction` (`lent` = me deben · `borrowed` = debo), cuotas y abonos.
+API: `/api/person-loans` (listar con cuotas y crear con N cuotas),
+`/[id]/pay` (registra movimiento real, mueve la cuenta, no toca presupuestos) y
+`/[id]/reverse` (borra el movimiento y reabre la cuota). UI: `+ → Préstamo a
+persona` y tarjeta en Análisis con cuotas, **Pagar** y **Revertir**. Suma al
+patrimonio neto (activo/pasivo). **Falta**: editar/eliminar el movimiento desde
+la lista de transacciones y el historial por persona.
 
 ### ⏳ FASE 5 — "Largo plazo"
 `F-19` contrato de datos para agentes · `F-34` simulación premium ·
