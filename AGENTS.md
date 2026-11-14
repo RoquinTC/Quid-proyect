@@ -331,6 +331,11 @@ in-app · `F-44` bolsillos · `F-47` naturalezas de cuenta.
 workspaces → `F-50` viajes → `F-13` recurrencia granular → `F-12` multi-moneda
 → `F-14` ledger verificable → `F-11` widgets de inicio
 
+**F-24 · patrimonio neto (hecho)**: `lib/finance/net-worth.ts` (función pura),
+`/api/finance/net-worth` y tarjeta en Análisis. Activos = cuentas + ahorros +
+CDT (capital + interés); pasivos = deudas; el neto se muestra con "Tienes" y
+"Debes". Falta el histórico (evolución mes a mes) y llevarlo al tablero.
+
 ### ⏳ FASE 5 — "Largo plazo"
 `F-19` contrato de datos para agentes · `F-34` simulación premium ·
 `F-37` infra de producto
