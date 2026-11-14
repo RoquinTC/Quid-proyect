@@ -33,6 +33,7 @@ export async function GET() {
   const loans = await db.personLoan.findMany({
     where: { userId: session.user.id },
     orderBy: [{ status: "asc" }, { date: "desc" }],
+    include: { installments: { orderBy: { number: "asc" } } },
   });
 
   const mapped = loans.map((loan) => {
@@ -49,6 +50,15 @@ export async function GET() {
       date: loan.date.toISOString(),
       dueDate: loan.dueDate ? loan.dueDate.toISOString() : null,
       status: loan.status,
+      installments: loan.installments.map((row) => ({
+        id: row.id,
+        number: row.number,
+        amount: toNumber(row.amount),
+        paidAmount: toNumber(row.paidAmount),
+        isPaid: row.isPaid,
+        dueDate: row.dueDate.toISOString(),
+        hasPayment: Boolean(row.paymentTransactionId),
+      })),
     };
   });
 

@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.60",
+  "currentVersion": "1.1.61",
   "releases": [
+    {
+      "version": "1.1.61",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.61",
+      "changes": [
+        "Cobra las cuotas desde la tarjeta del prestamo",
+        "Eliges cuenta y fecha, y se registra el movimiento",
+        "Revertir borra el movimiento y devuelve la cuota"
+      ]
+    },
     {
       "version": "1.1.60",
       "date": "2026-11-14",
