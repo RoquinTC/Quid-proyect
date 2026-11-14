@@ -340,9 +340,16 @@ workspaces → `F-50` viajes → `F-13` recurrencia granular → `F-12` multi-mo
 → `F-14` ledger verificable → `F-11` widgets de inicio
 
 **F-24 · patrimonio neto (hecho)**: `lib/finance/net-worth.ts` (función pura),
-`/api/finance/net-worth` y tarjeta en Análisis. Activos = cuentas + ahorros +
-CDT (capital + interés); pasivos = deudas; el neto se muestra con "Tienes" y
-"Debes". Falta el histórico (evolución mes a mes) y llevarlo al tablero.
+`/api/finance/net-worth` y tarjeta en Análisis + tablero. Activos = cuentas +
+ahorros + CDT (capital + interés); pasivos = deudas; el neto se muestra con
+"Tienes" y "Debes". Falta el histórico (evolución mes a mes).
+
+**F-25 · préstamos entre personas (hecho)**: modelo `PersonLoan`
+(`person_loans`) con `direction` (`lent` = me deben · `borrowed` = debo),
+monto, abonos y estado. API `/api/person-loans` (listar con totales y crear) y
+`/api/person-loans/[id]` (abonar/saldar, borrar). Tarjeta en Análisis. No se
+mezcla con las deudas de banco: sin corte, ciclo ni cuotas. Falta el histórico
+de abonos por persona y llevarlo al patrimonio neto como activo/pasivo.
 
 ### ⏳ FASE 5 — "Largo plazo"
 `F-19` contrato de datos para agentes · `F-34` simulación premium ·
