@@ -314,7 +314,7 @@ Después, en el orden del mapa:
 | 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
 | 3 | ✅ `F-23` Suscripciones | Hecho: cápsula en Análisis con candidatos detectados; crea el recurrente eligiendo gasto/ingreso/transferencia; descarte en base |
 | 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 29 lecturas + 26 escrituras**. Solo falta exponer el pago de cuota de tarjeta con interés/ciclo |
-| 5 | 🔄 `F-30` Privacidad de montos | Hecho en tablero y deudas (tarjeta y detalle); falta cuentas, presupuestos, análisis y reporte |
+| 5 | 🔄 `F-30` Privacidad de montos | Hecho en tablero, deudas, cuentas y presupuestos. **Análisis y reporte no aplican bien**: los montos van dentro de frases y del PNG exportado, donde el CSS no llega |
 | 6 | ✅ `F-16` PIN | Bloqueo con PIN local (`lib/pin-lock.ts`), se activa desde el menú de usuario. Biometría **no**: falta plugin nativo y recompilar APK |
 | 7 | `F-17` Export + respaldo cifrado | |
 
