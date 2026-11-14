@@ -29,6 +29,7 @@ import { AppDeepLinkHandler } from "@/components/layout/app-deep-link-handler";
 import { AuraChat } from "@/components/aura/aura-chat";
 import { PrivacyModeBoot } from "@/components/privacy/privacy-mode";
 import { PinLockGate } from "@/components/security/pin-lock";
+import { EncryptedBackupDialog } from "@/components/security/encrypted-backup";
 import { AchievementsProvider } from "@/hooks/use-achievements";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -393,6 +394,7 @@ export function AppShell() {
         <AuraChat />
         <PrivacyModeBoot />
         <PinLockGate />
+        <EncryptedBackupDialog />
         {showBackupPrompt && <BackupRestorePrompt />}
         {shouldLock && (
           <div className="fixed inset-0 z-[9999] bg-white dark:bg-gray-950">
