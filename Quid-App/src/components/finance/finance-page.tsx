@@ -23,6 +23,7 @@ import { DebtSimulator } from "./debt-simulator";
 import { AccountForm } from "./account-form";
 import { BudgetForm } from "./budget-form";
 import { SavingsGoalForm } from "./savings-goal-form";
+import { PersonLoanForm } from "@/components/finance/person-loan-form";
 import { DebtForm } from "./debt-form";
 import { CDTForm } from "./cdt-form";
 import { RecurringForm } from "./recurring-form";
@@ -129,6 +130,7 @@ export function FinancePage() {
   const [showBudgetForm, setShowBudgetForm] = useState(false);
   const [showSavingsForm, setShowSavingsForm] = useState(false);
   const [showDebtForm, setShowDebtForm] = useState(false);
+  const [showPersonLoanForm, setShowPersonLoanForm] = useState(false);
   const [showCDTForm, setShowCDTForm] = useState(false);
   const [showRecurringForm, setShowRecurringForm] = useState(false);
   // F-39 · "Pago" abre el mismo formulario pero en frecuencia única (one_time).
@@ -159,6 +161,10 @@ export function FinancePage() {
       "create-savings-goal": () => {
         setFinanceSubView("savings");
         setShowSavingsForm(true);
+      },
+      "create-person-loan": () => {
+        setFinanceSubView("debts");
+        setShowPersonLoanForm(true);
       },
       "create-debt": () => {
         setFinanceSubView("debts");
@@ -326,6 +332,11 @@ export function FinancePage() {
       <SavingsGoalForm
         open={showSavingsForm}
         onOpenChange={setShowSavingsForm}
+      />
+
+      <PersonLoanForm
+        open={showPersonLoanForm}
+        onClose={() => setShowPersonLoanForm(false)}
       />
 
       <DebtForm

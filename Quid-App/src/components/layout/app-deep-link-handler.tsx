@@ -22,6 +22,7 @@ const actions = new Set<SidebarAction>([
   "create-budget",
   "create-savings-goal",
   "create-debt",
+  "create-person-loan",
   "create-cdt",
   "create-recurring",
   "manage-categories",

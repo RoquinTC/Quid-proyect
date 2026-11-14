@@ -19,6 +19,7 @@ export type SidebarAction =
   | "create-savings-goal"
   | "create-debt"
   | "create-cdt"
+  | "create-person-loan"
   | "create-recurring"
   | "manage-categories"
   // Transport

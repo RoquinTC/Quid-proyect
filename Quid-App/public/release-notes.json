@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.59",
+  "currentVersion": "1.1.60",
   "releases": [
+    {
+      "version": "1.1.60",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.60",
+      "changes": [
+        "Prestamo a persona en el boton + de Finanzas",
+        "Persona, monto, cuotas, cuenta y primera fecha",
+        "Guarda y genera las cuotas del prestamo"
+      ]
+    },
     {
       "version": "1.1.59",
       "date": "2026-11-14",
