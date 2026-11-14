@@ -281,17 +281,24 @@ export function DebtDetail() {
       const newOther: Record<string, string> = {};
       const newRates: Record<string, string> = {};
 
-      if (isLoanFixed) {
-        for (const inst of instsToPay) {
-          const balance = inst.remainingBalance ?? debt.currentBalance;
-          const estimatedInt = monthlyRate > 0 ? balance * (monthlyRate / 100) : 0;
-          const estimatedCap = Math.max(fixedCuota - estimatedInt - defaultOther, 0);
+      // Cualquier préstamo (fijo o variable) permite escribir los valores del
+      // extracto: interés, otros cargos y capital. Si la cuota ya los tiene
+      // guardados se usan esos; si no, se estiman desde la tasa.
+      for (const inst of instsToPay) {
+        const balance = inst.remainingBalance ?? debt.currentBalance;
+        const storedInterest = Number(inst.interestAmount ?? 0);
+        const storedOther = Number(inst.otherChargesAmount ?? 0);
+        const cuota = fixedCuota || Number(inst.installmentAmount ?? 0) + storedInterest + storedOther;
+        const estimatedInt = storedInterest > 0
+          ? storedInterest
+          : monthlyRate > 0 ? balance * (monthlyRate / 100) : 0;
+        const other = storedOther > 0 ? storedOther : defaultOther;
+        const estimatedCap = Math.max(cuota - estimatedInt - other, 0);
 
-          newCapital[inst.id] = confirmedCapital[inst.id] ?? estimatedCap.toFixed(0);
-          newInterest[inst.id] = confirmedInterest[inst.id] ?? estimatedInt.toFixed(0);
-          newOther[inst.id] = confirmedOtherCharges[inst.id] ?? defaultOther.toFixed(0);
-          newRates[inst.id] = confirmedRate[inst.id] ?? monthlyRate.toFixed(4);
-        }
+        newCapital[inst.id] = confirmedCapital[inst.id] ?? estimatedCap.toFixed(0);
+        newInterest[inst.id] = confirmedInterest[inst.id] ?? estimatedInt.toFixed(0);
+        newOther[inst.id] = confirmedOtherCharges[inst.id] ?? other.toFixed(0);
+        newRates[inst.id] = confirmedRate[inst.id] ?? monthlyRate.toFixed(4);
       }
 
       setConfirmedCapital(newCapital);
@@ -1185,7 +1192,7 @@ export function DebtDetail() {
             {debt && debt.type === "loan" ? (
               // ── Loan: payment confirmation + account source ──
               <>
-              {debt.paymentType === "fixed" ? selectedDueInstallments.map((inst) => {
+              {(isInstallmentDebt(debt.type) || debt.paymentType === "fixed") ? selectedDueInstallments.map((inst) => {
                 const balance = inst.remainingBalance ?? debt.currentBalance;
                 const capStr = confirmedCapital[inst.id] ?? "0";
                 const intStr = confirmedInterest[inst.id] ?? "0";

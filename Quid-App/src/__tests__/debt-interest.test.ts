@@ -6,11 +6,10 @@ import { interestForPeriod, periodicRateFromAnnual } from "@/lib/debts/interest"
  * saldo a corte 5.469.280,41 · tasa 17,98% EA · interés del período 81.453,92
  * para una cuota con 33 días.
  */
-describe("interés de una cuota desde la tasa efectiva anual", () => {
-  it("convierte la efectiva anual a la tasa del período", () => {
+describe("interés de una cuota desde la tasa anual del banco", () => {
+  it("usa la tasa mensual que cobra el banco (anual / 12)", () => {
     const monthly = periodicRateFromAnnual(17.98, 30);
-    expect(monthly).toBeGreaterThan(0.0135);
-    expect(monthly).toBeLessThan(0.0145);
+    expect(monthly).toBeCloseTo(0.0149833, 6);
   });
 
   it("calcula un interés parecido al del banco (33 días)", () => {

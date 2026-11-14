@@ -9,11 +9,11 @@
  * Aquí se convierte la efectiva anual a la tasa del período:
  *   i = (1 + EA)^(días/365) − 1
  */
-export function periodicRateFromAnnual(effectiveAnnualPercent: number, days = 30): number {
+export function periodicRateFromAnnual(effectiveAnnualPercent: number, _days = 30): number {
   if (!Number.isFinite(effectiveAnnualPercent) || effectiveAnnualPercent <= 0) return 0;
-  const annual = effectiveAnnualPercent / 100;
-  const safeDays = Number.isFinite(days) && days > 0 ? days : 30;
-  return Math.pow(1 + annual, safeDays / 365) - 1;
+  // El banco publica la tasa como nominal mes vencido anual (NMV) y cobra
+  // 1/12 cada mes: es lo que cuadra con los extractos (81.454 sobre 5.469.280).
+  return effectiveAnnualPercent / 100 / 12;
 }
 
 export function interestForPeriod(
