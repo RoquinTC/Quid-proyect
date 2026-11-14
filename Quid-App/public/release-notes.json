@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.57",
+  "currentVersion": "1.1.58",
   "releases": [
+    {
+      "version": "1.1.58",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.58",
+      "changes": [
+        "Prestamos entre personas: me deben y debo",
+        "Se registran aparte de las deudas de banco",
+        "Puedes saldarlos cuando te paguen"
+      ]
+    },
     {
       "version": "1.1.57",
       "date": "2026-11-14",

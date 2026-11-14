@@ -74,6 +74,7 @@ model User {
   achievements        AchievementProgress[]
   pendingAuraActions  PendingAuraAction[]
   subscriptionSuggestionDismissals SubscriptionSuggestionDismissal[]
+  personLoans                   PersonLoan[]
 }
 
 // ============================================
@@ -1722,4 +1723,27 @@ model SubscriptionSuggestionDismissal {
 
   @@unique([userId, merchantKey])
   @@map("subscription_suggestion_dismissals")
+}
+
+/// F-25 · Préstamos entre personas (me deben / debo). No son deudas de banco:
+/// no tienen corte, ciclo ni cuotas; solo un monto y abonos.
+model PersonLoan {
+  id          String    @id @default(cuid())
+  userId      String
+  direction   String    // "lent" = me deben · "borrowed" = debo
+  personName  String
+  description String?
+  amount      Decimal
+  paidAmount  Decimal   @default(0)
+  date        DateTime
+  dueDate     DateTime?
+  status      String    @default("open") // open | settled
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, direction])
+  @@map("person_loans")
 }

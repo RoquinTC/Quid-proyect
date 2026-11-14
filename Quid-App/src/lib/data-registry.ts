@@ -176,6 +176,7 @@ export const DATA_REGISTRY: readonly ModelRegistryEntry[] = [
   // que el descarte valga en todos los equipos; el cliente solo lee el filtro.
   { model: "SubscriptionSuggestionDismissal", table: "subscription_suggestion_dismissals", scope: "user", strategy: "export", orphanAudit: true, hasUpdatedAt: false },
   { model: "PayrollGroup", table: "payroll_groups", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
+  { model: "PersonLoan", table: "person_loans", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
 
   // ── Finanzas: ahorro e inversión ────────────────────────────────────────
   { model: "SavingsGoal", table: "savings_goals", scope: "user", strategy: "both", orphanAudit: true, hasUpdatedAt: true },
