@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.51",
+  "currentVersion": "1.1.52",
   "releases": [
+    {
+      "version": "1.1.52",
+      "date": "2026-11-14",
+      "title": "Quid 1.1.52",
+      "changes": [
+        "Privacidad de montos tambien en cuentas y presupuestos",
+        "El ojo difumina saldos, ingresos, gastos y totales",
+        "Se aclaran al tocar la cifra"
+      ]
+    },
     {
       "version": "1.1.51",
       "date": "2026-11-14",

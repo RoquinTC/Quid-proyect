@@ -539,9 +539,9 @@ export function BudgetsView() {
             </p>
             <div className="flex items-center gap-1.5 shrink-0 ml-2">
               <span className={`text-xs font-semibold ${getProgressText(pct)}`}>
-                {formatCurrency(budget.spent)}
+                <span className="quid-money">{formatCurrency(budget.spent)}</span>
               </span>
-              <span className="text-xs text-gray-400">/ {formatCurrency(budget.amount)}</span>
+              <span className="text-xs text-gray-400">/ <span className="quid-money">{formatCurrency(budget.amount)}</span></span>
               <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={() => handleEdit(budget)}
@@ -663,9 +663,9 @@ export function BudgetsView() {
                       {totalPct}%
                     </Badge>
                     <span className={`text-xs font-semibold ${getProgressText(totalPct)}`}>
-                      {formatCurrency(totalSpent)}
+                      <span className="quid-money">{formatCurrency(totalSpent)}</span>
                     </span>
-                    <span className="text-xs text-gray-400">/ {formatCurrency(totalAmount)}</span>
+                    <span className="text-xs text-gray-400">/ <span className="quid-money">{formatCurrency(totalAmount)}</span></span>
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => {
@@ -779,7 +779,7 @@ export function BudgetsView() {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <span className="text-xs text-gray-500 tabular-nums">
-                    {formatCurrency(totalSpent)} / {formatCurrency(totalAmount)}
+                    <span className="quid-money">{formatCurrency(totalSpent)}</span> / <span className="quid-money">{formatCurrency(totalAmount)}</span>
                   </span>
                   <Badge
                     variant="outline"
@@ -925,7 +925,7 @@ export function BudgetsView() {
               {typeLabel}
             </h3>
             <Badge variant="secondary" className="text-[11px]">
-              {formatCurrency(totalSpent)}
+              <span className="quid-money">{formatCurrency(totalSpent)}</span>
             </Badge>
           </div>
         </div>

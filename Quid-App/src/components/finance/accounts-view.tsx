@@ -530,7 +530,7 @@ function SortableAccountCard({
               {typeLabel}
             </p>
             <p className="text-[15px] font-bold text-white tracking-tight leading-tight">
-              {isNegative ? "-" : ""}{formatCurrency(Math.abs(account.balance))}
+              {isNegative ? "-" : ""}<span className="quid-money">{formatCurrency(Math.abs(account.balance))}</span>
             </p>
             {hasSubAccounts && (
               <div className="flex items-center gap-1 mt-1">
@@ -1037,7 +1037,7 @@ export function AccountsView() {
                 <ExportMenu variant="onGradient" />
               </div>
               <p className="text-3xl font-bold tracking-tight">
-                {formatCurrency(availableBalance)}
+                <span className="quid-money">{formatCurrency(availableBalance)}</span>
               </p>
               <div className="mt-3 flex items-center gap-4">
                 <div className="flex items-center gap-1.5">
@@ -1047,7 +1047,7 @@ export function AccountsView() {
                   <div>
                     <p className="text-xs text-emerald-200">Ingresos</p>
                     <p className="text-sm font-semibold">
-                      {formatCurrency(monthlyIncome)}
+                      <span className="quid-money">{formatCurrency(monthlyIncome)}</span>
                     </p>
                   </div>
                 </div>
@@ -1058,7 +1058,7 @@ export function AccountsView() {
                   <div>
                     <p className="text-xs text-emerald-200">Gastos</p>
                     <p className="text-sm font-semibold">
-                      {formatCurrency(monthlyExpenses)}
+                      <span className="quid-money">{formatCurrency(monthlyExpenses)}</span>
                     </p>
                   </div>
                 </div>
@@ -1071,7 +1071,7 @@ export function AccountsView() {
                   </span>
                 </div>
                 <span className="text-xs font-medium text-emerald-100/70">
-                  {formatCurrency(grandTotal)}
+                  <span className="quid-money">{formatCurrency(grandTotal)}</span>
                 </span>
               </div>
               {excludedBalance > 0 && (
