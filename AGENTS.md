@@ -358,6 +358,16 @@ la lista de transacciones y el historial por persona.
 `F-19` contrato de datos para agentes · `F-34` simulación premium ·
 `F-37` infra de producto
 
+**F-53 · disponible vs. apartado (auditoría 2026-11-17)**: `Account` tiene
+`excludeFromAvailable`, pero **no se usaba en ningún cálculo**: el tablero sumaba
+todo y decía "tienes 4 millones" aunque 3 estuvieran apartados. Ahora
+`lib/finance/available.ts` (`balanceBreakdown`) es la única fuente y devuelve
+`{ total, available, apartado }`; el tablero ("Dinero disponible") y el widget
+Balance de Finanzas usan `available`, y bajo el monto se aclara cuánto está
+apartado. `accounts-view` ya lo hacía bien y se mantiene. El consejero del plan
+también lo respeta: el colchón es `max(metas + CDT, cuentas apartadas)` para no
+contar dos veces la misma plata.
+
 **F-52 · planes de proyecto (en curso, pedido del dueño)**: "quiero la casa en
 5 años" con escenarios de ahorro/CDT/ETF. Hecho: modelos `project_plans` y
 `plan_scenarios`, motor `lib/finance/project-plan.ts` (aporte necesario, meses,
