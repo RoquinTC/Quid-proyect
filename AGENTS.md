@@ -183,8 +183,8 @@ Entregado en las últimas sesiones:
   Análisis. Al crear se elige gasto / ingreso / transferencia y se reusa
   `POST /api/recurring`. El descarte vive en `subscription_suggestion_dismissals`
   (base, no dispositivo) para que valga en todos los equipos.
-- **Aura con más herramientas (base de F-21)**: **55 herramientas** en
-  `lib/aura/tools/` (29 lectura, 26 escritura), cubriendo los cuatro módulos y
+- **Aura con más herramientas (base de F-21)**: **59 herramientas** en
+  `lib/aura/tools/` (32 lectura, 27 escritura), cubriendo los cuatro módulos y
   los datos transversales (listas, recetas, salud, logros, compartidas,
   movimientos de despensa, autorizaciones). Todas las escrituras van por
   propuesta + confirmación. El `userId` lo resuelve el servidor (sesión o
@@ -319,7 +319,7 @@ Después, en el orden del mapa:
 | 1 | ✅ `F-10` Insights | Hecho: 6 hallazgos accionables en Análisis (`lib/finance/insights.ts`) |
 | 2 | ✅ `F-09` Reporte mensual | Hecho: KPIs, 6 meses, dona, tablas y narrativa; compartir texto o **imagen PNG** |
 | 3 | ✅ `F-23` Suscripciones | Hecho: cápsula en Análisis con candidatos detectados; crea el recurrente eligiendo gasto/ingreso/transferencia; descarte en base |
-| 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 29 lecturas + 26 escrituras**. Solo falta exponer el pago de cuota de tarjeta con interés/ciclo |
+| 4 | 🔄 `F-21` Chat IA con acciones | **Chat + 32 lecturas + 27 escrituras**. Solo falta exponer el pago de cuota de tarjeta con interés/ciclo |
 | 5 | 🔄 `F-30` Privacidad de montos | Hecho en tablero, deudas, cuentas y presupuestos. **Análisis y reporte no aplican bien**: los montos van dentro de frases y del PNG exportado, donde el CSS no llega |
 | 6 | ✅ `F-16` PIN | Bloqueo con PIN local (`lib/pin-lock.ts`), se activa desde el menú de usuario. Biometría **no**: falta plugin nativo y recompilar APK |
 | 7 | ✅ `F-17` Respaldo cifrado | `lib/backup-crypto.ts` (AES-256-GCM + PBKDF2 200k); crear y **restaurar** `.quid` desde el menú de usuario (el restore pide confirmación en dos toques) |
@@ -357,6 +357,17 @@ la lista de transacciones y el historial por persona.
 ### ⏳ FASE 5 — "Largo plazo"
 `F-19` contrato de datos para agentes · `F-34` simulación premium ·
 `F-37` infra de producto
+
+**F-52 · planes de proyecto (en curso, pedido del dueño)**: "quiero la casa en
+5 años" con escenarios de ahorro/CDT/ETF. Hecho: modelos `project_plans` y
+`plan_scenarios`, motor `lib/finance/project-plan.ts` (aporte necesario, meses,
+valor futuro, rango con volatilidad), API `/api/finance/plans` (+ `/[id]` y
+`/[id]/apply` que crea la meta real) y **4 herramientas de Aura**:
+`crear_plan_proyecto`, `consultar_planes_proyecto`, `simular_plan_proyecto`,
+`investigar_opciones_ahorro` (usa `lib/ai/llm.ts` → FreeLlmAPI; las tasas que
+devuelve son **sugerencias sin verificar**). Regla firme: nunca prometer
+rendimientos; siempre rango + supuesto editable + fuente. **Falta**: pantalla
+del plan y seguimiento mensual.
 
 ### Decisión cerrada
 `F-15` unidades menores → **no migrar**. Los montos se guardan como están.
