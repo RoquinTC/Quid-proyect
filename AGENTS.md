@@ -363,14 +363,25 @@ la lista de transacciones y el historial por persona.
 `plan_scenarios`, motor `lib/finance/project-plan.ts` (aporte necesario, meses,
 valor futuro, rango con volatilidad), API `/api/finance/plans` (+ `/[id]` y
 `/[id]/apply` que crea la meta real), **pantalla en Análisis**
-(`components/finance/project-plans-card.tsx`: crear plan, ver proyección y
-rango por escenario, editar la tasa y recalcular, botón "Crear meta") y **4
-herramientas de Aura**: `crear_plan_proyecto`, `consultar_planes_proyecto`,
-`simular_plan_proyecto`, `investigar_opciones_ahorro` (usa `lib/ai/llm.ts` →
-FreeLlmAPI; las tasas que devuelve son **sugerencias sin verificar**). Regla
-firme: nunca prometer rendimientos; siempre rango + supuesto editable + fuente.
-**Falta**: seguimiento mensual (proyectado vs real) y que la investigación de
-Aura llene los escenarios desde el chat.
+(`components/finance/project-plans-card.tsx`: crear, **editar**, **eliminar**,
+ver proyección y rango por escenario, editar la tasa y recalcular, botón "Crear
+meta") y **4 herramientas de Aura**: `crear_plan_proyecto`,
+`consultar_planes_proyecto`, `simular_plan_proyecto`,
+`investigar_opciones_ahorro` (usa `lib/ai/llm.ts` → FreeLlmAPI; las tasas que
+devuelve son **sugerencias sin verificar**). Regla firme: nunca prometer
+rendimientos; siempre rango + supuesto editable + fuente.
+
+**F-52b · el consejero (`lib/finance/plan-advisor.ts`)**: el dueño pidió no
+preguntar "¿cuánto aportarás?" sino **proponer** un aporte real. Toma ingresos y
+gastos promedio de 3 meses, cuotas de deudas activas y el colchón apartado
+(metas + CDT) y decide: `not_yet` (no queda excedente), `pay_debt_first`
+(cuotas > 30% del ingreso → 20% del excedente), `build_emergency_first` (falta
+colchón de 3 meses → 40% al plan y el resto al colchón) o `start` (50%). Nunca
+propone más que el excedente. Endpoint `/api/finance/plans/suggestion` y botón
+"¿Cuánto puedo aportar? Que Quid lo calcule" en la tarjeta.
+**Falta**: seguimiento mensual (proyectado vs real), que la investigación de
+Aura llene los escenarios desde el chat, y que el consejero también alimente a
+Aura por chat.
 
 ### Decisión cerrada
 `F-15` unidades menores → **no migrar**. Los montos se guardan como están.
