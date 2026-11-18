@@ -1,6 +1,17 @@
 {
-  "currentVersion": "1.1.65",
+  "currentVersion": "1.1.66",
   "releases": [
+    {
+      "version": "1.1.66",
+      "date": "2026-11-18",
+      "title": "Quid 1.1.66",
+      "changes": [
+        "Planes de proyecto en Analisis",
+        "Creas el plan con objetivo, fecha y aporte",
+        "Cada escenario muestra su rango y su fuente",
+        "Tocas la tasa, guardas y recalcula"
+      ]
+    },
     {
       "version": "1.1.65",
       "date": "2026-11-18",
