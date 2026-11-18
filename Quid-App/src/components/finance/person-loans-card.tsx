@@ -239,7 +239,12 @@ export function PersonLoansCard() {
                           </span>
                           <span className="flex items-center gap-2">
                             <span className={installment.isPaid ? "text-emerald-600" : ""}>
-                              {formatCurrency(installment.amount)}
+                              {formatCurrency(
+                                Math.max(0, installment.amount - installment.paidAmount)
+                              )}
+                              {!installment.isPaid && installment.paidAmount > 0 && (
+                                <span className="ml-1 text-[10px] text-amber-600">parcial</span>
+                              )}
                             </span>
                             {installment.isPaid ? (
                               <button
@@ -257,7 +262,7 @@ export function PersonLoansCard() {
                                 onClick={() => {
                                   setPayFor({ loanId: loan.id, installment });
                                   setPayAccount(accounts[0]?.id ?? "");
-                                  setPayAmount(String(installment.amount));
+                                  setPayAmount(String(Math.max(0, installment.amount - installment.paidAmount)));
                                   setError("");
                                 }}
                                 className="text-[11px] text-emerald-600"
@@ -330,7 +335,7 @@ export function PersonLoansCard() {
           <div className="w-full max-w-sm space-y-3 rounded-2xl bg-card p-5 shadow-xl">
             <p className="font-semibold">
               Pagar cuota {payFor.installment.number} ·{" "}
-              {formatCurrency(payFor.installment.amount)}
+              {formatCurrency(Math.max(0, payFor.installment.amount - payFor.installment.paidAmount))}
             </p>
             <select
               value={payAccount}

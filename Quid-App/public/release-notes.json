@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.62",
+  "currentVersion": "1.1.63",
   "releases": [
+    {
+      "version": "1.1.63",
+      "date": "2026-11-18",
+      "title": "Quid 1.1.63",
+      "changes": [
+        "El abono mayor reparte el excedente y se ve el saldo de cada cuota",
+        "Las cuotas parciales muestran cuanto falta",
+        "El dialogo abre con lo pendiente, no con el valor original"
+      ]
+    },
     {
       "version": "1.1.62",
       "date": "2026-11-18",

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
   if (!account) return NextResponse.json({ error: "Cuenta no encontrada" }, { status: 404 });
 
-  const amount = parsed.data.amount ?? toNumber(installment.amount);
+  const amount = parsed.data.amount ?? Math.max(0, toNumber(installment.amount) - toNumber(installment.paidAmount));
   const date = parsed.data.date ? new Date(`${parsed.data.date}T05:00:00.000Z`) : new Date();
   if (Number.isNaN(date.getTime())) {
     return NextResponse.json({ error: "Fecha inválida" }, { status: 400 });
