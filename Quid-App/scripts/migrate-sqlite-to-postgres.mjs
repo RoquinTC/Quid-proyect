@@ -35,6 +35,8 @@ const modelPlan = [
   ["recurringPayment", "RecurringPayment"],
   // F-23 · descartes de sugerencias de suscripción.
   ["subscriptionSuggestionDismissal", "SubscriptionSuggestionDismissal"],
+  ["projectPlan", "ProjectPlan"],
+  ["planScenario", "PlanScenario"],
   ["personLoan", "PersonLoan"],
   ["personLoanInstallment", "PersonLoanInstallment"],
   ["cDT", "CDT"],

@@ -75,6 +75,7 @@ model User {
   pendingAuraActions  PendingAuraAction[]
   subscriptionSuggestionDismissals SubscriptionSuggestionDismissal[]
   personLoans                   PersonLoan[]
+  projectPlans  ProjectPlan[]
 }
 
 // ============================================
@@ -1769,4 +1770,45 @@ model PersonLoanInstallment {
 
   @@index([loanId])
   @@map("person_loan_installments")
+}
+
+/// F-52 · Plan de proyecto: "quiero la casa en 5 años". Guarda supuestos, no
+/// promesas: cada escenario tiene su tasa editable y su fuente.
+model ProjectPlan {
+  id                  String    @id @default(cuid())
+  userId              String
+  name                String
+  targetAmount        Decimal
+  currentAmount       Decimal   @default(0)
+  monthlyContribution Decimal   @default(0)
+  targetDate          DateTime?
+  status              String    @default("draft") // draft | active | archived
+  goalId              String?
+  accountId           String?
+  researchJson        String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenarios           PlanScenario[]
+
+  @@index([userId])
+  @@map("project_plans")
+}
+
+/// Escenario del plan (CDT, ETF, ahorro…). La tasa es un supuesto, editable.
+model PlanScenario {
+  id                  String      @id @default(cuid())
+  planId              String
+  name                String
+  kind                String      // savings | cdt | etf | stocks | mixed
+  annualRatePercent   Decimal
+  volatilityPercent   Decimal?
+  source              String?
+  isSelected          Boolean     @default(false)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  plan                ProjectPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("plan_scenarios")
 }

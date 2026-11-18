@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.63",
+  "currentVersion": "1.1.64",
   "releases": [
+    {
+      "version": "1.1.64",
+      "date": "2026-11-18",
+      "title": "Quid 1.1.64",
+      "changes": [
+        "Planes de proyecto: objetivo, fecha y escenarios",
+        "Motor de proyeccion con aportes, tasa e inflacion",
+        "Tasas editables y rango cuando hay volatilidad"
+      ]
+    },
     {
       "version": "1.1.63",
       "date": "2026-11-18",
