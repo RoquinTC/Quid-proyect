@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.67",
+  "currentVersion": "1.1.68",
   "releases": [
+    {
+      "version": "1.1.68",
+      "date": "2026-11-18",
+      "title": "Quid 1.1.68",
+      "changes": [
+        "El balance del tablero ya no cuenta lo apartado",
+        "Se muestra cuanto tienes separado, aclarado",
+        "El consejero del plan tambien respeta las cuentas apartadas"
+      ]
+    },
     {
       "version": "1.1.67",
       "date": "2026-11-18",

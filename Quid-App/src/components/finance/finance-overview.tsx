@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { balanceBreakdown } from "@/lib/finance/available";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -494,12 +495,9 @@ export function FinanceOverview({ mode = "summary" }: { mode?: OverviewMode } = 
   // COMPUTED VALUES
   // ============================================================
 
-  const totalAccountBalance = accounts.reduce((sum, a) => sum + Number(a.balance), 0);
-  const totalSubAccountBalance = accounts.reduce(
-    (sum, a) => sum + (a.subAccounts || []).reduce((s, sa) => s + Number(sa.balance), 0),
-    0
-  );
-  const totalBalance = totalAccountBalance + totalSubAccountBalance;
+  // F-53 · el widget "Balance" muestra dinero DISPONIBLE, no el total con lo apartado.
+  const balances = balanceBreakdown(accounts);
+  const totalBalance = balances.available;
 
   const incomeBudgets = budgets.filter((b) => b.type === "income");
   const expenseBudgets = budgets.filter((b) => b.type === "expense");

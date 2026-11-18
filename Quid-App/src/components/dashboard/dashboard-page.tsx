@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { NetWorthCard } from "@/components/finance/net-worth-card";
+import { balanceBreakdown } from "@/lib/finance/available";
 import { openAuraBot } from "@/lib/aura-bot";
 import { formatCurrency } from "@/lib/api";
 import { useMultiQuery, useLocalQuery } from "@/lib/local/hooks/queries";
@@ -76,12 +77,9 @@ export function DashboardPage() {
   // COMPUTED VALUES
   // ============================================================
 
-  const totalAccountBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
-  const totalSubAccountBalance = accounts.reduce(
-    (sum, a) => sum + (a.subAccounts || []).reduce((s, sa) => s + sa.balance, 0),
-    0
-  );
-  const totalBalance = totalAccountBalance + totalSubAccountBalance;
+  // F-53 · "Balance" es dinero DISPONIBLE: lo marcado como apartado no cuenta.
+  const balances = balanceBreakdown(accounts);
+  const totalBalance = balances.available;
 
   const incomeBudgets = budgets.filter((b) => b.type === "income");
   const expenseBudgets = budgets.filter((b) => b.type === "expense");
@@ -366,11 +364,16 @@ export function DashboardPage() {
               <CardContent className="p-5 relative z-10">
                 <div className="flex items-center gap-2 mb-1">
                   <Wallet className="size-4 text-emerald-200" />
-                  <span className="text-sm text-emerald-100">Balance Total</span>
+                  <span className="text-sm text-emerald-100">Dinero disponible</span>
                 </div>
                 <p className="text-3xl font-bold tracking-tight quid-money">
                   {formatCurrency(totalBalance)}
                 </p>
+                {balances.apartado > 0 && (
+                  <p className="mt-1 text-[11px] text-emerald-100">
+                    + {formatCurrency(balances.apartado)} apartado, que no cuento como disponible
+                  </p>
+                )}
                 <div className="flex items-center gap-4 mt-3">
                   <div className="flex items-center gap-1.5">
                     <div className="size-6 rounded-full bg-white/20 flex items-center justify-center">

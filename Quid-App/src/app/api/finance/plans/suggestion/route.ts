@@ -22,7 +22,7 @@ export async function GET() {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth() - 3, 1);
 
-  const [transactions, debts, goals, cdts] = await Promise.all([
+  const [transactions, debts, goals, cdts, accounts] = await Promise.all([
     db.transaction.findMany({
       where: { userId, date: { gte: from } },
       select: { type: true, amount: true, excludeFromBudget: true },
@@ -33,6 +33,11 @@ export async function GET() {
     }),
     db.savingsGoal.findMany({ where: { userId }, select: { currentAmount: true } }),
     db.cDT.findMany({ where: { userId, status: "active" }, select: { amount: true } }),
+    // F-53 · las cuentas marcadas como "no disponible" son colchón real.
+    db.account.findMany({
+      where: { userId, excludeFromAvailable: true },
+      select: { balance: true },
+    }),
   ]);
 
   const income = transactions
@@ -46,9 +51,13 @@ export async function GET() {
     .filter((debt) => toNumber(debt.currentBalance) > 0)
     .reduce((sum, debt) => sum + toNumber(debt.monthlyPayment), 0);
 
-  const emergencyFund =
+  // Colchón: lo apartado en metas y CDT, o lo que haya en cuentas marcadas como
+  // no disponibles (lo que sea mayor, para no contar dos veces la misma plata).
+  const savedInGoals =
     goals.reduce((sum, goal) => sum + toNumber(goal.currentAmount), 0) +
     cdts.reduce((sum, cdt) => sum + toNumber(cdt.amount), 0);
+  const savedInExcluded = accounts.reduce((sum, account) => sum + toNumber(account.balance), 0);
+  const emergencyFund = Math.max(savedInGoals, savedInExcluded);
 
   const advice = advisePlan({
     monthlyIncome: Math.round(income),
