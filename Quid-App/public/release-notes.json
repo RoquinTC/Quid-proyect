@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.66",
+  "currentVersion": "1.1.67",
   "releases": [
+    {
+      "version": "1.1.67",
+      "date": "2026-11-18",
+      "title": "Quid 1.1.67",
+      "changes": [
+        "Puedes editar y eliminar un plan",
+        "Quid calcula tu aporte con deudas y gastos reales",
+        "Si no alcanza, te dice que ajustes primero"
+      ]
+    },
     {
       "version": "1.1.66",
       "date": "2026-11-18",

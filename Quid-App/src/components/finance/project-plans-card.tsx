@@ -62,6 +62,82 @@ export function ProjectPlansCard() {
   const [targetDate, setTargetDate] = useState("");
   const [cdtRate, setCdtRate] = useState("11");
   const [etfRate, setEtfRate] = useState("8");
+  const [advice, setAdvice] = useState<{
+    headline: string;
+    reasons: string[];
+    suggestedMonthly: number;
+  } | null>(null);
+  const [adviceBusy, setAdviceBusy] = useState(false);
+  const [editPlan, setEditPlan] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTarget, setEditTarget] = useState("");
+  const [editMonthly, setEditMonthly] = useState("");
+  const [editDate, setEditDate] = useState("");
+
+  const loadAdvice = async () => {
+    setAdviceBusy(true);
+    setError("");
+    try {
+      const data = await apiFetch<{
+        advice: { headline: string; reasons: string[]; suggestedMonthly: number };
+      }>("/api/finance/plans/suggestion");
+      setAdvice(data.advice);
+      if (data.advice.suggestedMonthly > 0) {
+        setMonthly(String(Math.round(data.advice.suggestedMonthly)));
+      }
+    } catch {
+      setError("No pude calcular tu aporte con los datos del mes.");
+    } finally {
+      setAdviceBusy(false);
+    }
+  };
+
+  const startEdit = (plan: Plan) => {
+    setEditPlan(plan.id);
+    setEditName(plan.name);
+    setEditTarget(String(Math.round(plan.targetAmount)));
+    setEditMonthly(String(Math.round(plan.monthlyContribution)));
+    setEditDate(plan.targetDate ? plan.targetDate.slice(0, 10) : "");
+  };
+
+  const saveEdit = async (plan: Plan) => {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/finance/plans/${plan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim() || plan.name,
+          targetAmount: Number(editTarget.replace(/[^\d]/g, "")) || plan.targetAmount,
+          monthlyContribution: Number(editMonthly.replace(/[^\d]/g, "")) || 0,
+          targetDate: editDate || null,
+        }),
+      });
+      if (!response.ok) throw new Error("No se pudo guardar el plan.");
+      setEditPlan(null);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "No se pudo guardar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removePlan = async (plan: Plan) => {
+    if (!window.confirm(`¿Eliminar el plan "${plan.name}"? No se puede deshacer.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/finance/plans/${plan.id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("No se pudo eliminar el plan.");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "No se pudo eliminar.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const load = useCallback(
     () => apiFetch<{ plans: Plan[] }>("/api/finance/plans").then((data) => setPlans(data.plans)).catch(() => undefined),
@@ -253,21 +329,83 @@ export function ProjectPlansCard() {
                   {formatCurrency(plan.monthlyContribution)}/mes
                 </p>
               </div>
-              {plan.goalId ? (
-                <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
-                  meta creada
-                </span>
-              ) : (
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => startEdit(plan)}
+                  className="text-[11px] text-gray-500"
+                >
+                  Editar
+                </button>
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void applyPlan(plan)}
-                  className="shrink-0 text-[11px] text-emerald-600 dark:text-emerald-400"
+                  onClick={() => void removePlan(plan)}
+                  className="text-[11px] text-rose-500"
                 >
-                  Crear meta
+                  Eliminar
                 </button>
-              )}
+                {plan.goalId ? (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                    meta creada
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void applyPlan(plan)}
+                    className="text-[11px] text-emerald-600 dark:text-emerald-400"
+                  >
+                    Crear meta
+                  </button>
+                )}
+              </div>
             </div>
+
+            {editPlan === plan.id && (
+              <div className="space-y-2 rounded-lg bg-muted/40 p-2">
+                <input
+                  value={editName}
+                  onChange={(event) => setEditName(event.target.value)}
+                  placeholder="Nombre"
+                  className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+                />
+                <div className="flex gap-2">
+                  <input
+                    value={editTarget}
+                    onChange={(event) => setEditTarget(event.target.value)}
+                    inputMode="numeric"
+                    placeholder="Cuánto necesitas"
+                    className="h-9 flex-1 rounded-lg border border-border bg-background px-2 text-sm"
+                  />
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(event) => setEditDate(event.target.value)}
+                    className="h-9 w-36 rounded-lg border border-border bg-background px-2 text-sm"
+                  />
+                </div>
+                <input
+                  value={editMonthly}
+                  onChange={(event) => setEditMonthly(event.target.value)}
+                  inputMode="numeric"
+                  placeholder="Aporte mensual"
+                  className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 rounded-lg"
+                    disabled={busy}
+                    onClick={() => void saveEdit(plan)}
+                  >
+                    Guardar cambios
+                  </Button>
+                  <Button variant="ghost" className="rounded-lg" onClick={() => setEditPlan(null)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1">
               {plan.projections.map((projection) => {
@@ -366,9 +504,29 @@ export function ProjectPlansCard() {
               value={monthly}
               onChange={(event) => setMonthly(event.target.value)}
               inputMode="numeric"
-              placeholder="Aporte mensual"
+              placeholder="Aporte mensual (opcional: deja que Quid lo calcule)"
               className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
             />
+            <button
+              type="button"
+              disabled={adviceBusy}
+              onClick={() => void loadAdvice()}
+              className="w-full text-xs text-emerald-600 dark:text-emerald-400"
+            >
+              {adviceBusy ? "Mirando tus números…" : "¿Cuánto puedo aportar? Que Quid lo calcule"}
+            </button>
+            {advice && (
+              <div className="rounded-xl bg-emerald-50 p-2 dark:bg-emerald-900/20">
+                <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">
+                  {advice.headline}
+                </p>
+                {advice.reasons.map((reason) => (
+                  <p key={reason} className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                    • {reason}
+                  </p>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
               <input
                 value={cdtRate}
