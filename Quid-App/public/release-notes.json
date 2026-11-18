@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.64",
+  "currentVersion": "1.1.65",
   "releases": [
+    {
+      "version": "1.1.65",
+      "date": "2026-11-18",
+      "title": "Quid 1.1.65",
+      "changes": [
+        "Aura ya puede crear planes de proyecto",
+        "Simula aportes y rangos, y consulta tus planes",
+        "Investiga opciones de ahorro con el modelo (sin prometer)"
+      ]
+    },
     {
       "version": "1.1.64",
       "date": "2026-11-18",

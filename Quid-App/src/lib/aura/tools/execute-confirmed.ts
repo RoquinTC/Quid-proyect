@@ -1633,6 +1633,97 @@ export async function executeCrearCondicionSalud(
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// F-52 · Plan de proyecto
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function executeCrearPlanProyecto(
+  args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const name = typeof args.name === "string" ? args.name.trim() : "";
+  const targetAmount = typeof args.targetAmount === "number" ? args.targetAmount : null;
+  const monthlyContribution =
+    typeof args.monthlyContribution === "number" ? args.monthlyContribution : 0;
+  const cdtRate = typeof args.cdtRate === "number" ? args.cdtRate : null;
+  const etfRate = typeof args.etfRate === "number" ? args.etfRate : null;
+  const etfVolatility = typeof args.etfVolatility === "number" ? args.etfVolatility : 15;
+  const targetDateRaw = typeof args.targetDate === "string" ? args.targetDate.trim() : "";
+
+  if (!name) throw new Error("Falta el nombre del proyecto.");
+  if (!targetAmount || targetAmount <= 0) throw new Error("Falta el monto objetivo.");
+
+  let targetDate: Date | null = null;
+  if (targetDateRaw) {
+    const parsed = new Date(`${targetDateRaw}T12:00:00Z`);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error(`No entendí la fecha "${targetDateRaw}". Usa AAAA-MM-DD.`);
+    }
+    targetDate = parsed;
+  }
+
+  const scenarios: Array<{
+    name: string;
+    kind: "cdt" | "etf" | "savings";
+    annualRatePercent: number;
+    volatilityPercent: number | null;
+    source: string;
+  }> = [];
+
+  if (cdtRate !== null) {
+    scenarios.push({
+      name: `CDT ${cdtRate}%`,
+      kind: "cdt",
+      annualRatePercent: cdtRate,
+      volatilityPercent: null,
+      source: "Supuesto del usuario o de Aura · verificar con el banco",
+    });
+  }
+  if (etfRate !== null) {
+    scenarios.push({
+      name: `ETF ${etfRate}%`,
+      kind: "etf",
+      annualRatePercent: etfRate,
+      volatilityPercent: etfVolatility,
+      source: "Supuesto histórico · no es una promesa de rendimiento",
+    });
+  }
+  if (scenarios.length === 0) {
+    scenarios.push({
+      name: "Ahorro",
+      kind: "savings",
+      annualRatePercent: 0,
+      volatilityPercent: null,
+      source: "Sin rendimiento: solo lo que aportas",
+    });
+  }
+
+  const plan = await db.projectPlan.create({
+    data: {
+      userId: ctx.userId,
+      name,
+      targetAmount,
+      monthlyContribution,
+      targetDate,
+      scenarios: {
+        create: scenarios.map((scenario, index) => ({
+          name: scenario.name,
+          kind: scenario.kind,
+          annualRatePercent: scenario.annualRatePercent,
+          volatilityPercent: scenario.volatilityPercent,
+          source: scenario.source,
+          isSelected: index === 0,
+        })),
+      },
+    },
+  });
+
+  return {
+    text: `Plan "${name}" creado con ${scenarios.length} escenario(s). Ajusta las tasas cuando quieras: el plan recalcula solo.`,
+    data: { planId: plan.id, scenarios: scenarios.length },
+  };
+}
+
 const WRITE_EXECUTORS: Record<
   string,
   (args: Record<string, unknown>, ctx: ExecutionContext) => Promise<ExecutionResult>
@@ -1644,6 +1735,7 @@ const WRITE_EXECUTORS: Record<
   crear_cuenta: executeCrearCuenta,
   crear_deuda: executeCrearDeuda,
   crear_meta: executeCrearMeta,
+  crear_plan_proyecto: executeCrearPlanProyecto,
   crear_cdt: executeCrearCdt,
   registrar_abono: executeRegistrarAbono,
   registrar_aporte_meta: executeRegistrarAporteMeta,

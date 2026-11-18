@@ -730,4 +730,43 @@ describe("reglas, autorizaciones y salud", () => {
     const authorizations = await getReadExecutor("consultar_autorizaciones")!({}, { userId });
     expect(Number(authorizations.data!.count)).toBeGreaterThan(0);
   });
+
+  it("crear_plan_proyecto guarda escenarios y la lectura los devuelve", async () => {
+    const created = await executeConfirmedTool(
+      "crear_plan_proyecto",
+      {
+        name: "Casa",
+        targetAmount: 200_000_000,
+        monthlyContribution: 1_500_000,
+        targetDate: "2031-06-01",
+        cdtRate: 11,
+        etfRate: 8,
+        etfVolatility: 15,
+      },
+      { userId }
+    );
+
+    const plan = await db.projectPlan.findUnique({
+      where: { id: String(created.data!.planId) },
+      include: { scenarios: true },
+    });
+    expect(plan!.name).toBe("Casa");
+    expect(plan!.scenarios).toHaveLength(2);
+
+    const read = await getReadExecutor("consultar_planes_proyecto")!({}, { userId });
+    expect(read.text).toContain("Casa");
+    expect(Number(read.data!.count)).toBeGreaterThan(0);
+  });
+
+  it("simular_plan_proyecto calcula sin guardar nada", async () => {
+    const before = await db.projectPlan.count({ where: { userId } });
+    const result = await getReadExecutor("simular_plan_proyecto")!(
+      { targetAmount: 50_000_000, monthlyContribution: 800_000, annualRate: 11, targetDate: "2030-01-01" },
+      { userId }
+    );
+    expect(result.text).toContain("Objetivo");
+    expect(result.text.toLowerCase()).toContain("supuestos");
+    const after = await db.projectPlan.count({ where: { userId } });
+    expect(after).toBe(before);
+  });
 });

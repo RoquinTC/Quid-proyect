@@ -710,12 +710,67 @@ export const CREAR_CONDICION_SALUD: ToolDefinition = {
   ],
 };
 
+export const CREAR_PLAN_PROYECTO: ToolDefinition = {
+  name: "crear_plan_proyecto",
+  kind: "write",
+  implemented: true,
+  description:
+    "Crea un plan de proyecto (casa, carro, estudios) con objetivo, fecha, aporte mensual y escenarios de rendimiento.",
+  parameters: [
+    { name: "name", type: "string", required: true, description: "Nombre del proyecto." },
+    { name: "targetAmount", type: "number", required: true, description: "Cuánto necesitas, en pesos." },
+    { name: "targetDate", type: "date", required: false, description: "Fecha objetivo (AAAA-MM-DD)." },
+    { name: "monthlyContribution", type: "number", required: false, defaultValue: 0, description: "Aporte mensual previsto." },
+    { name: "cdtRate", type: "number", required: false, description: "Tasa anual supuesta para CDT (%)." },
+    { name: "etfRate", type: "number", required: false, description: "Tasa anual supuesta para ETF (%)." },
+    { name: "etfVolatility", type: "number", required: false, description: "Volatilidad anual del ETF (%)." },
+  ],
+};
+
+export const CONSULTAR_PLANES_PROYECTO: ToolDefinition = {
+  name: "consultar_planes_proyecto",
+  kind: "read",
+  implemented: true,
+  description: "Lista los planes de proyecto con su proyección por escenario.",
+  parameters: [],
+};
+
+export const SIMULAR_PLAN_PROYECTO: ToolDefinition = {
+  name: "simular_plan_proyecto",
+  kind: "read",
+  implemented: true,
+  description:
+    "Simula cuánto necesitas aportar o cuánto alcanzarías, con una o varias tasas anuales. No guarda nada.",
+  parameters: [
+    { name: "targetAmount", type: "number", required: true, description: "Objetivo en pesos." },
+    { name: "currentAmount", type: "number", required: false, defaultValue: 0, description: "Lo que ya tienes." },
+    { name: "monthlyContribution", type: "number", required: false, defaultValue: 0, description: "Aporte mensual." },
+    { name: "targetDate", type: "date", required: false, description: "Fecha objetivo (AAAA-MM-DD)." },
+    { name: "annualRate", type: "number", required: false, defaultValue: 0, description: "Tasa anual supuesta (%)." },
+    { name: "volatility", type: "number", required: false, description: "Volatilidad anual (%)." },
+  ],
+};
+
+export const INVESTIGAR_OPCIONES_AHORRO: ToolDefinition = {
+  name: "investigar_opciones_ahorro",
+  kind: "read",
+  implemented: true,
+  description:
+    "Consulta al modelo opciones para un plan (CDT, ETF, ahorro) con supuestos y fuentes. Devuelve sugerencias NO verificadas que el usuario debe confirmar.",
+  parameters: [
+    { name: "goal", type: "string", required: true, description: "Para qué es el plan (casa, carro…)." },
+    { name: "months", type: "number", required: false, description: "Plazo en meses." },
+    { name: "risk", type: "enum", required: false, values: ["conservador", "moderado", "agresivo"], defaultValue: "moderado", description: "Perfil de riesgo." },
+  ],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Índice
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   // Escritura
+  CREAR_PLAN_PROYECTO,
   REGISTRAR_TRANSACCION,
   REGISTRAR_TANQUEO,
   REGISTRAR_TRANSFERENCIA,
@@ -770,6 +825,9 @@ export const TOOL_REGISTRY: readonly ToolDefinition[] = [
   CONSULTAR_COMPARTIDAS,
   CONSULTAR_MOVIMIENTOS_DESPENSA,
   CONSULTAR_AUTORIZACIONES,
+  CONSULTAR_PLANES_PROYECTO,
+  SIMULAR_PLAN_PROYECTO,
+  INVESTIGAR_OPCIONES_AHORRO,
   CONSULTAR_MEDICAMENTOS,
   CONSULTAR_CITAS,
 ];

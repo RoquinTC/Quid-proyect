@@ -16,6 +16,14 @@
  */
 
 import { db } from "@/lib/db";
+import { toNumber } from "@/lib/decimal-serializer";
+import {
+  projectAll,
+  projectScenario,
+  requiredMonthlyContribution,
+  type ScenarioKind,
+} from "@/lib/finance/project-plan";
+import { requestAiCompletion } from "@/lib/ai/llm";
 
 export interface ExecutionContext {
   userId: string;
@@ -1074,6 +1082,168 @@ export async function consultarAutorizaciones(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// F-52 · Planes de proyecto
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function consultarPlanesProyecto(
+  _args: Record<string, unknown>,
+  ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const plans = await db.projectPlan.findMany({
+    where: { userId: ctx.userId },
+    orderBy: { createdAt: "desc" },
+    include: { scenarios: { orderBy: { createdAt: "asc" } } },
+    take: 10,
+  });
+
+  if (plans.length === 0) {
+    return { text: "No tienes planes de proyecto. Dime el objetivo y te armo uno.", data: { count: 0 } };
+  }
+
+  const lines: string[] = [];
+  for (const plan of plans) {
+    const target = toNumber(plan.targetAmount);
+    const current = toNumber(plan.currentAmount);
+    const monthly = toNumber(plan.monthlyContribution);
+    const projections = projectAll(
+      plan.scenarios.map((scenario) => ({
+        name: scenario.name,
+        kind: scenario.kind as ScenarioKind,
+        annualRatePercent: toNumber(scenario.annualRatePercent),
+        volatilityPercent: scenario.volatilityPercent ? toNumber(scenario.volatilityPercent) : 0,
+      })),
+      {
+        targetAmount: target,
+        currentAmount: current,
+        monthlyContribution: monthly,
+        targetDate: plan.targetDate ? plan.targetDate.toISOString() : null,
+      }
+    );
+
+    lines.push(
+      `• ${plan.name}: meta ${COP.format(target)}, aportando ${COP.format(monthly)} al mes (${plan.status})`
+    );
+    for (const projection of projections.slice(0, 3)) {
+      lines.push(
+        `   - ${projection.name} (${projection.annualRatePercent}%): ${COP.format(projection.projectedAmount)}` +
+          (projection.highAmount > projection.projectedAmount
+            ? ` · rango ${COP.format(projection.lowAmount)}–${COP.format(projection.highAmount)}`
+            : "")
+      );
+    }
+  }
+
+  return { text: ["Planes de proyecto:", ...lines].join("\n"), data: { count: plans.length } };
+}
+
+export async function simularPlanProyecto(
+  args: Record<string, unknown>,
+  _ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const targetAmount = typeof args.targetAmount === "number" ? args.targetAmount : 0;
+  const currentAmount = typeof args.currentAmount === "number" ? args.currentAmount : 0;
+  const monthlyContribution = typeof args.monthlyContribution === "number" ? args.monthlyContribution : 0;
+  const annualRate = typeof args.annualRate === "number" ? args.annualRate : 0;
+  const volatility = typeof args.volatility === "number" ? args.volatility : 0;
+  const targetDate = typeof args.targetDate === "string" ? args.targetDate : null;
+
+  if (targetAmount <= 0) throw new Error("Falta el objetivo en pesos.");
+
+  const projection = projectScenario(
+    { name: "Simulación", kind: "mixed", annualRatePercent: annualRate, volatilityPercent: volatility },
+    { targetAmount, currentAmount, monthlyContribution, targetDate }
+  );
+
+  const required = requiredMonthlyContribution(
+    targetAmount,
+    currentAmount,
+    projection.monthsToGoal ?? 1,
+    annualRate
+  );
+
+  const lines = [
+    `Objetivo: ${COP.format(targetAmount)}`,
+    `Con ${COP.format(monthlyContribution)} al mes al ${annualRate}% anual llegarías a ${COP.format(projection.projectedAmount)}` +
+      (volatility > 0 ? ` (rango ${COP.format(projection.lowAmount)}–${COP.format(projection.highAmount)})` : ""),
+    projection.monthsToGoal
+      ? `Eso toma ${projection.monthsToGoal} meses.`
+      : "Con ese aporte y esa tasa no se alcanza en un plazo razonable.",
+    `Para llegar en ese plazo necesitarías aportar ${COP.format(required)} al mes.`,
+    "Son supuestos, no una promesa de rendimiento.",
+  ];
+
+  return {
+    text: lines.join("\n"),
+    data: { projected: projection.projectedAmount, requiredMonthly: required, months: projection.monthsToGoal },
+  };
+}
+
+export async function investigarOpcionesAhorro(
+  args: Record<string, unknown>,
+  _ctx: ExecutionContext
+): Promise<ExecutionResult> {
+  const goal = typeof args.goal === "string" ? args.goal : "un proyecto";
+  const months = typeof args.months === "number" ? Math.round(args.months) : 36;
+  const risk = typeof args.risk === "string" ? args.risk : "moderado";
+
+  const prompt = [
+    `Eres un asesor financiero para Colombia. El usuario planea: ${goal}.`,
+    `Plazo aproximado: ${months} meses. Perfil: ${risk}.`,
+    "Propón 3 opciones concretas (una conservadora tipo CDT, una diversificada tipo ETF y una de ahorro simple).",
+    "Para cada una indica: nombre, tipo, tasa anual esperada en porcentaje, volatilidad anual aproximada, y la fuente o referencia del dato.",
+    "Responde SOLO con un JSON: {\"options\":[{\"name\":\"\",\"kind\":\"cdt|etf|stocks|savings\",\"annualRatePercent\":0,\"volatilityPercent\":0,\"source\":\"\",\"note\":\"\"}]}",
+    "No prometas rendimientos; deja claro que son supuestos que hay que verificar con la entidad.",
+  ].join("\n");
+
+  try {
+    const completion = await requestAiCompletion({
+      system: "Eres un asesor financiero para Colombia. Nunca prometas rendimientos.",
+      user: prompt,
+      temperature: 0.2,
+      timeoutMs: 25000,
+    });
+
+    const raw = completion.text ?? "";
+    const match = raw.match(/\{[\s\S]*\}/);
+    const parsed = match ? JSON.parse(match[0]) : null;
+    const options = Array.isArray(parsed?.options) ? parsed.options : [];
+
+    if (options.length === 0) {
+      return {
+        text:
+          "El modelo no devolvió opciones con formato válido. Dime tú las tasas que quieres probar y las simulo.\n" +
+          raw.slice(0, 400),
+        data: { options: [] },
+      };
+    }
+
+    const lines = options.slice(0, 4).map((option: Record<string, unknown>) => {
+      const rate = Number(option.annualRatePercent ?? 0);
+      const vol = Number(option.volatilityPercent ?? 0);
+      return `• ${option.name ?? "Opción"} (${option.kind ?? "?"}): ${rate}% anual` +
+        (vol > 0 ? `, volatilidad ${vol}%` : "") +
+        (option.source ? ` · fuente: ${option.source}` : "");
+    });
+
+    return {
+      text: [
+        `Opciones sugeridas para "${goal}" (${months} meses, perfil ${risk}):`,
+        ...lines,
+        "",
+        "⚠️ Son sugerencias del modelo, NO verificadas: confirma tasas y condiciones con la entidad antes de usarlas.",
+      ].join("\n"),
+      data: { options },
+    };
+  } catch {
+    return {
+      text:
+        "No pude consultar al modelo ahora. Dime las tasas que quieres comparar y las simulo con Quid.",
+      data: { options: [] },
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Despacho
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1110,6 +1280,9 @@ const READ_EXECUTORS: Record<
   consultar_compartidas: consultarCompartidas,
   consultar_movimientos_despensa: consultarMovimientosDespensa,
   consultar_autorizaciones: consultarAutorizaciones,
+  consultar_planes_proyecto: consultarPlanesProyecto,
+  simular_plan_proyecto: simularPlanProyecto,
+  investigar_opciones_ahorro: investigarOpcionesAhorro,
 };
 
 export function getReadExecutor(name: string) {
