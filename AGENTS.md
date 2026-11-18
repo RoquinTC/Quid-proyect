@@ -362,12 +362,15 @@ la lista de transacciones y el historial por persona.
 5 años" con escenarios de ahorro/CDT/ETF. Hecho: modelos `project_plans` y
 `plan_scenarios`, motor `lib/finance/project-plan.ts` (aporte necesario, meses,
 valor futuro, rango con volatilidad), API `/api/finance/plans` (+ `/[id]` y
-`/[id]/apply` que crea la meta real) y **4 herramientas de Aura**:
-`crear_plan_proyecto`, `consultar_planes_proyecto`, `simular_plan_proyecto`,
-`investigar_opciones_ahorro` (usa `lib/ai/llm.ts` → FreeLlmAPI; las tasas que
-devuelve son **sugerencias sin verificar**). Regla firme: nunca prometer
-rendimientos; siempre rango + supuesto editable + fuente. **Falta**: pantalla
-del plan y seguimiento mensual.
+`/[id]/apply` que crea la meta real), **pantalla en Análisis**
+(`components/finance/project-plans-card.tsx`: crear plan, ver proyección y
+rango por escenario, editar la tasa y recalcular, botón "Crear meta") y **4
+herramientas de Aura**: `crear_plan_proyecto`, `consultar_planes_proyecto`,
+`simular_plan_proyecto`, `investigar_opciones_ahorro` (usa `lib/ai/llm.ts` →
+FreeLlmAPI; las tasas que devuelve son **sugerencias sin verificar**). Regla
+firme: nunca prometer rendimientos; siempre rango + supuesto editable + fuente.
+**Falta**: seguimiento mensual (proyectado vs real) y que la investigación de
+Aura llene los escenarios desde el chat.
 
 ### Decisión cerrada
 `F-15` unidades menores → **no migrar**. Los montos se guardan como están.
