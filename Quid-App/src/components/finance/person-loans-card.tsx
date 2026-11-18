@@ -43,6 +43,7 @@ export function PersonLoansCard() {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [payFor, setPayFor] = useState<{ loanId: string; installment: Installment } | null>(null);
   const [payAccount, setPayAccount] = useState("");
+  const [payAmount, setPayAmount] = useState("");
   const [payDate, setPayDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -112,6 +113,11 @@ export function PersonLoansCard() {
       setError("Elige la cuenta.");
       return;
     }
+    const extra = Number(payAmount.replace(/[^\d]/g, ""));
+    if (extra && extra <= 0) {
+      setError("Escribe un monto válido.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -121,6 +127,7 @@ export function PersonLoansCard() {
         body: JSON.stringify({
           installmentId: payFor.installment.id,
           accountId: payAccount,
+          amount: extra || undefined,
           date: payDate || undefined,
         }),
       });
@@ -128,6 +135,7 @@ export function PersonLoansCard() {
       if (!response.ok) throw new Error(result.error ?? "No se pudo registrar el pago.");
       setPayFor(null);
       setPayDate("");
+      setPayAmount("");
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo registrar el pago.");
@@ -249,6 +257,7 @@ export function PersonLoansCard() {
                                 onClick={() => {
                                   setPayFor({ loanId: loan.id, installment });
                                   setPayAccount(accounts[0]?.id ?? "");
+                                  setPayAmount(String(installment.amount));
                                   setError("");
                                 }}
                                 className="text-[11px] text-emerald-600"
@@ -335,6 +344,16 @@ export function PersonLoansCard() {
                 </option>
               ))}
             </select>
+            <input
+              value={payAmount}
+              onChange={(event) => setPayAmount(event.target.value)}
+              inputMode="numeric"
+              placeholder="Monto del abono"
+              className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Puedes abonar más que la cuota: el excedente se aplica a las siguientes.
+            </p>
             <input
               type="date"
               value={payDate}

@@ -50,10 +50,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       amount: isIncoming ? -amount : amount,
     });
 
-    await tx.transaction.delete({ where: { id: transaction.id } });
+    // Un pago puede haber cubierto varias cuotas: se liberan todas.
+    const touched = await tx.personLoanInstallment.findMany({
+      where: { loanId: loan.id, paymentTransactionId: transaction.id },
+      select: { id: true },
+    });
 
-    await tx.personLoanInstallment.update({
-      where: { id: installment.id },
+    await tx.personLoanInstallment.updateMany({
+      where: { loanId: loan.id, paymentTransactionId: transaction.id },
       data: {
         paidAmount: 0,
         isPaid: false,
@@ -61,6 +65,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         paymentTransactionId: null,
       },
     });
+
+    if (touched.length === 0) {
+      await tx.personLoanInstallment.update({
+        where: { id: installment.id },
+        data: { paidAmount: 0, isPaid: false, paidAt: null, paymentTransactionId: null },
+      });
+    }
+
+    await tx.transaction.delete({ where: { id: transaction.id } });
 
     await tx.personLoan.update({
       where: { id: loan.id },

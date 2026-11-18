@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.61",
+  "currentVersion": "1.1.62",
   "releases": [
+    {
+      "version": "1.1.62",
+      "date": "2026-11-18",
+      "title": "Quid 1.1.62",
+      "changes": [
+        "Puedes abonar mas que el valor de la cuota",
+        "El excedente baja a las cuotas siguientes",
+        "Revertir libera todas las cuotas que cubrio el pago"
+      ]
+    },
     {
       "version": "1.1.61",
       "date": "2026-11-14",

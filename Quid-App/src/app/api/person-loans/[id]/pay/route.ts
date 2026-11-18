@@ -61,13 +61,38 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const isIncoming = loan.direction === "lent";
 
+  // Se puede abonar más que una cuota: el excedente baja a las siguientes.
+  const outstanding = Math.max(0, toNumber(loan.amount) - toNumber(loan.paidAmount));
+  const requested = amount;
+  if (requested > outstanding + 0.005) {
+    return NextResponse.json(
+      { error: `Ese abono supera lo que falta del préstamo (${outstanding.toFixed(2)}).` },
+      { status: 400 }
+    );
+  }
+
+  const ordered = [...loan.installments].sort((a, b) => a.number - b.number);
+  const startIndex = ordered.findIndex((row) => row.id === installment.id);
+  let remaining = requested;
+  const applied: Array<{ id: string; paid: number; isPaid: boolean }> = [];
+
+  for (let index = startIndex; index < ordered.length && remaining > 0.005; index += 1) {
+    const row = ordered[index];
+    const due = toNumber(row.amount) - toNumber(row.paidAmount);
+    if (due <= 0.005) continue;
+    const take = Math.min(remaining, due);
+    const paid = toNumber(row.paidAmount) + take;
+    applied.push({ id: row.id, paid, isPaid: paid >= toNumber(row.amount) - 0.005 });
+    remaining -= take;
+  }
+
   const result = await db.$transaction(async (tx) => {
     const transaction = await tx.transaction.create({
       data: {
         userId: session.user.id,
         accountId: account.id,
         type: isIncoming ? "income" : "expense",
-        amount,
+        amount: requested,
         description: isIncoming
           ? `Cobro de préstamo: ${loan.personName}`
           : `Pago de préstamo: ${loan.personName}`,
@@ -82,31 +107,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await applyBalanceDelta(tx, {
       accountId: account.id,
       subAccountId: null,
-      amount: isIncoming ? amount : -amount,
+      amount: isIncoming ? requested : -requested,
     });
 
-    const paidAmount = toNumber(installment.paidAmount) + amount;
-    const isPaid = paidAmount >= toNumber(installment.amount) - 0.005;
+    for (const entry of applied) {
+      await tx.personLoanInstallment.update({
+        where: { id: entry.id },
+        data: {
+          paidAmount: entry.paid,
+          isPaid: entry.isPaid,
+          paidAt: entry.isPaid ? date : null,
+          accountId: account.id,
+          paymentTransactionId: transaction.id,
+        },
+      });
+    }
 
-    await tx.personLoanInstallment.update({
-      where: { id: installment.id },
-      data: {
-        paidAmount,
-        isPaid,
-        paidAt: isPaid ? date : null,
-        accountId: account.id,
-        paymentTransactionId: transaction.id,
-      },
-    });
-
-    const loanPaid = toNumber(loan.paidAmount) + amount;
+    const loanPaid = toNumber(loan.paidAmount) + requested;
     const loanSettled = loanPaid >= toNumber(loan.amount) - 0.005;
     await tx.personLoan.update({
       where: { id: loan.id },
       data: { paidAmount: loanPaid, status: loanSettled ? "settled" : "open" },
     });
 
-    return { transactionId: transaction.id, isPaid, loanSettled };
+    return {
+      transactionId: transaction.id,
+      installmentsTouched: applied.length,
+      loanSettled,
+    };
   });
 
   return NextResponse.json(result);
