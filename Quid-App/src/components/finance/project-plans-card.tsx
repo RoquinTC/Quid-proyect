@@ -46,6 +46,12 @@ interface Plan {
   goalId: string | null;
   scenarios: Scenario[];
   projections: Projection[];
+  progress?: {
+    status: "ahead" | "on_track" | "behind" | "unknown";
+    message: string;
+    expectedAmount: number;
+    actualAmount: number | null;
+  };
 }
 
 export function ProjectPlansCard() {
@@ -470,6 +476,20 @@ export function ProjectPlansCard() {
                 );
               })}
             </div>
+
+            {plan.progress && plan.progress.status !== "unknown" && (
+              <p
+                className={`text-[11px] ${
+                  plan.progress.status === "ahead"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : plan.progress.status === "behind"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-gray-500"
+                }`}
+              >
+                {plan.progress.message}
+              </p>
+            )}
 
             <p className="text-[10px] text-gray-400">
               Supuestos, no promesas: el rango depende de la tasa y la volatilidad que pongas.

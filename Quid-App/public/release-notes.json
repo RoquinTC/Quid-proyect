@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.74",
+  "currentVersion": "1.1.75",
   "releases": [
+    {
+      "version": "1.1.75",
+      "date": "2026-11-19",
+      "title": "Quid 1.1.75",
+      "changes": [
+        "Los planes muestran como vas: adelantado, en linea o atrasado",
+        "Si vas atrasado te dice cuanto aportar para llegar",
+        "Compara lo esperado contra lo apartado de verdad"
+      ]
+    },
     {
       "version": "1.1.74",
       "date": "2026-11-19",

@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { toNumber } from "@/lib/decimal-serializer";
 import { projectAll, type ScenarioKind } from "@/lib/finance/project-plan";
+import { computePlanProgress } from "@/lib/finance/plan-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,17 @@ export async function GET() {
     include: { scenarios: { orderBy: { createdAt: "asc" } } },
   });
 
+  // F-58 · para el seguimiento hace falta lo que de verdad hay apartado.
+  const goalIds = plans.map((plan) => plan.goalId).filter((id): id is string => Boolean(id));
+  const goals =
+    goalIds.length > 0
+      ? await db.savingsGoal.findMany({
+          where: { userId: session.user.id, id: { in: goalIds } },
+          select: { id: true, currentAmount: true },
+        })
+      : [];
+  const goalAmounts = new Map(goals.map((goal) => [goal.id, toNumber(goal.currentAmount)]));
+
   return NextResponse.json({
     plans: plans.map((plan) => {
       const dto = toDTO(plan);
@@ -93,7 +105,24 @@ export async function GET() {
           targetDate: dto.targetDate,
         }
       );
-      return { ...dto, projections };
+
+      const selected =
+        dto.scenarios.find((scenario) => scenario.isSelected) ?? dto.scenarios[0] ?? null;
+      const actualAmount = plan.goalId
+        ? goalAmounts.get(plan.goalId) ?? null
+        : dto.currentAmount;
+
+      const progress = computePlanProgress({
+        startedAt: plan.createdAt,
+        monthlyContribution: dto.monthlyContribution,
+        annualRatePercent: selected?.annualRatePercent ?? 0,
+        initialAmount: dto.currentAmount,
+        actualAmount,
+        targetAmount: dto.targetAmount,
+        targetDate: dto.targetDate ? new Date(dto.targetDate) : null,
+      });
+
+      return { ...dto, projections, progress };
     }),
   });
 }
