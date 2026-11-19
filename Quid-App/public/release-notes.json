@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.69",
+  "currentVersion": "1.1.70",
   "releases": [
+    {
+      "version": "1.1.70",
+      "date": "2026-11-19",
+      "title": "Quid 1.1.70",
+      "changes": [
+        "Documento con las reglas del dinero",
+        "Cuentas usa el mismo calculo de disponible",
+        "Ninguna pantalla suma saldos por su cuenta"
+      ]
+    },
     {
       "version": "1.1.69",
       "date": "2026-11-19",

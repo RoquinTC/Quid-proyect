@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, ReactNode, useMemo } from "react";
 import { apiFetch, formatCurrency, calcPercentage, getColombiaNow, parseLocalDate } from "@/lib/api";
+import { balanceBreakdown } from "@/lib/finance/available";
 import { useMultiQuery } from "@/lib/local/hooks/queries";
 import { useDataEvent } from "@/hooks/use-data-event";
 import { useAppStore } from "@/lib/store";
@@ -736,23 +737,11 @@ export function AccountsView() {
   // COMPUTED VALUES
   // ============================================
 
-  const totalBalance = accounts.reduce((sum, a) => sum + Number(a.balance), 0);
-  const totalSubAccountBalance = accounts.reduce(
-    (sum, a) => sum + (a.subAccounts || []).reduce((s, sa) => s + Number(sa.balance), 0),
-    0
-  );
-  const grandTotal = totalBalance + totalSubAccountBalance;
-
-  const availableBalance = accounts.reduce((sum, a) => {
-    const accountPortion = a.excludeFromAvailable ? 0 : Number(a.balance);
-    const subAccountPortion = (a.subAccounts || []).reduce(
-      (s, sa) => (sa.excludeFromAvailable ? s : s + Number(sa.balance)),
-      0
-    );
-    return sum + accountPortion + subAccountPortion;
-  }, 0);
-
-  const excludedBalance = grandTotal - availableBalance;
+  // F-53 · una sola fuente para los tres números (ver docs/reglas-dinero.md).
+  const balances = balanceBreakdown(accounts);
+  const grandTotal = balances.total;
+  const availableBalance = balances.available;
+  const excludedBalance = balances.apartado;
 
   const highYieldAccounts = accounts.filter((a) => a.isHighYield);
 
