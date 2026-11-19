@@ -489,6 +489,14 @@ datos: saldos, movimientos, deudas, metas, radar, vehículos, salud, despensa).
 El corte se hizo con emparejado de llaves, no por números de línea, y las 852
 pruebas pasaron **sin cambios**.
 
-**Orden restante:** partir `finance-overview.tsx` y `accounts-view.tsx`
-(datos / cálculo / vista). Sin cambiar comportamiento: la red de pruebas (852)
-es la garantía.
+**Resumen de Finanzas dividido (F-56, 2026-11-18)**:
+`finance-overview.tsx` bajó de 1.567 a **1.299 líneas**; los widgets visuales
+(`CircularProgress`, los dos tooltips de gráficas, `WidgetCustomizationDialog`)
+y la configuración de widgets (`WidgetConfig`, `DEFAULT_WIDGETS`,
+`FULL_MONTH_NAMES`) viven ahora en `components/finance/overview-widgets.tsx`
+(317 líneas). Mismo criterio: emparejado de llaves, sin cambios de
+comportamiento y con las 852 pruebas intactas.
+
+**Orden restante:** partir `accounts-view.tsx`; luego volver a producto
+(seguimiento mensual del plan, F-26/F-27) y extraer el pago de cuota de deuda
+a `lib/finance/debt-payment.ts`.
