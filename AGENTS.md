@@ -497,6 +497,14 @@ y la configuración de widgets (`WidgetConfig`, `DEFAULT_WIDGETS`,
 (317 líneas). Mismo criterio: emparejado de llaves, sin cambios de
 comportamiento y con las 852 pruebas intactas.
 
-**Orden restante:** partir `accounts-view.tsx`; luego volver a producto
-(seguimiento mensual del plan, F-26/F-27) y extraer el pago de cuota de deuda
-a `lib/finance/debt-payment.ts`.
+**Cuentas separada (F-57, 2026-11-18)**: `accounts-view.tsx` bajó de 1.723 a
+**1.620 líneas**; el tooltip de la gráfica, la mini-línea de tendencia y
+`computeBalanceHistory` viven en `components/finance/accounts-view-parts.tsx`
+(125 líneas). **Corte conservador a propósito**: las tarjetas ordenables
+(drag & drop) y la configuración de widgets siguen en la vista porque dependen
+de tipos y constantes locales; moverlas exige separar antes ese estado.
+
+**Orden restante:** volver a producto (seguimiento mensual del plan,
+F-26/F-27) y extraer el pago de cuota de deuda a `lib/finance/debt-payment.ts`.
+La reorganización de archivos queda en un punto seguro: las dos pantallas
+grandes tienen sus piezas visuales fuera y el resto puede esperar.
