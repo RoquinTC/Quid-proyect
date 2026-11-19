@@ -482,6 +482,13 @@ todo y reorganizar"**. No es cosmético; hay deuda estructural acumulada:
 propuesta + confirmación, canales, límites). §5 y §6 quedaron resumidos con
 enlaces.
 
-**Orden restante:** partir los archivos grandes (`lib/aura/index.ts`,
-`finance-overview.tsx`, `accounts-view.tsx`). Sin cambiar comportamiento: la
-red de pruebas (852) es la garantía.
+**Aura dividida (F-55, 2026-11-18):** `lib/aura/index.ts` bajó de 2.181 a
+**1.631 líneas**; lo extraído quedó en `lib/aura/utils.ts` (ayudantes puros:
+fechas, texto, `DateRange`) y `lib/aura/snapshots.ts` (lecturas de base de
+datos: saldos, movimientos, deudas, metas, radar, vehículos, salud, despensa).
+El corte se hizo con emparejado de llaves, no por números de línea, y las 852
+pruebas pasaron **sin cambios**.
+
+**Orden restante:** partir `finance-overview.tsx` y `accounts-view.tsx`
+(datos / cálculo / vista). Sin cambiar comportamiento: la red de pruebas (852)
+es la garantía.
