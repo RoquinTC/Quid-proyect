@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.70",
+  "currentVersion": "1.1.71",
   "releases": [
+    {
+      "version": "1.1.71",
+      "date": "2026-11-19",
+      "title": "Quid 1.1.71",
+      "changes": [
+        "Finanzas ahora tiene 4 bloques: Hoy, Planear, Deudas y Analisis",
+        "Se acaban las nueve pestanas planas",
+        "El deslizamiento cambia solo dentro del bloque"
+      ]
+    },
     {
       "version": "1.1.70",
       "date": "2026-11-19",

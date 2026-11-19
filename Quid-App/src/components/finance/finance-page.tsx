@@ -87,6 +87,17 @@ const ALL_FINANCE_TABS: ModuleTab<FinanceSubView>[] = [
   { id: "recurring", label: "Pagos", icon: Clock, primary: false, hint: "Suscripciones fijas" },
 ];
 
+// F-54 · cuatro bloques en vez de nueve pestañas planas.
+// El id interno de cada vista no cambia: solo se agrupa y se renombra.
+type FinanceGroupId = "hoy" | "planear" | "deudas" | "analisis";
+
+const FINANCE_GROUPS: Array<{ id: FinanceGroupId; label: string; tabs: FinanceSubView[] }> = [
+  { id: "hoy", label: "Hoy", tabs: ["overview", "inbox", "accounts"] },
+  { id: "planear", label: "Planear", tabs: ["budgets", "savings", "cdts", "recurring"] },
+  { id: "deudas", label: "Deudas", tabs: ["debts"] },
+  { id: "analisis", label: "Análisis", tabs: ["analysis"] },
+];
+
 export function FinancePage() {
   const { financeSubView, setFinanceSubView, sidebarAction, setSidebarAction } = useAppStore();
 
@@ -122,6 +133,17 @@ export function FinancePage() {
   const tabs = useMemo(
     () => ALL_FINANCE_TABS.filter((tab) => tab.id !== "inbox" || inboxAvailable),
     [inboxAvailable]
+  );
+
+  const activeGroup = useMemo(
+    () => FINANCE_GROUPS.find((group) => group.tabs.includes(financeSubView)) ?? FINANCE_GROUPS[0],
+    [financeSubView]
+  );
+
+  // Solo se muestran las pestañas del bloque activo.
+  const groupTabs = useMemo(
+    () => tabs.filter((tab) => activeGroup.tabs.includes(tab.id)),
+    [tabs, activeGroup]
   );
 
   // Sidebar quick-action forms (managed at page level so they work from sidebar)
@@ -211,13 +233,13 @@ export function FinancePage() {
       const carouselParent = target.closest('[data-carousel], .overflow-x-auto, .snap-x');
       if (carouselParent) return; // Don't change tab in carousel
 
-      const currentIdx = tabs.findIndex((t) => t.id === financeSubView);
-      if (dx < 0 && currentIdx < tabs.length - 1) {
-        // Swipe left → next tab
-        setFinanceSubView(tabs[currentIdx + 1].id);
+      const currentIdx = groupTabs.findIndex((t) => t.id === financeSubView);
+      if (dx < 0 && currentIdx >= 0 && currentIdx < groupTabs.length - 1) {
+        // Swipe left → next tab dentro del bloque
+        setFinanceSubView(groupTabs[currentIdx + 1].id);
       } else if (dx > 0 && currentIdx > 0) {
-        // Swipe right → previous tab
-        setFinanceSubView(tabs[currentIdx - 1].id);
+        // Swipe right → previous tab dentro del bloque
+        setFinanceSubView(groupTabs[currentIdx - 1].id);
       }
     }
     setTouchStart(null);
@@ -278,15 +300,44 @@ export function FinancePage() {
       onTouchEnd={handleTouchEnd}
       header={
         !isDetailView ? (
-          <ModuleTabs
-            title="Finanzas"
-            icon={Wallet}
-            tone="emerald"
-            tabs={tabs}
-            activeId={financeSubView}
-            onSelect={setFinanceSubView}
-            layoutId="financeModuleTab"
-          />
+          <div className="space-y-2">
+            {/* F-54 · cuatro bloques: Hoy · Planear · Deudas · Análisis */}
+            <div className="flex gap-1 rounded-xl bg-muted/60 p-1">
+              {FINANCE_GROUPS.map((group) => {
+                const isActive = group.id === activeGroup.id;
+                // Un bloque sin pestañas visibles (p. ej. Bandeja apagada) no se
+                // oculta: se abre en su primera vista disponible.
+                const firstTab = tabs.find((tab) => group.tabs.includes(tab.id));
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    onClick={() => {
+                      if (isActive) return;
+                      if (firstTab) setFinanceSubView(firstTab.id);
+                    }}
+                    className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                      isActive
+                        ? "bg-background text-emerald-600 shadow-sm dark:text-emerald-400"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {group.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <ModuleTabs
+              title="Finanzas"
+              icon={Wallet}
+              tone="emerald"
+              tabs={groupTabs}
+              activeId={financeSubView}
+              onSelect={setFinanceSubView}
+              layoutId="financeModuleTab"
+            />
+          </div>
         ) : null
       }
     >
