@@ -366,7 +366,11 @@ todo y decía "tienes 4 millones" aunque 3 estuvieran apartados. Ahora
 Balance de Finanzas usan `available`, y bajo el monto se aclara cuánto está
 apartado. `accounts-view` ya lo hacía bien y se mantiene. El consejero del plan
 también lo respeta: el colchón es `max(metas + CDT, cuentas apartadas)` para no
-contar dos veces la misma plata.
+contar dos veces la misma plata. **Ampliado 2026-11-18**: Aura responde con
+"disponible" y "apartado" (`getBalanceSnapshot` devuelve los tres números y
+`AccountChoice` lleva `available`), y el simulador de deudas avisa y bloquea un
+abono extra mayor que el dinero disponible, mostrando "Disponible hoy: X · lo
+apartado no cuenta".
 
 **F-52 · planes de proyecto (en curso, pedido del dueño)**: "quiero la casa en
 5 años" con escenarios de ahorro/CDT/ETF. Hecho: modelos `project_plans` y
@@ -462,3 +466,24 @@ Finanzas ▸
 ### Lo que NO se toca
 El dueño decidió **mantener dos menús** (hamburguesa = trabajar, ajustes =
 configurar). No unificar en uno. Solo hay que hacer evidente la diferencia.
+---
+
+## 13. Reorganización pendiente (decisión del dueño, 2026-11-18)
+
+El dueño lo pidió explícito: **"al final tenemos que darle un nuevo orden a
+todo y reorganizar"**. No es cosmético; hay deuda estructural acumulada:
+
+| Problema | Dónde se siente | Qué haría falta |
+|---|---|---|
+| Archivos gigantes | `finance-overview.tsx` (1.500+), `accounts-view.tsx` (1.500+), `finance-page.tsx`, `lib/aura/index.ts` (2.000+) | Partir por responsabilidad (datos, cálculo, vista) y dejar el componente solo pintando |
+| Cálculos de dinero dispersos | Cada tarjeta suma saldos a su manera (el bug de F-53 nació así) | **Una sola capa `lib/finance/`** como fuente; ninguna vista suma saldos por su cuenta |
+| "Disponible" con varios nombres | tablero, cuentas, Aura, simulador, planes | Un concepto único documentado (`available` / `apartado` / `total`) y usarlo en todos lados |
+| Pestañas de Finanzas desordenadas | Resumen, Cuentas, Deudas, Ahorros, CDT, Presupuestos, Recurrentes, Análisis, Simulador | Reagrupar: **HOY** (disponible, próximo, hallazgos) · **PLANEAR** (presupuestos, metas, planes, CDT) · **DEUDAS** · **ANÁLISIS** |
+| Aura con 59 herramientas planas | `lib/aura/tools/` | Agrupar por dominio y documentar cuáles son de lectura/escritura en un índice legible |
+| Documentación regada | `AGENTS.md` crece por secciones | Dividir: `docs/arquitectura.md`, `docs/dinero.md` (reglas de cálculo), `docs/aura.md` |
+
+**Orden sugerido cuando se aborde:** primero `docs/dinero.md` con las reglas
+(qué es disponible, qué suma el patrimonio, cuándo un pago es gasto) → luego
+extraer cálculos a `lib/finance/` → luego reagrupar pestañas → al final partir
+archivos grandes. Sin cambiar comportamiento: la red de pruebas (852) es la
+garantía.
