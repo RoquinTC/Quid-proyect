@@ -504,7 +504,13 @@ comportamiento y con las 852 pruebas intactas.
 (drag & drop) y la configuración de widgets siguen en la vista porque dependen
 de tipos y constantes locales; moverlas exige separar antes ese estado.
 
-**Orden restante:** volver a producto (seguimiento mensual del plan,
-F-26/F-27) y extraer el pago de cuota de deuda a `lib/finance/debt-payment.ts`.
-La reorganización de archivos queda en un punto seguro: las dos pantallas
-grandes tienen sus piezas visuales fuera y el resto puede esperar.
+**F-58 · seguimiento del plan (hecho 2026-11-18)**: `lib/finance/plan-progress.ts`
+compara lo que deberías tener hoy (aporte + tasa supuesta) contra lo apartado de
+verdad, y devuelve `ahead` / `on_track` / `behind` / `unknown`, con el aporte
+mensual necesario si vas atrasado. Se muestra en la tarjeta del plan con color.
+Sin dato real (`actualAmount = null`) no inventa estado. Lo "de verdad" sale de
+la meta vinculada (`goalId`); si no hay meta, se toma el monto del plan.
+
+**Orden restante:** extraer el pago de cuota de deuda a
+`lib/finance/debt-payment.ts` (con pruebas de caracterización primero) y luego
+F-26/F-27 (pareja y workspaces).
