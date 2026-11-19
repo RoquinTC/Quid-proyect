@@ -484,8 +484,7 @@ todo y reorganizar"**. No es cosmético; hay deuda estructural acumulada:
 
 **Hecho (2026-11-18):** `Quid-App/docs/reglas-dinero.md` escrito (disponible/apartado/total, patrimonio, cuándo es gasto, cuotas, colchón, préstamos entre personas, planes, fechas) y **todos los cálculos de saldos unificados en `lib/finance/available.ts`** — tablero, Finanzas y Cuentas ya usan `balanceBreakdown`; no quedan sumas de saldos sueltas en vistas.
 
-**Orden restante cuando se aborde:** primero `docs/dinero.md` con las reglas
-(qué es disponible, qué suma el patrimonio, cuándo un pago es gasto) → luego
-extraer cálculos a `lib/finance/` → luego reagrupar pestañas → al final partir
-archivos grandes. Sin cambiar comportamiento: la red de pruebas (852) es la
-garantía.
+**Orden restante:** reagrupar las pestañas de Finanzas (HOY · PLANEAR ·
+DEUDAS · ANÁLISIS) → dividir la documentación (`docs/arquitectura.md`,
+`docs/aura.md`) → partir los archivos grandes. Sin cambiar comportamiento: la
+red de pruebas (852) es la garantía.
