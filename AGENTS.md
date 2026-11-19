@@ -482,7 +482,9 @@ todo y reorganizar"**. No es cosmético; hay deuda estructural acumulada:
 | Aura con 59 herramientas planas | `lib/aura/tools/` | Agrupar por dominio y documentar cuáles son de lectura/escritura en un índice legible |
 | Documentación regada | `AGENTS.md` crece por secciones | Dividir: `docs/arquitectura.md`, `docs/dinero.md` (reglas de cálculo), `docs/aura.md` |
 
-**Orden sugerido cuando se aborde:** primero `docs/dinero.md` con las reglas
+**Hecho (2026-11-18):** `Quid-App/docs/reglas-dinero.md` escrito (disponible/apartado/total, patrimonio, cuándo es gasto, cuotas, colchón, préstamos entre personas, planes, fechas) y **todos los cálculos de saldos unificados en `lib/finance/available.ts`** — tablero, Finanzas y Cuentas ya usan `balanceBreakdown`; no quedan sumas de saldos sueltas en vistas.
+
+**Orden restante cuando se aborde:** primero `docs/dinero.md` con las reglas
 (qué es disponible, qué suma el patrimonio, cuándo un pago es gasto) → luego
 extraer cálculos a `lib/finance/` → luego reagrupar pestañas → al final partir
 archivos grandes. Sin cambiar comportamiento: la red de pruebas (852) es la
