@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.71",
+  "currentVersion": "1.1.72",
   "releases": [
+    {
+      "version": "1.1.72",
+      "date": "2026-11-19",
+      "title": "Quid 1.1.72",
+      "changes": [
+        "Aura parte su codigo en modulos: motor, contexto y ayudantes",
+        "Sin cambios de comportamiento, todo verificado",
+        "Menos riesgo al tocar el asistente"
+      ]
+    },
     {
       "version": "1.1.71",
       "date": "2026-11-19",

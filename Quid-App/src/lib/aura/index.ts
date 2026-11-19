@@ -23,6 +23,42 @@ import {
   updateFuelProposal,
   executeFuelProposal,
 } from "./tools/registrar_tanqueo";
+import {
+  addDays,
+  dateOnly,
+  daysInMonth,
+  daysUntil,
+  formatDate,
+  formatDateRange,
+  monthsUntil,
+  normalize,
+  parseDateRange,
+  startOfToday,
+  startOfWeek,
+  type DateRange,
+} from "@/lib/aura/utils";
+import {
+  AccountChoice,
+  PendingRecurring,
+  DebtChoice,
+  getAccountChoices,
+  findMentionedAccount,
+  getDebtChoices,
+  getBalanceSnapshot,
+  getExpenseSnapshot,
+  getMovementSnapshot,
+  getPendingRecurring,
+  getPlannerSnapshot,
+  getSavingsSnapshot,
+  getCdtSnapshot,
+  getDebtSnapshot,
+  getBudgetSnapshot,
+  getFinancialRadar,
+  getVehicleSnapshot,
+  getTransportRadar,
+  getHealthSnapshot,
+  getPantrySnapshot,
+} from "@/lib/aura/snapshots";
 
 export type CoreMessage = { role: "user" | "assistant" | "system" | "data"; content: string };
 
@@ -84,51 +120,10 @@ type AuraToolResult = {
   action?: AuraStructuredAction;
 };
 
-type AccountChoice = {
-  id: string;
-  name: string;
-  balance: number;
-  /** F-53 · false cuando la cuenta está marcada como "no disponible". */
-  available?: boolean;
-  kind: "account" | "subAccount";
-  parentAccountId?: string;
-  parentAccountName?: string;
-};
 
-type PendingRecurring = {
-  id: string;
-  description: string;
-  amount: number;
-  type: string;
-  scheduledDate: Date;
-  accountId: string | null;
-  subAccountId: string | null;
-  category: string | null;
-  subCategory: string | null;
-};
 
-type DebtChoice = {
-  id: string;
-  name: string;
-  currentBalance: number;
-  kind: "debt";
-};
 
-type DateRange = {
-  start: Date;
-  end: Date;
-  label: string;
-};
 
-function normalize(value: string) {
-  return value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function parseLocaleNumber(rawValue: string) {
   const compact = rawValue.replace(/\s+/g, "");
@@ -290,68 +285,9 @@ function inferAction(text: string): AuraAction {
   return "chat";
 }
 
-function dateOnly(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
-}
 
-function addDays(value: Date, days: number) {
-  const date = new Date(value);
-  date.setDate(date.getDate() + days);
-  return date;
-}
 
-function startOfWeek(value: Date) {
-  const date = dateOnly(value);
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  return addDays(date, diff);
-}
 
-function parseDateRange(text: string): DateRange {
-  const normalized = normalize(text);
-  const today = dateOnly(new Date());
-
-  if (/\b(antes de ayer|antier|anteayer)\b/.test(normalized)) {
-    const day = addDays(today, -2);
-    return { start: day, end: addDays(day, 1), label: "antes de ayer" };
-  }
-
-  if (/\bayer\b/.test(normalized)) {
-    const day = addDays(today, -1);
-    return { start: day, end: addDays(day, 1), label: "ayer" };
-  }
-
-  if (/\bhoy\b/.test(normalized)) {
-    return { start: today, end: addDays(today, 1), label: "hoy" };
-  }
-
-  const lastDays = normalized.match(/\b(?:ultimos|ultimas|últimos|últimas)\s+(\d+)\s+dias\b/);
-  if (lastDays) {
-    const days = Math.max(1, Number(lastDays[1]));
-    return { start: addDays(today, -days + 1), end: addDays(today, 1), label: `los últimos ${days} días` };
-  }
-
-  if (/\bsemana pasada\b/.test(normalized)) {
-    const thisWeek = startOfWeek(today);
-    return { start: addDays(thisWeek, -7), end: thisWeek, label: "la semana pasada" };
-  }
-
-  if (/\b(esta semana|semana actual)\b/.test(normalized)) {
-    return { start: startOfWeek(today), end: addDays(today, 1), label: "esta semana" };
-  }
-
-  if (/\b(mes anterior|mes pasado)\b/.test(normalized)) {
-    const startThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const startLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    return { start: startLastMonth, end: startThisMonth, label: "el mes anterior" };
-  }
-
-  if (/\b(este mes|mes actual)\b/.test(normalized)) {
-    return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: addDays(today, 1), label: "este mes" };
-  }
-
-  return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: addDays(today, 1), label: "este mes" };
-}
 
 function parseRecordDate(text: string) {
   const normalized = normalize(text);
@@ -514,81 +450,12 @@ function transactionDescription(text: string, category: string) {
   return `${category} registrado por Aura`;
 }
 
-function startOfToday() {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
 
-function daysUntil(date: Date) {
-  const today = startOfToday();
-  const target = new Date(date);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-}
 
-function formatDate(value: Date) {
-  return new Intl.DateTimeFormat("es-CO", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).format(value);
-}
 
-function formatDateRange(range: DateRange) {
-  return `${range.label} (${range.start.toLocaleDateString("es-CO")} - ${addDays(range.end, -1).toLocaleDateString("es-CO")})`;
-}
 
-async function getAccountChoices(userId: string): Promise<AccountChoice[]> {
-  const accounts = await db.account.findMany({
-    where: { userId },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    include: { subAccounts: { orderBy: [{ order: "asc" }, { createdAt: "asc" }] } },
-  });
 
-  return accounts.flatMap((account) => [
-    {
-      id: account.id,
-      name: account.name,
-      balance: toNumber(account.balance),
-      available: !account.excludeFromAvailable,
-      kind: "account" as const,
-    },
-    ...account.subAccounts.map((subAccount) => ({
-      id: subAccount.id,
-      name: `${account.name} / ${subAccount.name}`,
-      balance: toNumber(subAccount.balance),
-      available: !subAccount.excludeFromAvailable,
-      kind: "subAccount" as const,
-      parentAccountId: account.id,
-      parentAccountName: account.name,
-    })),
-  ]);
-}
 
-function findMentionedAccount(text: string, accounts: AccountChoice[]) {
-  const normalized = normalize(text);
-  return accounts.find((account) => {
-    const accountName = normalize(account.name);
-    const parts = accountName.split(" / ");
-    return normalized.includes(accountName) || parts.some((part) => part.length >= 4 && normalized.includes(part));
-  });
-}
-
-async function getDebtChoices(userId: string): Promise<DebtChoice[]> {
-  const debts = await db.debt.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, bank: true, currentBalance: true },
-  });
-
-  return debts.map((debt) => ({
-    id: debt.id,
-    name: debt.bank ? `${debt.name} ${debt.bank}` : debt.name,
-    currentBalance: toNumber(debt.currentBalance),
-    kind: "debt" as const,
-  }));
-}
 
 export async function createCreditCardPurchaseFromAura(params: {
   userId: string;
@@ -657,439 +524,21 @@ function findMentionedDebt(text: string, debts: DebtChoice[]) {
   });
 }
 
-async function getBalanceSnapshot(userId: string) {
-  const accounts = await getAccountChoices(userId);
-  // F-53 · lo apartado no es disponible, aunque siga siendo dinero tuyo.
-  const availableBalance = accounts
-    .filter((account) => account.available !== false)
-    .reduce((sum, account) => sum + account.balance, 0);
-  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
-  const apartado = totalBalance - availableBalance;
-  return { totalBalance, availableBalance, apartado, currency: "COP", accounts };
-}
 
-async function getExpenseSnapshot(userId: string) {
-  return getMovementSnapshot(userId, "expense", parseDateRange("este mes"));
-}
 
-async function getMovementSnapshot(userId: string, type: "expense" | "income" | "transfer", range: DateRange) {
-  const whereType = type === "transfer" ? "transfer" : type;
 
-  const transactions = await db.transaction.findMany({
-    where: { userId, type: whereType, date: { gte: range.start, lt: range.end } },
-    orderBy: { date: "desc" },
-    select: { type: true, amount: true, category: true, description: true, date: true },
-  });
 
-  const total = transactions.reduce((sum, tx) => sum + toNumber(tx.amount), 0);
-  const byCategory = transactions.reduce<Record<string, number>>((acc, tx) => {
-    const key = tx.category || "Sin categoría";
-    acc[key] = (acc[key] || 0) + toNumber(tx.amount);
-    return acc;
-  }, {});
 
-  return { total, count: transactions.length, byCategory, transactions, range };
-}
 
-async function getPendingRecurring(userId: string): Promise<PendingRecurring[]> {
-  return db.recurringPayment
-    .findMany({
-      where: { userId, status: "pending" },
-      orderBy: { scheduledDate: "asc" },
-      take: 10,
-      select: {
-        id: true,
-        description: true,
-        amount: true,
-        actualAmount: true,
-        type: true,
-        scheduledDate: true,
-        accountId: true,
-        subAccountId: true,
-        category: true,
-        subCategory: true,
-      },
-    })
-    .then((items) =>
-      items.map((item) => ({
-        ...item,
-        amount: toNumber(item.actualAmount ?? item.amount),
-      }))
-    );
-}
 
-async function getPlannerSnapshot(userId: string) {
-  const recurring = await getPendingRecurring(userId);
-  const horizon = new Date();
-  horizon.setDate(horizon.getDate() + 7);
 
-  const appointments = await db.medicalAppointment.findMany({
-    where: { userId, status: "scheduled", date: { lte: horizon } },
-    orderBy: { date: "asc" },
-    take: 8,
-    select: { specialty: true, doctorName: true, date: true, location: true },
-  });
 
-  return {
-    recurring: recurring.slice(0, 8),
-    appointments,
-  };
-}
 
-async function getSavingsSnapshot(userId: string) {
-  const goals = await db.savingsGoal.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      sourceAccount: { select: { name: true } },
-      destinationAccount: { select: { name: true } },
-      cdts: { select: { amount: true, bank: true, status: true } },
-    },
-  });
 
-  return goals.map((goal) => ({
-    name: goal.name,
-    status: goal.status,
-    targetAmount: toNumber(goal.targetAmount),
-    currentAmount: toNumber(goal.currentAmount),
-    progress: toNumber(goal.targetAmount) > 0 ? Math.round((toNumber(goal.currentAmount) / toNumber(goal.targetAmount)) * 100) : 0,
-    deadline: goal.deadline,
-    sourceAccount: goal.sourceAccount?.name,
-    destinationAccount: goal.destinationAccount?.name,
-    cdtsTotal: goal.cdts.reduce((sum, cdt) => sum + toNumber(cdt.amount), 0),
-  }));
-}
 
-async function getCdtSnapshot(userId: string) {
-  const cdts = await db.cDT.findMany({
-    where: { userId },
-    orderBy: { endDate: "asc" },
-    include: {
-      goal: { select: { name: true } },
-      account: { select: { name: true } },
-    },
-  });
 
-  return cdts.map((cdt) => ({
-    bank: cdt.bank,
-    amount: toNumber(cdt.amount),
-    effectiveRate: toNumber(cdt.effectiveRate),
-    interestEarned: toNumber(cdt.interestEarned),
-    status: cdt.status,
-    endDate: cdt.endDate,
-    goal: cdt.goal?.name,
-    account: cdt.account?.name,
-  }));
-}
 
-async function getDebtSnapshot(userId: string) {
-  const debts = await db.debt.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      installments: {
-        where: { isPaid: false },
-        orderBy: { nextPaymentDate: "asc" },
-        take: 3,
-      },
-    },
-  });
 
-  return debts.map((debt) => ({
-    name: debt.bank ? `${debt.name} ${debt.bank}` : debt.name,
-    type: debt.type,
-    currentBalance: toNumber(debt.currentBalance),
-    totalAmount: toNumber(debt.totalAmount),
-    paymentDate: debt.paymentDate,
-    installmentsPending: debt.installments.length,
-  }));
-}
-
-async function getBudgetSnapshot(userId: string) {
-  const budgets = await db.budget.findMany({
-    where: { userId },
-    orderBy: [{ type: "asc" }, { category: "asc" }],
-  });
-
-  return budgets.map((budget) => {
-    const amount = toNumber(budget.amount);
-    const spent = toNumber(budget.spent);
-    return {
-      category: budget.subCategory ? `${budget.category} / ${budget.subCategory}` : budget.category,
-      type: budget.type,
-      amount,
-      spent,
-      remaining: amount - spent,
-      usage: amount > 0 ? Math.round((spent / amount) * 100) : 0,
-    };
-  });
-}
-
-function daysInMonth(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth() + 1, 0).getDate();
-}
-
-function monthsUntil(value: Date) {
-  const today = dateOnly(new Date());
-  const target = dateOnly(value);
-  const years = target.getFullYear() - today.getFullYear();
-  const months = years * 12 + target.getMonth() - today.getMonth();
-  return Math.max(1, months + (target.getDate() > today.getDate() ? 1 : 0));
-}
-
-async function getFinancialRadar(userId: string) {
-  const today = dateOnly(new Date());
-  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  const elapsedDays = Math.max(1, today.getDate());
-  const monthDays = daysInMonth(today);
-
-  const [balance, expenses, income, budgets, goals, debts, planner] = await Promise.all([
-    getBalanceSnapshot(userId),
-    getMovementSnapshot(userId, "expense", { start: monthStart, end: addDays(today, 1), label: "este mes" }),
-    getMovementSnapshot(userId, "income", { start: monthStart, end: addDays(today, 1), label: "este mes" }),
-    getBudgetSnapshot(userId),
-    getSavingsSnapshot(userId),
-    getDebtSnapshot(userId),
-    getPlannerSnapshot(userId),
-  ]);
-
-  const projectedExpenses = Math.round((expenses.total / elapsedDays) * monthDays);
-  const netNow = income.total - expenses.total;
-  const projectedNet = income.total - projectedExpenses;
-  const riskyBudgets = budgets
-    .filter((budget) => budget.type === "expense" && budget.amount > 0 && budget.usage >= 80)
-    .sort((a, b) => b.usage - a.usage)
-    .slice(0, 3);
-  const savingsPressure = goals
-    .filter((goal) => goal.status !== "completada" && goal.targetAmount > goal.currentAmount)
-    .map((goal) => {
-      const missing = Math.max(0, goal.targetAmount - goal.currentAmount);
-      const months = goal.deadline ? monthsUntil(goal.deadline) : null;
-      const monthlyNeed = months ? Math.ceil(missing / months) : null;
-      return { ...goal, missing, months, monthlyNeed };
-    })
-    .sort((a, b) => (b.monthlyNeed || 0) - (a.monthlyNeed || 0))
-    .slice(0, 3);
-  const debtTotal = debts.reduce((sum, debt) => sum + debt.currentBalance, 0);
-  const heaviestDebt = [...debts].sort((a, b) => b.currentBalance - a.currentBalance)[0];
-  const upcomingPayments = planner.recurring
-    .filter((item) => daysUntil(item.scheduledDate) <= 10)
-    .slice(0, 4);
-
-  const alerts: string[] = [];
-  if (projectedNet < 0) {
-    alerts.push(`Ojo: al ritmo actual el mes cerraría ${COP.format(Math.abs(projectedNet))} por debajo.`);
-  } else if (projectedExpenses > income.total * 0.85 && income.total > 0) {
-    alerts.push(`Vas apretado: el gasto proyectado se come más del 85% del ingreso registrado este mes.`);
-  } else {
-    alerts.push(`El flujo no está en rojo: hoy vas ${COP.format(netNow)} ${netNow >= 0 ? "arriba" : "abajo"}.`);
-  }
-
-  for (const budget of riskyBudgets) {
-    alerts.push(`${budget.category} va al ${budget.usage}% (${COP.format(budget.remaining)} libres).`);
-  }
-
-  if (savingsPressure[0]?.monthlyNeed) {
-    alerts.push(`Para ${savingsPressure[0].name} necesitas cerca de ${COP.format(savingsPressure[0].monthlyNeed)} al mes.`);
-  }
-
-  if (heaviestDebt && debtTotal > 0) {
-    alerts.push(`Tu deuda más pesada es ${heaviestDebt.name}: ${COP.format(heaviestDebt.currentBalance)}.`);
-  }
-
-  if (upcomingPayments.length > 0) {
-    const totalUpcoming = upcomingPayments.reduce((sum, item) => sum + item.amount, 0);
-    alerts.push(`En 10 días veo ${upcomingPayments.length} pago(s) por ${COP.format(totalUpcoming)}.`);
-  }
-
-  const move =
-    riskyBudgets.length > 0
-      ? `Corta o pausa ${riskyBudgets[0].category} hasta el próximo corte.`
-      : savingsPressure[0]?.monthlyNeed
-        ? `Programa un aporte recurrente a ${savingsPressure[0].name}.`
-        : heaviestDebt
-          ? `Si te sobra caja, ataca primero ${heaviestDebt.name}.`
-          : "Sigue registrando movimientos para que el radar se vuelva más filoso.";
-
-  return {
-    balance,
-    income,
-    expenses,
-    projectedExpenses,
-    projectedNet,
-    debtTotal,
-    alerts: alerts.slice(0, 6),
-    move,
-  };
-}
-
-async function getVehicleSnapshot(userId: string) {
-  const vehicles = await db.vehicle.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-    include: {
-      fuelLogs: { orderBy: { date: "desc" } },
-      maintenanceRecords: {
-        where: { reminderEnabled: true },
-        orderBy: [{ nextDueDate: "asc" }, { nextDueKm: "asc" }],
-        take: 5,
-      },
-      documents: {
-        where: { reminderEnabled: true },
-        orderBy: { expiryDate: "asc" },
-        take: 5,
-      },
-      reminders: {
-        where: { isActive: true },
-        orderBy: [{ dueDate: "asc" }, { dueKm: "asc" }],
-        take: 5,
-      },
-    },
-  });
-
-  return vehicles.map((vehicle) => {
-    const fuelLevel = calculateFuelLevel(
-      {
-        tankCapacity: vehicle.tankCapacity,
-        currentKm: vehicle.currentKm,
-        type: vehicle.type,
-      },
-      vehicle.fuelLogs.map((log) => ({
-        id: log.id,
-        date: log.date,
-        km: log.km,
-        amount: toNumber(log.amount),
-        pricePerGallon: toNumber(log.pricePerGallon),
-        gallons: log.gallons,
-        isFullTank: log.isFullTank,
-      })),
-    );
-
-    return {
-      name: vehicle.name,
-      type: vehicle.type,
-      plate: vehicle.plate,
-      currentKm: vehicle.currentKm,
-      tankCapacity: vehicle.tankCapacity,
-      lastFuelAmount: vehicle.fuelLogs[0] ? toNumber(vehicle.fuelLogs[0].amount) : null,
-      fuelLevel: Math.round(fuelLevel.fuelLevel),
-      estimatedRange: Math.round(fuelLevel.estimatedRange),
-      daysUntilRefuel: fuelLevel.daysUntilRefuel,
-      refuelByDate: fuelLevel.refuelByDate ? new Date(fuelLevel.refuelByDate) : null,
-      gallonsToRefuel: fuelLevel.gallonsToRefuel,
-      isLowFuel: fuelLevel.isLowFuel,
-      isLearningFuel: fuelLevel.isLearning,
-      anomalyDetected: fuelLevel.anomalyDetected,
-      documents: vehicle.documents.map((doc) => ({
-        type: doc.type,
-        expiryDate: doc.expiryDate,
-        daysUntil: daysUntil(doc.expiryDate),
-        cost: toNumber(doc.cost),
-      })),
-      maintenance: vehicle.maintenanceRecords.map((record) => ({
-        type: record.type,
-        description: record.description,
-        nextDueKm: record.nextDueKm,
-        nextDueDate: record.nextDueDate,
-        kmRemaining: record.nextDueKm ? Math.round(record.nextDueKm - vehicle.currentKm) : null,
-        cost: toNumber(record.cost),
-      })),
-      reminders: vehicle.reminders.map((reminder) => ({
-        title: reminder.title,
-        dueDate: reminder.dueDate,
-        dueKm: reminder.dueKm,
-        daysUntil: reminder.dueDate ? daysUntil(reminder.dueDate) : null,
-        kmRemaining: reminder.dueKm ? Math.round(reminder.dueKm - vehicle.currentKm) : null,
-      })),
-    };
-  });
-}
-
-async function getTransportRadar(userId: string) {
-  const vehicles = await getVehicleSnapshot(userId);
-  const alerts: string[] = [];
-
-  for (const vehicle of vehicles) {
-    const label = vehicle.plate ? `${vehicle.name} (${vehicle.plate})` : vehicle.name;
-
-    if (vehicle.isLowFuel) {
-      alerts.push(`${label}: combustible bajo, quedan aprox. ${vehicle.estimatedRange} km.`);
-    } else if (vehicle.daysUntilRefuel !== null && vehicle.daysUntilRefuel <= 5) {
-      alerts.push(`${label}: al ritmo actual toca tanquear en ${vehicle.daysUntilRefuel} día${vehicle.daysUntilRefuel === 1 ? "" : "s"}.`);
-    }
-
-    if (vehicle.anomalyDetected) {
-      alerts.push(`${label}: vi consumo raro de combustible; revisa presión de llantas o fuga.`);
-    }
-
-    for (const doc of vehicle.documents) {
-      if (doc.daysUntil <= 0) {
-        alerts.push(`${label}: ${doc.type.toUpperCase()} vencido o vence hoy.`);
-      } else if (doc.daysUntil <= 30) {
-        alerts.push(`${label}: ${doc.type.toUpperCase()} vence en ${doc.daysUntil} días.`);
-      }
-    }
-
-    for (const item of vehicle.maintenance) {
-      if (item.kmRemaining !== null && item.kmRemaining <= 0) {
-        alerts.push(`${label}: ${item.description} ya está pasado por km.`);
-      } else if (item.kmRemaining !== null && item.kmRemaining <= 300) {
-        alerts.push(`${label}: ${item.description} viene en ${item.kmRemaining} km.`);
-      } else if (item.nextDueDate && daysUntil(item.nextDueDate) <= 14) {
-        alerts.push(`${label}: ${item.description} cae en ${daysUntil(item.nextDueDate)} días.`);
-      }
-    }
-
-    for (const reminder of vehicle.reminders) {
-      if (reminder.daysUntil !== null && reminder.daysUntil <= 7) {
-        alerts.push(`${label}: recordatorio "${reminder.title}" en ${reminder.daysUntil <= 0 ? "hoy/vencido" : `${reminder.daysUntil} días`}.`);
-      } else if (reminder.kmRemaining !== null && reminder.kmRemaining <= 300) {
-        alerts.push(`${label}: recordatorio "${reminder.title}" en ${reminder.kmRemaining} km.`);
-      }
-    }
-  }
-
-  const move = alerts.length > 0
-    ? alerts[0]
-    : vehicles.length > 0
-      ? "Transporte se ve tranquilo. Mantén tanqueos con kilometraje para que Aura aprenda mejor tu consumo."
-      : "Aún no tienes vehículos registrados; sin vehículo no puedo presionarte con SOAT, combustible ni mantenimiento.";
-
-  return { vehicles, alerts: alerts.slice(0, 8), move };
-}
-
-async function getHealthSnapshot(userId: string) {
-  const horizon = addDays(startOfToday(), 30);
-  const [appointments, medications] = await Promise.all([
-    db.medicalAppointment.findMany({
-      where: { userId, status: "scheduled", date: { lte: horizon } },
-      orderBy: { date: "asc" },
-      take: 8,
-    }),
-    db.medication.findMany({
-      where: { userId, isActive: true },
-      orderBy: { createdAt: "desc" },
-      take: 8,
-    }),
-  ]);
-
-  return { appointments, medications };
-}
-
-async function getPantrySnapshot(userId: string) {
-  const today = startOfToday();
-  const soon = addDays(today, 14);
-  const items = await db.pantryItem.findMany({
-    where: { userId },
-    orderBy: [{ expirationDate: "asc" }, { name: "asc" }],
-    take: 30,
-  });
-
-  const expiring = items.filter((item) => item.expirationDate && item.expirationDate <= soon);
-  const lowStock = items.filter((item) => item.minStock != null && item.quantity <= item.minStock);
-  return { totalItems: items.length, expiring, lowStock };
-}
 
 function getDefaultPaymentLabel(
   paymentDefault: { paymentType?: string | null; accountId?: string | null; subAccountId?: string | null; debtId?: string | null } | null | undefined,
@@ -2179,3 +1628,4 @@ export async function askAura(userId: string, messages: CoreMessage[]) {  const 
     return { text, action: "chat" as const, error: error instanceof Error ? error.message : String(error) };
   }
 }
+
