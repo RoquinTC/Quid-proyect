@@ -92,37 +92,29 @@ en cada push a `main`. No hace falta crear tags.
 
 ## 5. Trampas que ya costaron tiempo
 
+Las cinco que más duelen; la tabla completa está en
+`Quid-App/docs/arquitectura.md` §7.
+
 | Trampa | Qué pasa | Prevención |
 |---|---|---|
-| **Editar JSX por número de línea** | Inserté bloques en el componente equivocado y rompí el archivo 3 veces | Usa la herramienta `edit` con anclas de texto exactas; lee el bloque completo antes de envolverlo; `npx tsc --noEmit` después de **cada** cambio |
-| `@unique` nuevo en Prisma | `db push` se niega sin `--accept-data-loss` y el contenedor entra en bucle de reinicio (**tumba producción**) | Nunca agregues `@unique` a una columna existente. Usa índice simple y valida en código. **Nunca** pases `--accept-data-loss` |
-| Rutas nuevas en `/api` | El proxy (`src/proxy.ts`) devuelve 401 antes de llegar al handler | Si la ruta se autentica sola (token propio), agrégala a `PUBLIC_ROUTES` |
-| `localStorage` de widgets | El orden guardado tapa los valores por defecto nuevos | Al cambiar el orden/visibilidad por defecto, sube la clave (`...-v2`) |
-| Fechas `YYYY-MM-DD` | `new Date("2026-11-17")` se interpreta UTC y en Bogotá cae el 16 | Construye con `new Date(y, m-1, d)` |
-| `build-mobile.mjs` | Mueve `src/app/api` → `api-backup` durante el export; si muere a medias, deja la API secuestrada | Verifica que `src/app/api` exista y que no haya `api-backup` |
-| Datos de dinero | En producción hay transacciones **reales** del usuario | Nunca borres datos sin respaldo; informa antes |
-| **Tablas sueltas en Postgres** | Crear una tabla que no esté en `schema.prisma` hace que `db push` (entrypoint) falle por "data loss" y el contenedor entra en **bucle de reinicio: producción cae** | Respalda a **archivo** (`pg_dump` a `backups/`), nunca a una tabla temporal. Si ya existe, `drop table` y reinicia `quid-app` |
-| Credenciales | La app no guarda contraseñas de correo | Usa tokens por usuario, nunca IMAP con password |
-
----
-
+| **Editar JSX a ciegas** | Bloques pegados en el componente equivocado, o ítems de menú que no aparecen | `edit` con anclas exactas; `npx tsc --noEmit` tras cada cambio; **verificar en pantalla** |
+| **`@unique` nuevo en Prisma** | `db push` se niega y el contenedor entra en bucle (**tumba producción**) | Nunca en columnas existentes; índice simple + validación en código |
+| **Tablas sueltas en Postgres** | Igual: bucle de reinicio | Respaldo a **archivo** (`pg_dump` a `backups/`); nunca a una tabla temporal |
+| **Rutas nuevas en `/api`** | El proxy responde 401 antes del handler | Agregarlas a `PUBLIC_ROUTES` si se autentican solas |
+| **Datos de dinero** | En producción hay transacciones reales | Nunca borrar sin respaldo; informar el antes y el después |
 ## 6. Reglas de datos
 
-**Tres esquemas Prisma en paralelo**, los tres deben cambiarse juntos:
-`schema.prisma`, `schema.postgres.prisma`, `schema.sqlite.prisma`.
+**Tres esquemas Prisma en paralelo** (`schema.prisma`,
+`schema.postgres.prisma`, `schema.sqlite.prisma`): se cambian juntos.
 
-Si agregas un modelo, además:
-1. `src/lib/data-registry.ts`
-2. `scripts/migrate-sqlite-to-postgres.mjs`
+Modelo nuevo ⇒ además `src/lib/data-registry.ts` y el par en
+`scripts/migrate-sqlite-to-postgres.mjs`. Hay prueba que falla si se olvida.
 
-Hay una prueba que falla si lo olvidas (`data-registry.test.ts`).
+Sin carpeta `migrations/`: el entrypoint corre `db push` y migraciones
+idempotentes en Node. Detalle y trampas: `Quid-App/docs/arquitectura.md`.
 
-**Migraciones:** el entrypoint del contenedor corre `prisma db push
---skip-generate` y luego migraciones idempotentes en Node. No hay carpeta
-`migrations/` para Postgres.
-
----
-
+**Todos los cálculos de dinero** viven en `src/lib/finance/` y están probados;
+ninguna vista suma saldos. Reglas completas: `Quid-App/docs/reglas-dinero.md`.
 ## 7. `docs/` está sin rastrear a propósito
 
 Contiene el análisis REA de APKs de terceros (competencia). **No lo subas a
@@ -484,7 +476,12 @@ todo y reorganizar"**. No es cosmético; hay deuda estructural acumulada:
 
 **Hecho (2026-11-18):** `Quid-App/docs/reglas-dinero.md` escrito (disponible/apartado/total, patrimonio, cuándo es gasto, cuotas, colchón, préstamos entre personas, planes, fechas) y **todos los cálculos de saldos unificados en `lib/finance/available.ts`** — tablero, Finanzas y Cuentas ya usan `balanceBreakdown`; no quedan sumas de saldos sueltas en vistas. **Pestañas reagrupadas (F-54)**: Finanzas pasa de 9 a **4 bloques** — HOY (`overview`, `inbox`, `accounts`) · PLANEAR (`budgets`, `savings`, `cdts`, `recurring`) · DEUDAS (`debts`) · ANÁLISIS (`analysis`) — con barra de bloques arriba y las pestañas del bloque debajo; el `FinanceSubView` interno no cambió, y el deslizamiento solo cambia entre pestañas del mismo bloque.
 
-**Orden restante:** dividir la documentación (`docs/arquitectura.md`,
-`docs/aura.md`) → partir los archivos grandes (`lib/aura/index.ts`,
+**Documentación dividida (2026-11-18):** `Quid-App/docs/arquitectura.md`
+(stack, mapa de carpetas, datos, cálculos, navegación, despliegue, trampas) y
+`Quid-App/docs/aura.md` (dos cerebros, 59 herramientas por dominio,
+propuesta + confirmación, canales, límites). §5 y §6 quedaron resumidos con
+enlaces.
+
+**Orden restante:** partir los archivos grandes (`lib/aura/index.ts`,
 `finance-overview.tsx`, `accounts-view.tsx`). Sin cambiar comportamiento: la
 red de pruebas (852) es la garantía.
