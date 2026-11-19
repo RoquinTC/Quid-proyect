@@ -15,8 +15,8 @@ android {
         applicationId "app.quid.finance"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 10173
-        versionName "1.1.73"
+        versionCode 10174
+        versionName "1.1.74"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         resValue "string", "google_web_client_id", (
             project.findProperty("googleWebClientId")

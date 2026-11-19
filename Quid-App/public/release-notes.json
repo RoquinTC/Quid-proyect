@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.73",
+  "currentVersion": "1.1.74",
   "releases": [
+    {
+      "version": "1.1.74",
+      "date": "2026-11-19",
+      "title": "Quid 1.1.74",
+      "changes": [
+        "Cuentas separa sus piezas visuales en un archivo aparte",
+        "El tooltip, la mini-grafica y el historial de saldo",
+        "Sin cambios de comportamiento, 852 pruebas verdes"
+      ]
+    },
     {
       "version": "1.1.73",
       "date": "2026-11-19",
