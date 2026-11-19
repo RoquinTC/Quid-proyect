@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import { balanceBreakdown } from "@/lib/finance/available";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
@@ -417,6 +418,15 @@ function generateId(): string {
 export function DebtSimulator() {
   const { setFinanceSubView } = useAppStore();
   const { data: debts, loading } = useLocalQuery<Debt>("/api/debts");
+  const { data: accounts } = useLocalQuery<{
+    id: string;
+    balance: number;
+    excludeFromAvailable?: boolean;
+    subAccounts?: Array<{ balance: number; excludeFromAvailable?: boolean }>;
+  }>("/api/accounts");
+  // F-53 · un abono extra solo puede salir del dinero disponible.
+  const availableNow = useMemo(() => balanceBreakdown(accounts ?? []).available, [accounts]);
+  const [extraWarning, setExtraWarning] = useState("");
 
   // Step 1: Select debt
   const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
@@ -452,6 +462,13 @@ export function DebtSimulator() {
   const handleAddExtra = () => {
     const amount = parseFloat(newExtraAmount);
     if (isNaN(amount) || amount <= 0) return;
+    if (availableNow > 0 && amount > availableNow) {
+      setExtraWarning(
+        `Ese abono (${formatCurrency(amount)}) es mayor que tu dinero disponible (${formatCurrency(availableNow)}). No lo podrías hacer sin descuadrar el mes.`
+      );
+      return;
+    }
+    setExtraWarning("");
 
     const ep: ExtraPayment = {
       id: generateId(),
@@ -868,6 +885,12 @@ export function DebtSimulator() {
                     placeholder="0"
                     className="rounded-xl h-11 text-base font-semibold"
                   />
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    Disponible hoy: {formatCurrency(availableNow)} · lo apartado no cuenta
+                  </p>
+                  {extraWarning && (
+                    <p className="mt-1 text-[11px] text-rose-500">{extraWarning}</p>
+                  )}
                 </div>
 
                 {/* Date (for one-time) */}

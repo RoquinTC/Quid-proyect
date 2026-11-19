@@ -1,6 +1,16 @@
 {
-  "currentVersion": "1.1.68",
+  "currentVersion": "1.1.69",
   "releases": [
+    {
+      "version": "1.1.69",
+      "date": "2026-11-19",
+      "title": "Quid 1.1.69",
+      "changes": [
+        "Aura dice cuanto tienes disponible y cuanto apartado",
+        "El simulador de deudas avisa si el abono excede tu disponible",
+        "Lo apartado se mantiene apartado en todo el entorno"
+      ]
+    },
     {
       "version": "1.1.68",
       "date": "2026-11-18",

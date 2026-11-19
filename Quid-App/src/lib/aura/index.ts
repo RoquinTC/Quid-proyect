@@ -88,6 +88,8 @@ type AccountChoice = {
   id: string;
   name: string;
   balance: number;
+  /** F-53 · false cuando la cuenta está marcada como "no disponible". */
+  available?: boolean;
   kind: "account" | "subAccount";
   parentAccountId?: string;
   parentAccountName?: string;
@@ -549,12 +551,14 @@ async function getAccountChoices(userId: string): Promise<AccountChoice[]> {
       id: account.id,
       name: account.name,
       balance: toNumber(account.balance),
+      available: !account.excludeFromAvailable,
       kind: "account" as const,
     },
     ...account.subAccounts.map((subAccount) => ({
       id: subAccount.id,
       name: `${account.name} / ${subAccount.name}`,
       balance: toNumber(subAccount.balance),
+      available: !subAccount.excludeFromAvailable,
       kind: "subAccount" as const,
       parentAccountId: account.id,
       parentAccountName: account.name,
@@ -655,8 +659,13 @@ function findMentionedDebt(text: string, debts: DebtChoice[]) {
 
 async function getBalanceSnapshot(userId: string) {
   const accounts = await getAccountChoices(userId);
+  // F-53 · lo apartado no es disponible, aunque siga siendo dinero tuyo.
+  const availableBalance = accounts
+    .filter((account) => account.available !== false)
+    .reduce((sum, account) => sum + account.balance, 0);
   const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
-  return { totalBalance, currency: "COP", accounts };
+  const apartado = totalBalance - availableBalance;
+  return { totalBalance, availableBalance, apartado, currency: "COP", accounts };
 }
 
 async function getExpenseSnapshot(userId: string) {
@@ -1443,7 +1452,11 @@ async function answerWithQuidData(userId: string, action: AuraAction, text: stri
       .slice(0, 6)
       .map((account) => `• ${account.name}: ${COP.format(account.balance)}`)
       .join("\n");
-    return `Tu balance total visible es ${COP.format(snapshot.totalBalance)}.\n${topAccounts}`;
+    return `Tienes ${COP.format(snapshot.availableBalance)} disponible${
+      snapshot.apartado > 0
+        ? ` (más ${COP.format(snapshot.apartado)} apartado, que no cuento)`
+        : ""
+    }.\n${topAccounts}`;
   }
 
   if (action === "consultar_gastos") {
@@ -1507,7 +1520,9 @@ async function answerWithQuidData(userId: string, action: AuraAction, text: stri
     const radar = await getFinancialRadar(userId);
     return [
       "Radar financiero de Aura:",
-      `• Disponible visible: ${COP.format(radar.balance.totalBalance)}`,
+      `• Disponible: ${COP.format(radar.balance.availableBalance)}${
+        radar.balance.apartado > 0 ? ` (apartado ${COP.format(radar.balance.apartado)})` : ""
+      }`,
       `• Este mes: ingresos ${COP.format(radar.income.total)}, gastos ${COP.format(radar.expenses.total)}.`,
       `• Si sigues igual, el gasto cerraría cerca de ${COP.format(radar.projectedExpenses)}.`,
       ...radar.alerts.map((alert) => `• ${alert}`),
