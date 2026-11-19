@@ -482,9 +482,9 @@ todo y reorganizar"**. No es cosmético; hay deuda estructural acumulada:
 | Aura con 59 herramientas planas | `lib/aura/tools/` | Agrupar por dominio y documentar cuáles son de lectura/escritura en un índice legible |
 | Documentación regada | `AGENTS.md` crece por secciones | Dividir: `docs/arquitectura.md`, `docs/dinero.md` (reglas de cálculo), `docs/aura.md` |
 
-**Hecho (2026-11-18):** `Quid-App/docs/reglas-dinero.md` escrito (disponible/apartado/total, patrimonio, cuándo es gasto, cuotas, colchón, préstamos entre personas, planes, fechas) y **todos los cálculos de saldos unificados en `lib/finance/available.ts`** — tablero, Finanzas y Cuentas ya usan `balanceBreakdown`; no quedan sumas de saldos sueltas en vistas.
+**Hecho (2026-11-18):** `Quid-App/docs/reglas-dinero.md` escrito (disponible/apartado/total, patrimonio, cuándo es gasto, cuotas, colchón, préstamos entre personas, planes, fechas) y **todos los cálculos de saldos unificados en `lib/finance/available.ts`** — tablero, Finanzas y Cuentas ya usan `balanceBreakdown`; no quedan sumas de saldos sueltas en vistas. **Pestañas reagrupadas (F-54)**: Finanzas pasa de 9 a **4 bloques** — HOY (`overview`, `inbox`, `accounts`) · PLANEAR (`budgets`, `savings`, `cdts`, `recurring`) · DEUDAS (`debts`) · ANÁLISIS (`analysis`) — con barra de bloques arriba y las pestañas del bloque debajo; el `FinanceSubView` interno no cambió, y el deslizamiento solo cambia entre pestañas del mismo bloque.
 
-**Orden restante:** reagrupar las pestañas de Finanzas (HOY · PLANEAR ·
-DEUDAS · ANÁLISIS) → dividir la documentación (`docs/arquitectura.md`,
-`docs/aura.md`) → partir los archivos grandes. Sin cambiar comportamiento: la
+**Orden restante:** dividir la documentación (`docs/arquitectura.md`,
+`docs/aura.md`) → partir los archivos grandes (`lib/aura/index.ts`,
+`finance-overview.tsx`, `accounts-view.tsx`). Sin cambiar comportamiento: la
 red de pruebas (852) es la garantía.
